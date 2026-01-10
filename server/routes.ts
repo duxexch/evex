@@ -578,6 +578,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/admin/integrations/status", authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
+    try {
+      const integrations: Record<string, boolean> = {
+        twilio: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER),
+        sendgrid: !!(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
+        google_oauth: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+        facebook_oauth: !!(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET),
+        telegram_oauth: !!process.env.TELEGRAM_BOT_TOKEN,
+        twitter_oauth: !!(process.env.TWITTER_API_KEY && process.env.TWITTER_API_SECRET),
+        stripe: !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY),
+        firebase_push: !!(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY),
+      };
+      res.json(integrations);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/admin/payment-methods", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const parsed = insertCountryPaymentMethodSchema.safeParse(req.body);
@@ -1338,6 +1356,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const user = await storage.updateUser(req.user!.id, { nickname });
       const { password, ...safeUser } = user!;
+      res.json(safeUser);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  const userStatusSchema = z.object({
+    stealthMode: z.boolean().optional(),
+    isOnline: z.boolean().optional(),
+  }).refine(data => data.stealthMode !== undefined || data.isOnline !== undefined, {
+    message: "At least one field (stealthMode or isOnline) is required"
+  });
+
+  app.patch("/api/user/status", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const parsed = userStatusSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+      
+      const { stealthMode, isOnline } = parsed.data;
+      const updateData: Partial<{stealthMode: boolean; isOnline: boolean; lastActiveAt: Date}> = { 
+        lastActiveAt: new Date() 
+      };
+      if (stealthMode !== undefined) updateData.stealthMode = stealthMode;
+      if (isOnline !== undefined) updateData.isOnline = isOnline;
+      
+      const user = await storage.updateUser(req.user!.id, updateData);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const { password, ...safeUser } = user;
       res.json(safeUser);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

@@ -79,6 +79,7 @@ function AdminSidebar() {
     { title: "Badges", url: "/admin/badges", icon: Award },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
     { title: "Payment Methods", url: "/admin/payment-methods", icon: CreditCard },
+    { title: "Integrations", url: "/admin/integrations", icon: Settings },
   ];
 
   return (

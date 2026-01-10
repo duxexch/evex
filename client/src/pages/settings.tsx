@@ -397,6 +397,111 @@ function PreferencesSection() {
   );
 }
 
+function PrivacySection() {
+  const { user, updateUser, token } = useAuth();
+  const { t, language } = useI18n();
+  const { toast } = useToast();
+  const isArabic = language === "ar";
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async (data: { stealthMode?: boolean; isOnline?: boolean }) => {
+      const res = await fetch("/api/user/status", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      updateUser(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ 
+        title: isArabic ? "تم التحديث" : "Updated",
+        description: isArabic ? "تم تحديث إعدادات الظهور" : "Visibility settings updated" 
+      });
+    },
+    onError: () => {
+      toast({ 
+        title: isArabic ? "خطأ" : "Error", 
+        description: isArabic ? "فشل تحديث الإعدادات" : "Failed to update settings",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="h-5 w-5" />
+          {isArabic ? "الخصوصية والظهور" : "Privacy & Visibility"}
+        </CardTitle>
+        <CardDescription>
+          {isArabic 
+            ? "تحكم في حالة ظهورك للمستخدمين الآخرين"
+            : "Control how you appear to other users"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label>{isArabic ? "الوضع الخفي" : "Stealth Mode"}</Label>
+            <p className="text-sm text-muted-foreground">
+              {isArabic 
+                ? "إخفاء حالة نشاطك عن المستخدمين الآخرين"
+                : "Hide your online status from other users"}
+            </p>
+          </div>
+          <Switch
+            checked={user?.stealthMode ?? false}
+            onCheckedChange={(checked) => updateStatusMutation.mutate({ stealthMode: checked })}
+            disabled={updateStatusMutation.isPending}
+            data-testid="switch-stealth-mode"
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label>{isArabic ? "الحالة الحالية" : "Current Status"}</Label>
+            <p className="text-sm text-muted-foreground">
+              {isArabic 
+                ? "حالة نشاطك المعروضة للآخرين"
+                : "Your activity status shown to others"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {user?.stealthMode ? (
+              <Badge variant="secondary" data-testid="badge-status-hidden">
+                {isArabic ? "مخفي" : "Hidden"}
+              </Badge>
+            ) : user?.isOnline ? (
+              <Badge className="bg-green-600" data-testid="badge-status-online">
+                {isArabic ? "نشط" : "Online"}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" data-testid="badge-status-offline">
+                {isArabic ? "غير نشط" : "Offline"}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border p-4 bg-muted/50">
+          <p className="text-sm text-muted-foreground">
+            {isArabic 
+              ? "عند تفعيل الوضع الخفي، لن يتمكن المستخدمون الآخرون من رؤية حالة نشاطك. سيظهر لهم أنك غير متصل دائمًا."
+              : "When stealth mode is enabled, other users won't be able to see your online status. You'll always appear as offline to them."}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SecuritySection() {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -811,7 +916,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold mb-6" data-testid="text-settings-title">{t("nav.settings")}</h1>
       
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="profile" data-testid="tab-profile">
             <User className="h-4 w-4 me-2" />
             {t("settings.profile")}
@@ -819,6 +924,10 @@ export default function SettingsPage() {
           <TabsTrigger value="preferences" data-testid="tab-preferences">
             <Settings2 className="h-4 w-4 me-2" />
             {t("settings.preferences")}
+          </TabsTrigger>
+          <TabsTrigger value="privacy" data-testid="tab-privacy">
+            <Globe className="h-4 w-4 me-2" />
+            {t("settings.privacy") || "Privacy"}
           </TabsTrigger>
           <TabsTrigger value="security" data-testid="tab-security">
             <Shield className="h-4 w-4 me-2" />
@@ -832,6 +941,10 @@ export default function SettingsPage() {
 
         <TabsContent value="preferences">
           <PreferencesSection />
+        </TabsContent>
+
+        <TabsContent value="privacy">
+          <PrivacySection />
         </TabsContent>
 
         <TabsContent value="security">
