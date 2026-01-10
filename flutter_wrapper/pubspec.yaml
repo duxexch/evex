@@ -1,0 +1,42 @@
+name: vex_app
+description: VEX Gaming & Trading Platform Mobile App
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  webview_flutter: ^4.4.2
+  connectivity_plus: ^5.0.2
+  flutter_native_splash: ^2.3.8
+  shared_preferences: ^2.2.2
+  url_launcher: ^6.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#0f1419"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+
+flutter_native_splash:
+  color: "#0f1419"
+  image: assets/splash/splash.png
+  android_12:
+    color: "#0f1419"
+    icon_background_color: "#0f1419"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/
+    - assets/splash/
