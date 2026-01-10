@@ -1,0 +1,61 @@
+# VEX Platform - Docker Ignore File
+# ملف تجاهل Docker
+
+# Dependencies
+node_modules
+.npm
+
+# Build outputs (we build fresh in Docker)
+dist
+
+# Development files
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Cache
+.cache
+.replit
+replit.nix
+
+# Backups
+backups
+*.sql
+*.sql.gz
+
+# Documentation (not needed in production image)
+docs
+*.md
+!README.md
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__
+coverage
+
+# Flutter wrapper (separate build)
+flutter_wrapper
+
+# Export files
+vex_export_*
+*.tar.gz
+
+# Temporary files
+tmp
+temp
+.DS_Store
+Thumbs.db

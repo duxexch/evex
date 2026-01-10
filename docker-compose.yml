@@ -1,0 +1,68 @@
+# VEX Platform - Docker Compose Configuration
+# تكوين Docker Compose لمنصة VEX
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: vex-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vex_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vex_password}
+      POSTGRES_DB: ${POSTGRES_DB:-vex_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    # Database is only accessible internally (not exposed to host)
+    # Uncomment below for local development debugging only:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vex_user} -d ${POSTGRES_DB:-vex_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # VEX Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vex-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vex_user}:${POSTGRES_PASSWORD:-vex_password}@db:5432/${POSTGRES_DB:-vex_db}
+      SESSION_SECRET: ${SESSION_SECRET:-change_this_secret_key}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+
+  # Nginx Reverse Proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: vex-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+    profiles:
+      - with-nginx
+
+volumes:
+  postgres_data:
+    driver: local
