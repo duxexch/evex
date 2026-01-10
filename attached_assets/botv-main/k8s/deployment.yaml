@@ -1,0 +1,308 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: langsense
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langsense-config
+  namespace: langsense
+data:
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  API_WORKERS: "4"
+  DB_POOL_SIZE: "20"
+  DB_MAX_OVERFLOW: "40"
+  HEALTH_CHECK_INTERVAL: "30"
+  NOTIFICATIONS_ENABLED: "true"
+  RATE_LIMITING_ENABLED: "true"
+  AUDIT_ENABLED: "true"
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: langsense-secrets
+  namespace: langsense
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql+asyncpg://langsense:langsense_password@postgres-service:5432/langsense"
+  SECRET_KEY: "your-secret-key-minimum-32-characters-required"
+  BOT_TOKEN: "your-telegram-bot-token"
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: langsense
+spec:
+  serviceName: postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_USER
+          value: langsense
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: langsense-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          value: langsense
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+          subPath: postgres
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U langsense
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U langsense
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: langsense
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langsense-api
+  namespace: langsense
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: langsense-api
+  template:
+    metadata:
+      labels:
+        app: langsense-api
+    spec:
+      serviceAccountName: langsense-api
+      containers:
+      - name: api
+        image: langsense-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: langsense-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: langsense-secrets
+              key: DATABASE_URL
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: langsense-secrets
+              key: SECRET_KEY
+        - name: BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: langsense-secrets
+              key: BOT_TOKEN
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: logs
+          mountPath: /var/log/langsense
+      volumes:
+      - name: logs
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - langsense-api
+              topologyKey: kubernetes.io/hostname
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: langsense-api-service
+  namespace: langsense
+spec:
+  type: LoadBalancer
+  selector:
+    app: langsense-api
+  ports:
+  - port: 80
+    targetPort: 8000
+    name: http
+
+---
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: langsense-api-hpa
+  namespace: langsense
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: langsense-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: langsense-api-pdb
+  namespace: langsense
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: langsense-api
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ServiceAccount
+metadata:
+  name: langsense-api
+  namespace: langsense
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: langsense-api-role
+  namespace: langsense
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: langsense-api-rolebinding
+  namespace: langsense
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: langsense-api-role
+subjects:
+- kind: ServiceAccount
+  name: langsense-api
+  namespace: langsense

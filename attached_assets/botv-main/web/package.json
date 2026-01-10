@@ -1,0 +1,27 @@
+{
+  "name": "langsense-control-panel",
+  "version": "1.0.0",
+  "description": "Real-time notification system for LangSense control panel",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
+  },
+  "dependencies": {
+    "next": "^14.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.0.1",
+    "axios": "^1.6.5",
+    "date-fns": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.1.0",
+    "typescript": "^5.3.3"
+  }
+}

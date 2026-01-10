@@ -1,0 +1,153 @@
+# docker-compose.prod.yml - LangSense PWM Production Stack
+# Web-based Platform Management - NO Telegram Bot
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # PostgreSQL Database
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: langsense-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-langsense}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-langsense_secure_pw_2026}
+      POSTGRES_DB: ${DB_NAME:-langsense}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-langsense}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - langsense-network
+
+  # ============================================================================
+  # Redis Cache & Queue
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: langsense-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_pw_2026} --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - langsense-network
+
+  # ============================================================================
+  # PWM Web Dashboard API
+  # ============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api.prod
+    container_name: langsense-pwm-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-langsense}:${DB_PASSWORD:-langsense_secure_pw_2026}@postgres:5432/${DB_NAME:-langsense}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_pw_2026}@redis:6379/0
+      BOT_TOKEN: dummy-token-for-pwm-mode
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - langsense-network
+    volumes:
+      - ./logs:/app/logs
+  # ============================================================================
+  pwm-api:
+    build:
+      context: .
+      dockerfile: pwm/Dockerfile.pwm
+    container_name: pwm-api
+    restart: unless-stopped
+    env_file:
+      - pwm/.env.pwm
+    environment:
+      PWM_DATABASE_URL: postgresql+asyncpg://pwm_user:${PWM_DB_PASSWORD:-pwm_secure_pw_2026}@postgres:5432/pwm_db
+      JWT_SECRET_KEY: ${PWM_JWT_SECRET:-your-super-secret-key-change-in-production-at-least-32-characters-long}
+      PWM_ENV: production
+    ports:
+      - "8011:8011"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - langsense-network
+    volumes:
+      - ./logs:/app/logs
+
+  # ============================================================================
+  # PWM (Project Web Management) - Frontend
+  # ============================================================================
+  pwm-web:
+    build:
+      context: ./pwm/frontend
+      dockerfile: Dockerfile
+    container_name: pwm-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_PWM_API_BASE: http://pwm-api:8011/pwm/api
+      NODE_ENV: production
+    ports:
+      - "3012:3012"
+    depends_on:
+      - pwm-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3012/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - langsense-network
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  langsense-network:
+    driver: bridge
+
+# ============================================================================
+# Volumes - Persistent Data
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

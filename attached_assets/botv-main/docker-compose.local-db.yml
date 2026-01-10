@@ -1,0 +1,65 @@
+# docker-compose.local-db.yml - Uses Local PostgreSQL & Redis
+# For servers with existing PostgreSQL and Redis installations
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # FastAPI REST API
+  # ============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api.prod
+    container_name: langsense-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dotv:m784951m@host.docker.internal:5432/dotv
+      REDIS_URL: redis://host.docker.internal:6379/0
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - langsense-network
+    volumes:
+      - ./logs:/app/logs
+
+  # ============================================================================
+  # Telegram Bot
+  # ============================================================================
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: langsense-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dotv:m784951m@host.docker.internal:5432/dotv
+      REDIS_URL: redis://host.docker.internal:6379/0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - langsense-network
+    volumes:
+      - ./logs:/app/logs
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  langsense-network:
+    driver: bridge

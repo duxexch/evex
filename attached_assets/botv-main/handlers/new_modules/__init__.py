@@ -1,0 +1,3 @@
+"""
+New handlers modules package
+"""

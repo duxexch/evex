@@ -1,0 +1,64 @@
+# Alembic configuration file
+
+# Path to migration scripts
+script_location = pwm/database
+
+# SQLAlchemy database URL
+sqlalchemy.url = driver://user:pass@localhost/dbname
+
+# Template for new migration scripts
+file_template = %%(rev)s_%%(slug)s
+
+# Timezone for timestamps
+timezone = 
+
+# Maximum length for slugs
+truncate_slug_len = 40
+
+# Run env during revision command
+revision_environment = false
+
+# Allow .pyc and .pyo files
+sourceless = false
+
+# Require down_revision
+depends_on_current = false
+
+# Character encoding (strict, utf8, unicode)
+sqlalchemy_track_modifications = false
+
+sqlalchemy_echo = true
+
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARN
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARN
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S

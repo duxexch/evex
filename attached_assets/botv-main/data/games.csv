@@ -1,0 +1,4 @@
+﻿id,name,description,type,payout_min_percent,payout_max_percent,status,created_date
+GAME_BD7CC8ED,Dragon Slots,Classic slot machine game,casino,50.0,150.0,active,2026-01-02T08:57:11.549356
+GAME_217261CD,Dragon Slots,Classic slot machine game,casino,50.0,150.0,active,2026-01-02T08:57:53.614837
+GAME_674E4BA0,Flying Plane,Guide your plane through obstacles. Avoid collision and maximize your score!,arcade,100.0,150.0,active,2026-01-02T09:07:19.227577

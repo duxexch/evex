@@ -1,0 +1,322 @@
+import { db } from "./db";
+import { 
+  games, languages, currencies, countryPaymentMethods, 
+  themes, p2pSettings, financialLimits, promoCodes
+} from "@shared/schema";
+
+async function seed() {
+  console.log("Starting database seed...");
+  
+  const existingGames = await db.select().from(games).limit(1);
+  if (existingGames.length > 0) {
+    console.log("Games already exist, skipping seed.");
+    return;
+  }
+  console.log("Adding games and supporting data...");
+
+  await db.insert(games).values([
+    // Crash Games
+    {
+      name: "Aviator",
+      description: "Watch the plane fly and cash out before it disappears!",
+      category: "crash",
+      rtp: "97.00",
+      houseEdge: "3.00",
+      volatility: "high",
+      minBet: "1.00",
+      maxBet: "5000.00",
+      multiplierMin: "1.00",
+      multiplierMax: "1000.00",
+      isFeatured: true,
+      sortOrder: 1,
+    },
+    {
+      name: "Rocket",
+      description: "Ride the rocket to the moon! Cash out before explosion.",
+      category: "crash",
+      rtp: "96.50",
+      houseEdge: "3.50",
+      volatility: "high",
+      minBet: "0.50",
+      maxBet: "3000.00",
+      multiplierMin: "1.00",
+      multiplierMax: "500.00",
+      isFeatured: false,
+      sortOrder: 2,
+    },
+    {
+      name: "Balloon",
+      description: "Inflate the balloon and collect before it pops!",
+      category: "crash",
+      rtp: "97.50",
+      houseEdge: "2.50",
+      volatility: "medium",
+      minBet: "1.00",
+      maxBet: "2000.00",
+      multiplierMin: "1.00",
+      multiplierMax: "200.00",
+      isFeatured: false,
+      sortOrder: 3,
+    },
+    // Dice Games
+    {
+      name: "Classic Dice",
+      description: "Roll the dice and predict over or under. Simple and fast!",
+      category: "dice",
+      rtp: "98.00",
+      houseEdge: "2.00",
+      volatility: "low",
+      minBet: "0.50",
+      maxBet: "2000.00",
+      multiplierMin: "1.01",
+      multiplierMax: "99.00",
+      isFeatured: true,
+      sortOrder: 4,
+    },
+    {
+      name: "Hi-Lo",
+      description: "Predict if the next number is higher or lower!",
+      category: "dice",
+      rtp: "97.00",
+      houseEdge: "3.00",
+      volatility: "low",
+      minBet: "1.00",
+      maxBet: "1000.00",
+      multiplierMin: "1.50",
+      multiplierMax: "10.00",
+      isFeatured: false,
+      sortOrder: 5,
+    },
+    {
+      name: "Triple Dice",
+      description: "Roll 3 dice and match combinations for big wins!",
+      category: "dice",
+      rtp: "96.00",
+      houseEdge: "4.00",
+      volatility: "medium",
+      minBet: "1.00",
+      maxBet: "500.00",
+      multiplierMin: "1.00",
+      multiplierMax: "50.00",
+      isFeatured: false,
+      sortOrder: 6,
+    },
+    // Wheel Games
+    {
+      name: "Lucky Wheel",
+      description: "Spin the wheel of fortune for amazing prizes!",
+      category: "wheel",
+      rtp: "96.00",
+      houseEdge: "4.00",
+      volatility: "medium",
+      minBet: "1.00",
+      maxBet: "1000.00",
+      multiplierMin: "0.00",
+      multiplierMax: "50.00",
+      isFeatured: true,
+      sortOrder: 7,
+    },
+    {
+      name: "Money Wheel",
+      description: "Classic money wheel with multiple segments!",
+      category: "wheel",
+      rtp: "95.50",
+      houseEdge: "4.50",
+      volatility: "medium",
+      minBet: "0.50",
+      maxBet: "500.00",
+      multiplierMin: "0.00",
+      multiplierMax: "40.00",
+      isFeatured: false,
+      sortOrder: 8,
+    },
+    {
+      name: "Dream Catcher",
+      description: "Catch your dreams with this exciting wheel game!",
+      category: "wheel",
+      rtp: "96.50",
+      houseEdge: "3.50",
+      volatility: "high",
+      minBet: "1.00",
+      maxBet: "2000.00",
+      multiplierMin: "0.00",
+      multiplierMax: "100.00",
+      isFeatured: false,
+      sortOrder: 9,
+    },
+    // Slots Games
+    {
+      name: "VEX Slots",
+      description: "Classic slot machine with modern graphics!",
+      category: "slots",
+      rtp: "95.00",
+      houseEdge: "5.00",
+      volatility: "high",
+      minBet: "0.25",
+      maxBet: "500.00",
+      multiplierMin: "0.00",
+      multiplierMax: "500.00",
+      isFeatured: true,
+      sortOrder: 10,
+    },
+    {
+      name: "Fruit Frenzy",
+      description: "Juicy fruits and sweet wins await!",
+      category: "slots",
+      rtp: "96.00",
+      houseEdge: "4.00",
+      volatility: "medium",
+      minBet: "0.10",
+      maxBet: "200.00",
+      multiplierMin: "0.00",
+      multiplierMax: "200.00",
+      isFeatured: false,
+      sortOrder: 11,
+    },
+    {
+      name: "Diamond Rush",
+      description: "Hunt for diamonds in this glittering slot!",
+      category: "slots",
+      rtp: "94.50",
+      houseEdge: "5.50",
+      volatility: "high",
+      minBet: "0.50",
+      maxBet: "1000.00",
+      multiplierMin: "0.00",
+      multiplierMax: "1000.00",
+      isFeatured: false,
+      sortOrder: 12,
+    },
+    // Jackpot Games
+    {
+      name: "Mega Jackpot",
+      description: "Progressive jackpot with life-changing prizes!",
+      category: "jackpot",
+      rtp: "93.00",
+      houseEdge: "7.00",
+      volatility: "high",
+      minBet: "5.00",
+      maxBet: "500.00",
+      multiplierMin: "0.00",
+      multiplierMax: "10000.00",
+      isFeatured: true,
+      sortOrder: 13,
+    },
+    {
+      name: "Daily Jackpot",
+      description: "Win the jackpot every day! Guaranteed winner.",
+      category: "jackpot",
+      rtp: "94.00",
+      houseEdge: "6.00",
+      volatility: "medium",
+      minBet: "1.00",
+      maxBet: "100.00",
+      multiplierMin: "0.00",
+      multiplierMax: "1000.00",
+      isFeatured: false,
+      sortOrder: 14,
+    },
+    {
+      name: "Lucky 7 Jackpot",
+      description: "Match lucky 7s for the ultimate prize!",
+      category: "jackpot",
+      rtp: "92.00",
+      houseEdge: "8.00",
+      volatility: "high",
+      minBet: "2.00",
+      maxBet: "200.00",
+      multiplierMin: "0.00",
+      multiplierMax: "5000.00",
+      isFeatured: false,
+      sortOrder: 15,
+    },
+  ]);
+  console.log("Created games");
+
+  await db.insert(languages).values([
+    { code: "en", name: "English", nativeName: "English", isDefault: true, sortOrder: 1 },
+    { code: "ar", name: "Arabic", nativeName: "العربية", isDefault: false, sortOrder: 2 },
+  ]);
+  console.log("Created languages");
+
+  await db.insert(currencies).values([
+    { code: "USD", name: "US Dollar", symbol: "$", exchangeRate: "1.000000", isDefault: true, country: "US", sortOrder: 1 },
+    { code: "EGP", name: "Egyptian Pound", symbol: "ج.م", exchangeRate: "30.900000", country: "EG", sortOrder: 2 },
+    { code: "SAR", name: "Saudi Riyal", symbol: "ر.س", exchangeRate: "3.750000", country: "SA", sortOrder: 3 },
+    { code: "AED", name: "UAE Dirham", symbol: "د.إ", exchangeRate: "3.670000", country: "AE", sortOrder: 4 },
+    { code: "USDT", name: "Tether", symbol: "USDT", exchangeRate: "1.000000", country: null, sortOrder: 5 },
+  ]);
+  console.log("Created currencies");
+
+  await db.insert(countryPaymentMethods).values([
+    { countryCode: "EG", name: "Vodafone Cash", type: "e_wallet", minAmount: "50.00", maxAmount: "50000.00", processingTime: "Instant", instructions: "Send to agent wallet number" },
+    { countryCode: "EG", name: "InstaPay", type: "e_wallet", minAmount: "100.00", maxAmount: "100000.00", processingTime: "Instant" },
+    { countryCode: "EG", name: "Bank Transfer", type: "bank_transfer", minAmount: "500.00", maxAmount: "500000.00", processingTime: "1-2 hours" },
+    { countryCode: "SA", name: "STC Pay", type: "e_wallet", minAmount: "50.00", maxAmount: "20000.00", processingTime: "Instant" },
+    { countryCode: "SA", name: "Bank Transfer", type: "bank_transfer", minAmount: "100.00", maxAmount: "100000.00", processingTime: "30 minutes" },
+    { countryCode: "AE", name: "Apple Pay", type: "e_wallet", minAmount: "50.00", maxAmount: "50000.00", processingTime: "Instant" },
+    { countryCode: "GLOBAL", name: "USDT (TRC20)", type: "crypto", minAmount: "10.00", maxAmount: "1000000.00", processingTime: "10-30 minutes" },
+    { countryCode: "GLOBAL", name: "Bitcoin", type: "crypto", minAmount: "50.00", maxAmount: "1000000.00", processingTime: "30-60 minutes" },
+  ]);
+  console.log("Created payment methods");
+
+  await db.insert(themes).values([
+    {
+      name: "vex-dark",
+      displayName: "VEX Dark (Default)",
+      primaryColor: "#00c853",
+      secondaryColor: "#ff9800",
+      accentColor: "#00e676",
+      backgroundColor: "#0f1419",
+      foregroundColor: "#ffffff",
+      cardColor: "#1a1f2e",
+      mutedColor: "#6b7280",
+      borderColor: "#2d3748",
+      isDefault: true,
+    },
+    {
+      name: "vex-royal",
+      displayName: "VEX Royal",
+      primaryColor: "#6366f1",
+      secondaryColor: "#f59e0b",
+      accentColor: "#8b5cf6",
+      backgroundColor: "#0c0a1d",
+      foregroundColor: "#ffffff",
+      cardColor: "#1e1b4b",
+      mutedColor: "#9ca3af",
+      borderColor: "#312e81",
+      isDefault: false,
+    },
+  ]);
+  console.log("Created themes");
+
+  await db.insert(p2pSettings).values({
+    platformFeePercentage: "0.005",
+    minTradeAmount: "10.00",
+    maxTradeAmount: "100000.00",
+    escrowTimeoutHours: 24,
+    paymentTimeoutMinutes: 15,
+    isEnabled: true,
+  });
+  console.log("Created P2P settings");
+
+  await db.insert(financialLimits).values([
+    { name: "Basic", vipLevel: 0, minDeposit: "10.00", maxDeposit: "1000.00", minWithdrawal: "20.00", maxWithdrawal: "500.00", dailyWithdrawalLimit: "1000.00" },
+    { name: "Bronze", vipLevel: 1, minDeposit: "10.00", maxDeposit: "5000.00", minWithdrawal: "20.00", maxWithdrawal: "2000.00", dailyWithdrawalLimit: "5000.00" },
+    { name: "Silver", vipLevel: 2, minDeposit: "10.00", maxDeposit: "10000.00", minWithdrawal: "20.00", maxWithdrawal: "5000.00", dailyWithdrawalLimit: "10000.00" },
+    { name: "Gold", vipLevel: 3, minDeposit: "10.00", maxDeposit: "25000.00", minWithdrawal: "20.00", maxWithdrawal: "10000.00", dailyWithdrawalLimit: "25000.00" },
+    { name: "Platinum", vipLevel: 4, minDeposit: "10.00", maxDeposit: "50000.00", minWithdrawal: "20.00", maxWithdrawal: "25000.00", dailyWithdrawalLimit: "50000.00" },
+  ]);
+  console.log("Created financial limits");
+
+  await db.insert(promoCodes).values([
+    { code: "WELCOME100", type: "percentage", value: "100.00", minDeposit: "50.00", maxDiscount: "500.00", usageLimit: 1000 },
+    { code: "VEX50", type: "fixed", value: "50.00", minDeposit: "100.00", usageLimit: 500 },
+    { code: "NEWUSER", type: "percentage", value: "50.00", minDeposit: "20.00", maxDiscount: "200.00", perUserLimit: 1 },
+  ]);
+  console.log("Created promo codes");
+
+  console.log("Database seed completed successfully!");
+}
+
+seed().catch(console.error);

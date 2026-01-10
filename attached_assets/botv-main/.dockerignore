@@ -1,0 +1,71 @@
+# Prevent sensitive files from being copied into Docker image
+.env
+.env.*
+!.env.example
+
+# Git files
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Virtual environments
+venv
+env
+ENV
+.venv
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+.tox
+
+# Documentation (optional - keep if needed in image)
+*.md
+!README.md
+docs
+
+# Logs (will be mounted as volume)
+logs
+*.log
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups
+*.backup
+*.bak
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Other
+.dockerignore
+docker-compose*.yml
+Dockerfile*
+nginx.conf

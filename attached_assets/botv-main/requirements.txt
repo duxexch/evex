@@ -1,0 +1,47 @@
+# FastAPI backend requirements
+fastapi==0.115.7
+uvicorn[standard]==0.34.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# ✅ SQLAlchemy with async support
+sqlalchemy==2.0.37
+aiosqlite==0.20.0
+asyncpg==0.30.0
+
+# Environment variables
+python-dotenv==1.0.1
+
+# ✅ SECURITY: Encryption for sensitive data
+cryptography==43.0.0
+
+# ✅ SECURITY: Rate limiting
+slowapi==0.1.9
+
+# ✅ SECURITY: CORS middleware
+fastapi-cors==0.0.6
+
+# Image processing (for uploads)
+pillow==11.1.0
+
+# ✅ Monitoring and logging
+prometheus-client==0.21.0
+
+# ✅ Database migrations
+alembic==1.13.3
+
+# ✅ Background jobs and caching
+redis==5.1.0
+
+# ✅ TESTING & SECURITY SCANNING
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-asyncio==0.23.3
+flake8==7.1.1
+black==24.1.1
+isort==5.13.2
+bandit==1.7.6
+safety>=3.0.0

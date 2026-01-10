@@ -1,0 +1,58 @@
+# Add .env to gitignore
+# .env    # ⚠️ TEMPORARILY ENABLED FOR PRODUCTION BACKUP
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Mobile app
+mobile-app/node_modules/
+mobile-app/.expo/
+mobile-app/dist/
+mobile-app/npm-debug.*
+mobile-app/*.jks
+mobile-app/*.p8
+mobile-app/*.p12
+mobile-app/*.key
+mobile-app/*.mobileprovision
+mobile-app/*.orig.*
+mobile-app/web-build/

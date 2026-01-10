@@ -1,0 +1,104 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: langsense-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-langsense}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-langsense_secure_pw}
+      POSTGRES_DB: ${DB_NAME:-langsense}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - langsense_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-langsense}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: postgres -c log_statement=none
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: langsense-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secure_pw}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - langsense_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # FastAPI Control Panel API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: langsense-api
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-langsense}:${DB_PASSWORD:-langsense_secure_pw}@postgres:5432/${DB_NAME:-langsense}
+      
+      # Redis Configuration
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_pw}@redis:6379/0
+      
+      # API Configuration
+      PORT: 8000
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+      # Security
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-this-in-production}
+      
+      # Bot Configuration
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-1}
+      
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
+    
+    ports:
+      - "${API_PORT:-8000}:8000"
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    volumes:
+      - ./:/app:ro
+    
+    networks:
+      - langsense_network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  langsense_network:
+    driver: bridge

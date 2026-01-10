@@ -1,0 +1,57 @@
+# Dockerfile.api - Production-ready FastAPI Image
+# Multi-stage build for optimized API server
+
+# ============================================================================
+# Stage 1: Builder
+# ============================================================================
+FROM python:3.11-slim-bookworm AS builder
+
+LABEL maintainer="LangSense API <admin@langsense.bot>"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+# ============================================================================
+# Stage 2: Runtime
+# ============================================================================
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PATH=/root/.local/bin:$PATH
+
+# Runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN groupadd -r app && useradd -r -g app app
+
+WORKDIR /app
+
+# Copy dependencies and code
+COPY --from=builder /root/.local /root/.local
+COPY . .
+
+RUN mkdir -p /app/logs && chown -R app:app /app
+
+USER app
+
+# Health check for API
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+EXPOSE 8000
+
+# Run FastAPI with Uvicorn
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop"]

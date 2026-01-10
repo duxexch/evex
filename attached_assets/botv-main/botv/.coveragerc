@@ -1,0 +1,24 @@
+[coverage]
+run = 
+    branch = True
+    source = botv
+    omit = 
+        */tests/*
+        */venv/*
+        */__init__.py
+
+report = 
+    show_missing = True
+    skip_covered = True
+    exclude_lines = 
+        pragma: no cover
+        if __name__ == .__main__.:
+        raise NotImplementedError
+        pass
+        # TODO
+        # FIXME
+
+html = 
+    directory = coverage_html_report
+    title = Coverage Report
+    skip_covered = True
