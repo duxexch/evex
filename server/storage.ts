@@ -13,7 +13,7 @@ import {
   type ComplaintMessage, type InsertComplaintMessage, type AuditLog, type InsertAuditLog,
   type FinancialLimit, type InsertFinancialLimit, type SystemSetting, type InsertSystemSetting,
   type PasswordResetToken, type InsertPasswordResetToken,
-  type CountryPaymentMethod,
+  type CountryPaymentMethod, type InsertCountryPaymentMethod,
   type Notification, type InsertNotification,
   type UserSession, type InsertUserSession,
   type LoginHistory, type InsertLoginHistory,
@@ -119,6 +119,9 @@ export interface IStorage {
 
   // Country Payment Methods
   listCountryPaymentMethods(): Promise<CountryPaymentMethod[]>;
+  createCountryPaymentMethod(method: InsertCountryPaymentMethod): Promise<CountryPaymentMethod>;
+  updateCountryPaymentMethod(id: string, data: Partial<InsertCountryPaymentMethod>): Promise<CountryPaymentMethod | undefined>;
+  deleteCountryPaymentMethod(id: string): Promise<boolean>;
 
   // Notifications
   createNotification(notification: InsertNotification): Promise<Notification>;
@@ -555,7 +558,26 @@ export class DatabaseStorage implements IStorage {
   // ==================== COUNTRY PAYMENT METHODS ====================
 
   async listCountryPaymentMethods(): Promise<CountryPaymentMethod[]> {
-    return db.select().from(countryPaymentMethods).orderBy(asc(countryPaymentMethods.name));
+    return db.select().from(countryPaymentMethods).orderBy(asc(countryPaymentMethods.sortOrder), asc(countryPaymentMethods.name));
+  }
+
+  async createCountryPaymentMethod(method: InsertCountryPaymentMethod): Promise<CountryPaymentMethod> {
+    const [created] = await db.insert(countryPaymentMethods).values(method).returning();
+    return created;
+  }
+
+  async updateCountryPaymentMethod(id: string, data: Partial<InsertCountryPaymentMethod>): Promise<CountryPaymentMethod | undefined> {
+    const [updated] = await db.update(countryPaymentMethods).set(data).where(eq(countryPaymentMethods.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCountryPaymentMethod(id: string): Promise<boolean> {
+    const existing = await db.select().from(countryPaymentMethods).where(eq(countryPaymentMethods.id, id));
+    if (existing.length === 0) {
+      return false;
+    }
+    await db.delete(countryPaymentMethods).where(eq(countryPaymentMethods.id, id));
+    return true;
   }
 
   // ==================== NOTIFICATIONS ====================

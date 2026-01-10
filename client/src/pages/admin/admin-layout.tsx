@@ -35,6 +35,7 @@ import {
   Bell,
   IdCard,
   Search,
+  CreditCard,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -77,6 +78,7 @@ function AdminSidebar() {
     { title: "Languages", url: "/admin/languages", icon: Languages },
     { title: "Badges", url: "/admin/badges", icon: Award },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
+    { title: "Payment Methods", url: "/admin/payment-methods", icon: CreditCard },
   ];
 
   return (

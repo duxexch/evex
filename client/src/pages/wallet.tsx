@@ -56,7 +56,7 @@ export default function WalletPage() {
 
   const depositMutation = useMutation({
     mutationFn: (data: { amount: number; paymentMethod: string }) =>
-      apiRequest('/api/transactions/deposit', { method: 'POST', body: JSON.stringify(data) }),
+      apiRequest('POST', '/api/transactions/deposit', data),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('wallet.depositSuccess') });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
@@ -71,7 +71,7 @@ export default function WalletPage() {
 
   const withdrawMutation = useMutation({
     mutationFn: (data: { amount: number; paymentMethod: string }) =>
-      apiRequest('/api/transactions/withdraw', { method: 'POST', body: JSON.stringify(data) }),
+      apiRequest('POST', '/api/transactions/withdraw', data),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('wallet.withdrawSuccess') });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });

@@ -57,11 +57,7 @@ export default function TransactionsPage() {
 
   const depositMutation = useMutation({
     mutationFn: async (data: { amount: string; paymentMethod: string; paymentReference: string; walletNumber?: string }) => {
-      return apiRequest("/api/transactions/deposit", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", "/api/transactions/deposit", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
@@ -76,11 +72,7 @@ export default function TransactionsPage() {
 
   const withdrawMutation = useMutation({
     mutationFn: async (data: { amount: string }) => {
-      return apiRequest("/api/transactions/withdraw", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", "/api/transactions/withdraw", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
@@ -95,11 +87,7 @@ export default function TransactionsPage() {
 
   const processMutation = useMutation({
     mutationFn: async ({ id, status, note }: { id: string; status: string; note?: string }) => {
-      return apiRequest(`/api/transactions/${id}/process`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ status, note }),
-      });
+      return apiRequest("PATCH", `/api/transactions/${id}/process`, { status, note });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });

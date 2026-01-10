@@ -85,6 +85,7 @@ import AdminNotificationsPage from "@/pages/admin/admin-notifications";
 import AdminGamesPage from "@/pages/admin/admin-games";
 import AdminIdVerificationPage from "@/pages/admin/admin-id-verification";
 import AdminSeoPage from "@/pages/admin/admin-seo";
+import AdminPaymentMethodsPage from "@/pages/admin/admin-payment-methods";
 import SupportPage from "@/pages/support";
 import ChatPage from "@/pages/chat";
 
@@ -468,6 +469,9 @@ function AdminRouter() {
       </Route>
       <Route path="/admin/seo">
         <AdminLayout><AdminSeoPage /></AdminLayout>
+      </Route>
+      <Route path="/admin/payment-methods">
+        <AdminLayout><AdminPaymentMethodsPage /></AdminLayout>
       </Route>
     </Switch>
   );

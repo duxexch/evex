@@ -10,7 +10,8 @@ import {
   insertAnnouncementSchema, insertUserPreferencesSchema, notifications,
   chatMessages, chatSettings, users, matchmakingQueue, gameMatches, games, gameplaySettings,
   gameplayEmojis, gameplayMessages, gameSections, advertisements,
-  insertGameSectionSchema, insertAdvertisementSchema
+  insertGameSectionSchema, insertAdvertisementSchema,
+  insertCountryPaymentMethodSchema
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -563,6 +564,58 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const methods = await storage.listCountryPaymentMethods();
       res.json(methods.filter(m => m.isActive));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/payment-methods", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const methods = await storage.listCountryPaymentMethods();
+      res.json(methods);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/admin/payment-methods", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const parsed = insertCountryPaymentMethodSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid payment method data", details: parsed.error.errors });
+      }
+      const method = await storage.createCountryPaymentMethod(parsed.data);
+      res.json(method);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/admin/payment-methods/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const parsed = insertCountryPaymentMethodSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid payment method data", details: parsed.error.errors });
+      }
+      const method = await storage.updateCountryPaymentMethod(id, parsed.data);
+      if (!method) {
+        return res.status(404).json({ error: "Payment method not found" });
+      }
+      res.json(method);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/admin/payment-methods/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteCountryPaymentMethod(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Payment method not found" });
+      }
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
