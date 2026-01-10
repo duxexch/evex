@@ -330,15 +330,96 @@ function PreferencesSection() {
         <div className="space-y-2">
           <Label>{t("settings.currency")}</Label>
           <Select value={preferences?.currency || "USD"} onValueChange={handleCurrencyChange}>
-            <SelectTrigger className="w-full md:w-[200px]" data-testid="select-currency">
+            <SelectTrigger className="w-full md:w-[280px]" data-testid="select-currency">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="USD">USD - US Dollar</SelectItem>
-              <SelectItem value="EUR">EUR - Euro</SelectItem>
-              <SelectItem value="GBP">GBP - British Pound</SelectItem>
-              <SelectItem value="AED">AED - UAE Dirham</SelectItem>
-              <SelectItem value="SAR">SAR - Saudi Riyal</SelectItem>
+            <SelectContent className="max-h-[300px]">
+              <SelectItem value="USD">USD - US Dollar ($)</SelectItem>
+              <SelectItem value="EUR">EUR - Euro (€)</SelectItem>
+              <SelectItem value="GBP">GBP - British Pound (£)</SelectItem>
+              <SelectItem value="JPY">JPY - Japanese Yen (¥)</SelectItem>
+              <SelectItem value="CHF">CHF - Swiss Franc (CHF)</SelectItem>
+              <SelectItem value="CAD">CAD - Canadian Dollar (C$)</SelectItem>
+              <SelectItem value="AUD">AUD - Australian Dollar (A$)</SelectItem>
+              <SelectItem value="NZD">NZD - New Zealand Dollar (NZ$)</SelectItem>
+              <SelectItem value="CNY">CNY - Chinese Yuan (¥)</SelectItem>
+              <SelectItem value="HKD">HKD - Hong Kong Dollar (HK$)</SelectItem>
+              <SelectItem value="SGD">SGD - Singapore Dollar (S$)</SelectItem>
+              <SelectItem value="KRW">KRW - South Korean Won (₩)</SelectItem>
+              <SelectItem value="INR">INR - Indian Rupee (₹)</SelectItem>
+              <SelectItem value="RUB">RUB - Russian Ruble (₽)</SelectItem>
+              <SelectItem value="BRL">BRL - Brazilian Real (R$)</SelectItem>
+              <SelectItem value="MXN">MXN - Mexican Peso (MX$)</SelectItem>
+              <SelectItem value="ZAR">ZAR - South African Rand (R)</SelectItem>
+              <SelectItem value="TRY">TRY - Turkish Lira (₺)</SelectItem>
+              <SelectItem value="PLN">PLN - Polish Zloty (zł)</SelectItem>
+              <SelectItem value="SEK">SEK - Swedish Krona (kr)</SelectItem>
+              <SelectItem value="NOK">NOK - Norwegian Krone (kr)</SelectItem>
+              <SelectItem value="DKK">DKK - Danish Krone (kr)</SelectItem>
+              <SelectItem value="CZK">CZK - Czech Koruna (Kč)</SelectItem>
+              <SelectItem value="HUF">HUF - Hungarian Forint (Ft)</SelectItem>
+              <SelectItem value="ILS">ILS - Israeli Shekel (₪)</SelectItem>
+              <SelectItem value="THB">THB - Thai Baht (฿)</SelectItem>
+              <SelectItem value="MYR">MYR - Malaysian Ringgit (RM)</SelectItem>
+              <SelectItem value="IDR">IDR - Indonesian Rupiah (Rp)</SelectItem>
+              <SelectItem value="PHP">PHP - Philippine Peso (₱)</SelectItem>
+              <SelectItem value="VND">VND - Vietnamese Dong (₫)</SelectItem>
+              <SelectItem value="PKR">PKR - Pakistani Rupee (Rs)</SelectItem>
+              <SelectItem value="BDT">BDT - Bangladeshi Taka (৳)</SelectItem>
+              <SelectItem value="NGN">NGN - Nigerian Naira (₦)</SelectItem>
+              <SelectItem value="EGP">EGP - Egyptian Pound (E£)</SelectItem>
+              <SelectItem value="KES">KES - Kenyan Shilling (KSh)</SelectItem>
+              <SelectItem value="GHS">GHS - Ghanaian Cedi (GH₵)</SelectItem>
+              <SelectItem value="AED">AED - UAE Dirham (د.إ)</SelectItem>
+              <SelectItem value="SAR">SAR - Saudi Riyal (ر.س)</SelectItem>
+              <SelectItem value="QAR">QAR - Qatari Riyal (ر.ق)</SelectItem>
+              <SelectItem value="KWD">KWD - Kuwaiti Dinar (د.ك)</SelectItem>
+              <SelectItem value="BHD">BHD - Bahraini Dinar (ب.د)</SelectItem>
+              <SelectItem value="OMR">OMR - Omani Rial (ر.ع)</SelectItem>
+              <SelectItem value="JOD">JOD - Jordanian Dinar (د.أ)</SelectItem>
+              <SelectItem value="LBP">LBP - Lebanese Pound (ل.ل)</SelectItem>
+              <SelectItem value="IQD">IQD - Iraqi Dinar (ع.د)</SelectItem>
+              <SelectItem value="SYP">SYP - Syrian Pound (ل.س)</SelectItem>
+              <SelectItem value="YER">YER - Yemeni Rial (ر.ي)</SelectItem>
+              <SelectItem value="MAD">MAD - Moroccan Dirham (د.م)</SelectItem>
+              <SelectItem value="DZD">DZD - Algerian Dinar (د.ج)</SelectItem>
+              <SelectItem value="TND">TND - Tunisian Dinar (د.ت)</SelectItem>
+              <SelectItem value="LYD">LYD - Libyan Dinar (ل.د)</SelectItem>
+              <SelectItem value="SDG">SDG - Sudanese Pound (ج.س)</SelectItem>
+              <SelectItem value="ARS">ARS - Argentine Peso ($)</SelectItem>
+              <SelectItem value="CLP">CLP - Chilean Peso ($)</SelectItem>
+              <SelectItem value="COP">COP - Colombian Peso ($)</SelectItem>
+              <SelectItem value="PEN">PEN - Peruvian Sol (S/)</SelectItem>
+              <SelectItem value="VES">VES - Venezuelan Bolivar (Bs)</SelectItem>
+              <SelectItem value="UYU">UYU - Uruguayan Peso ($U)</SelectItem>
+              <SelectItem value="UAH">UAH - Ukrainian Hryvnia (₴)</SelectItem>
+              <SelectItem value="RON">RON - Romanian Leu (lei)</SelectItem>
+              <SelectItem value="BGN">BGN - Bulgarian Lev (лв)</SelectItem>
+              <SelectItem value="HRK">HRK - Croatian Kuna (kn)</SelectItem>
+              <SelectItem value="RSD">RSD - Serbian Dinar (din)</SelectItem>
+              <SelectItem value="TWD">TWD - Taiwan Dollar (NT$)</SelectItem>
+              <SelectItem value="LKR">LKR - Sri Lankan Rupee (Rs)</SelectItem>
+              <SelectItem value="NPR">NPR - Nepalese Rupee (Rs)</SelectItem>
+              <SelectItem value="MMK">MMK - Myanmar Kyat (K)</SelectItem>
+              <SelectItem value="KHR">KHR - Cambodian Riel (៛)</SelectItem>
+              <SelectItem value="LAK">LAK - Lao Kip (₭)</SelectItem>
+              <SelectItem value="BND">BND - Brunei Dollar (B$)</SelectItem>
+              <SelectItem value="MOP">MOP - Macanese Pataca (MOP$)</SelectItem>
+              <SelectItem value="BTC">BTC - Bitcoin (₿)</SelectItem>
+              <SelectItem value="ETH">ETH - Ethereum (Ξ)</SelectItem>
+              <SelectItem value="USDT">USDT - Tether (₮)</SelectItem>
+              <SelectItem value="BNB">BNB - Binance Coin (BNB)</SelectItem>
+              <SelectItem value="XRP">XRP - Ripple (XRP)</SelectItem>
+              <SelectItem value="SOL">SOL - Solana (SOL)</SelectItem>
+              <SelectItem value="DOGE">DOGE - Dogecoin (Ð)</SelectItem>
+              <SelectItem value="ADA">ADA - Cardano (₳)</SelectItem>
+              <SelectItem value="TRX">TRX - Tron (TRX)</SelectItem>
+              <SelectItem value="LTC">LTC - Litecoin (Ł)</SelectItem>
+              <SelectItem value="DOT">DOT - Polkadot (DOT)</SelectItem>
+              <SelectItem value="MATIC">MATIC - Polygon (MATIC)</SelectItem>
+              <SelectItem value="AVAX">AVAX - Avalanche (AVAX)</SelectItem>
+              <SelectItem value="LINK">LINK - Chainlink (LINK)</SelectItem>
+              <SelectItem value="XLM">XLM - Stellar (XLM)</SelectItem>
             </SelectContent>
           </Select>
         </div>
