@@ -8,12 +8,13 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, Send, Check, CheckCheck, Loader2, AlertCircle, Search } from "lucide-react";
+import { MessageCircle, Send, Check, CheckCheck, Loader2, AlertCircle, Search, Timer } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { format, isToday, isYesterday } from "date-fns";
 
-function formatMessageTime(dateString: string) {
-  const date = new Date(dateString);
+function formatMessageTime(dateValue: string | Date) {
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
   if (isToday(date)) {
     return format(date, "HH:mm");
   }
@@ -48,6 +49,7 @@ export default function ChatPage() {
 
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [disappearingMode, setDisappearingMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -63,7 +65,10 @@ export default function ChatPage() {
 
   const handleSendMessage = () => {
     if (!messageInput.trim() || !activeConversation) return;
-    sendMessage(activeConversation, messageInput.trim());
+    sendMessage(activeConversation, messageInput.trim(), "text", undefined, {
+      isDisappearing: disappearingMode,
+      disappearAfterRead: disappearingMode,
+    });
     setMessageInput("");
     setTyping(activeConversation, false);
   };
@@ -167,7 +172,7 @@ export default function ChatPage() {
                           {conv.otherUser.firstName || conv.otherUser.username}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {formatMessageTime(conv.lastMessage.createdAt as string)}
+                          {formatMessageTime(conv.lastMessage.createdAt)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
@@ -222,6 +227,7 @@ export default function ChatPage() {
               <div className="space-y-4">
                 {messages.map((msg) => {
                   const isMine = msg.senderId === user?.id;
+                  const isDisappearingMsg = msg.isDisappearing || msg.disappearAfterRead;
                   return (
                     <div
                       key={msg.id}
@@ -242,7 +248,17 @@ export default function ChatPage() {
                             isMine ? "text-primary-foreground/70" : "text-muted-foreground"
                           )}
                         >
-                          <span>{formatMessageTime(msg.createdAt as string)}</span>
+                          {isDisappearingMsg && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Timer className="h-3 w-3" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{t("chat.disappearingMessage")}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <span>{formatMessageTime(msg.createdAt)}</span>
                           {isMine && (
                             <>
                               {msg.isRead ? (
@@ -262,7 +278,33 @@ export default function ChatPage() {
             </ScrollArea>
 
             <div className="p-4 border-t">
+              {disappearingMode && (
+                <div className="mb-2 flex items-center gap-2 text-xs text-primary">
+                  <Timer className="h-3 w-3" />
+                  <span>{t("chat.disappearingModeActive")}</span>
+                </div>
+              )}
               <div className="flex gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={disappearingMode ? "default" : "ghost"}
+                      size="icon"
+                      onClick={() => setDisappearingMode(!disappearingMode)}
+                      className={cn(
+                        "shrink-0",
+                        disappearingMode && "text-primary-foreground"
+                      )}
+                      data-testid="button-toggle-disappearing"
+                    >
+                      <Timer className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{disappearingMode ? t("chat.disappearingModeOff") : t("chat.disappearingModeOn")}</p>
+                    <p className="text-xs text-muted-foreground">{t("chat.disappearingModeDesc")}</p>
+                  </TooltipContent>
+                </Tooltip>
                 <Input
                   value={messageInput}
                   onChange={(e) => handleInputChange(e.target.value)}

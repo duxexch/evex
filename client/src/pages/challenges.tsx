@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { BackButton } from "@/components/BackButton";
 import { 
   Swords, 
   Users, 
@@ -43,7 +44,8 @@ import {
   ShoppingBag,
   UserPlus,
   UserCheck,
-  Bell
+  Bell,
+  Filter
 } from "lucide-react";
 
 interface PlayerRating {
@@ -148,6 +150,7 @@ export default function ChallengesPage() {
   const [spectatingChallenge, setSpectatingChallenge] = useState<Challenge | null>(null);
   const [spectatorBetAmount, setSpectatorBetAmount] = useState("");
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [gameFilter, setGameFilter] = useState<string[]>([]);
 
   const { data: myChallenges, isLoading: loadingMy } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/my'],
@@ -333,8 +336,24 @@ export default function ChallengesPage() {
     return game?.icon || Target;
   };
 
+  const toggleGameFilter = (gameId: string) => {
+    setGameFilter(prev => 
+      prev.includes(gameId) 
+        ? prev.filter(id => id !== gameId)
+        : [...prev, gameId]
+    );
+  };
+
+  const filterChallenges = (challenges: Challenge[] | undefined) => {
+    if (!challenges) return [];
+    if (gameFilter.length === 0) return challenges;
+    return challenges.filter(c => gameFilter.includes(c.gameType));
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      <BackButton className="mb-4" />
+      
       <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-challenges-title">
@@ -393,6 +412,50 @@ export default function ChallengesPage() {
         </Card>
       )}
 
+      <Card className="mb-6">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium text-sm">{t('challenges.filterByGame')}</span>
+            {gameFilter.length > 0 && (
+              <Badge variant="secondary" className="ms-auto">
+                {gameFilter.length} {t('challenges.selected')}
+              </Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {CHALLENGE_GAMES.map(game => {
+              const Icon = game.icon;
+              const isSelected = gameFilter.includes(game.id);
+              return (
+                <Button
+                  key={game.id}
+                  variant={isSelected ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleGameFilter(game.id)}
+                  className="gap-2"
+                  data-testid={`button-filter-${game.id}`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {game.name}
+                </Button>
+              );
+            })}
+            {gameFilter.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setGameFilter([])}
+                className="text-muted-foreground"
+                data-testid="button-clear-filter"
+              >
+                {t('challenges.clearFilter')}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="arena">
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="arena" data-testid="tab-arena">
@@ -426,9 +489,9 @@ export default function ChallengesPage() {
                   </Card>
                 ))}
               </div>
-            ) : publicChallenges && publicChallenges.length > 0 ? (
+            ) : filterChallenges(publicChallenges).length > 0 ? (
               <div className="grid md:grid-cols-2 gap-4">
-                {publicChallenges.map(challenge => {
+                {filterChallenges(publicChallenges).map(challenge => {
                   const GameIcon = getGameIcon(challenge.gameType);
                   return (
                     <Card key={challenge.id} className="overflow-hidden" data-testid={`card-live-challenge-${challenge.id}`}>
@@ -546,8 +609,8 @@ export default function ChallengesPage() {
                   </Card>
                 ))}
               </div>
-            ) : availableChallenges && availableChallenges.length > 0 ? (
-              availableChallenges.map(challenge => {
+            ) : filterChallenges(availableChallenges).length > 0 ? (
+              filterChallenges(availableChallenges).map(challenge => {
                 const GameIcon = getGameIcon(challenge.gameType);
                 return (
                   <Card key={challenge.id} data-testid={`card-challenge-${challenge.id}`}>
@@ -631,8 +694,8 @@ export default function ChallengesPage() {
                   </Card>
                 ))}
               </div>
-            ) : myChallenges && myChallenges.length > 0 ? (
-              myChallenges.map(challenge => {
+            ) : filterChallenges(myChallenges).length > 0 ? (
+              filterChallenges(myChallenges).map(challenge => {
                 const GameIcon = getGameIcon(challenge.gameType);
                 const isCreator = challenge.player1Id === user?.id;
                 return (

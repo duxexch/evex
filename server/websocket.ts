@@ -81,7 +81,7 @@ export function setupWebSocket(server: Server) {
 
         // Chat message handler
         if (data.type === "chat_message" && ws.userId) {
-          const { receiverId, content, messageType = "text", attachmentUrl } = data;
+          const { receiverId, content, messageType = "text", attachmentUrl, isDisappearing = false, disappearAfterRead = false } = data;
           
           // Check if chat is enabled
           const chatEnabledSetting = await db.select().from(chatSettings).where(eq(chatSettings.key, "isEnabled")).limit(1);
@@ -97,6 +97,8 @@ export function setupWebSocket(server: Server) {
             content,
             messageType,
             attachmentUrl,
+            isDisappearing: Boolean(isDisappearing),
+            disappearAfterRead: Boolean(disappearAfterRead),
           }).returning();
           
           // Get sender info
@@ -149,9 +151,12 @@ export function setupWebSocket(server: Server) {
           const messages = await db.select()
             .from(chatMessages)
             .where(
-              or(
-                and(eq(chatMessages.senderId, ws.userId), eq(chatMessages.receiverId, otherUserId)),
-                and(eq(chatMessages.senderId, otherUserId), eq(chatMessages.receiverId, ws.userId))
+              and(
+                or(
+                  and(eq(chatMessages.senderId, ws.userId), eq(chatMessages.receiverId, otherUserId)),
+                  and(eq(chatMessages.senderId, otherUserId), eq(chatMessages.receiverId, ws.userId))
+                ),
+                sql`${chatMessages.deletedAt} IS NULL`
               )
             )
             .orderBy(desc(chatMessages.createdAt))
@@ -177,12 +182,19 @@ export function setupWebSocket(server: Server) {
             .returning();
           
           if (updated) {
+            // If message should disappear after being read, mark it as deleted
+            if (updated.disappearAfterRead) {
+              await db.update(chatMessages)
+                .set({ deletedAt: new Date() })
+                .where(eq(chatMessages.id, messageId));
+            }
+            
             // Notify sender that message was read
             const senderSockets = clients.get(updated.senderId);
             if (senderSockets) {
               const outgoing = JSON.stringify({ 
                 type: "message_read_receipt", 
-                data: { messageId, readAt: updated.readAt } 
+                data: { messageId, readAt: updated.readAt, disappeared: updated.disappearAfterRead } 
               });
               senderSockets.forEach(socket => {
                 if (socket.readyState === WebSocket.OPEN) {

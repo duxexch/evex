@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,7 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { User, Shield, Settings2, Loader2, Monitor, Smartphone, Globe, Trash2, LogOut, CheckCircle } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { User, Shield, Settings2, Loader2, Monitor, Smartphone, Globe, Trash2, LogOut, CheckCircle, KeyRound, Camera } from "lucide-react";
 import { format } from "date-fns";
 
 const profileSchema = z.object({
@@ -71,6 +72,9 @@ function ProfileSection() {
   const { t } = useI18n();
   const { toast } = useToast();
   const headers = useAuthHeaders();
+  
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -102,6 +106,38 @@ function ProfileSection() {
     },
   });
 
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploadingPicture(true);
+    const formData = new FormData();
+    formData.append('profilePicture', file);
+    
+    try {
+      const res = await fetch("/api/user/profile-picture", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Failed to upload");
+      const data = await res.json();
+      updateUser(data.user);
+      toast({ title: t("common.success"), description: "Profile picture updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    } catch {
+      toast({ title: t("common.error"), description: "Failed to upload profile picture", variant: "destructive" });
+    } finally {
+      setIsUploadingPicture(false);
+    }
+  };
+
+  const getUserInitials = () => {
+    const first = user?.firstName?.[0] || '';
+    const last = user?.lastName?.[0] || '';
+    return (first + last).toUpperCase() || 'U';
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -112,6 +148,38 @@ function ProfileSection() {
         <CardDescription>{t("settings.profileDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="flex flex-col items-center gap-4 mb-6">
+          <div className="relative">
+            <Avatar className="h-24 w-24">
+              <AvatarImage src={user?.profilePicture} alt={user?.firstName || "Profile"} />
+              <AvatarFallback className="text-2xl bg-primary/10">{getUserInitials()}</AvatarFallback>
+            </Avatar>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              className="hidden"
+              onChange={handleProfilePictureUpload}
+              data-testid="input-profile-picture"
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className="absolute bottom-0 right-0 h-8 w-8 rounded-full"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingPicture}
+              data-testid="button-upload-picture"
+            >
+              {isUploadingPicture ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Camera className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">{t("settings.clickToUpload") || "Click the camera icon to upload a profile picture"}</p>
+        </div>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => updateProfileMutation.mutate(data))} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -334,6 +402,14 @@ function SecuritySection() {
   const { toast } = useToast();
   const headers = useAuthHeaders();
 
+  const [withdrawalPasswordEnabled, setWithdrawalPasswordEnabled] = useState(false);
+  const [showSetWithdrawalPassword, setShowSetWithdrawalPassword] = useState(false);
+  const [withdrawalPasswordForm, setWithdrawalPasswordForm] = useState({
+    newPassword: "",
+    confirmPassword: "",
+    currentLoginPassword: ""
+  });
+
   const passwordForm = useForm<PasswordFormValues>({
     resolver: zodResolver(passwordSchema),
     defaultValues: {
@@ -365,6 +441,27 @@ function SecuritySection() {
     },
     onError: (error: Error) => {
       toast({ title: t("common.error"), description: error.message, variant: "destructive" });
+    },
+  });
+
+  const setWithdrawalPasswordMutation = useMutation({
+    mutationFn: async (data: { password: string; loginPassword: string }) => {
+      const res = await fetch("/api/user/withdrawal-password", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to set withdrawal password");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: t("common.success"), description: "Withdrawal password set successfully" });
+      setShowSetWithdrawalPassword(false);
+      setWithdrawalPasswordForm({ newPassword: "", confirmPassword: "", currentLoginPassword: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/preferences"] });
+    },
+    onError: () => {
+      toast({ title: t("common.error"), description: "Failed to set withdrawal password", variant: "destructive" });
     },
   });
 
@@ -595,6 +692,110 @@ function SecuritySection() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">{t("settings.noLoginHistory")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5" />
+            Withdrawal Password
+          </CardTitle>
+          <CardDescription>
+            This password is required for withdrawals and P2P sells to add an extra layer of security to your funds.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label>Enable Withdrawal Password</Label>
+              <p className="text-sm text-muted-foreground">
+                Require a separate password for all withdrawal and P2P sell operations
+              </p>
+            </div>
+            <Switch
+              checked={withdrawalPasswordEnabled}
+              onCheckedChange={(checked) => {
+                setWithdrawalPasswordEnabled(checked);
+                if (checked) {
+                  setShowSetWithdrawalPassword(true);
+                }
+              }}
+              data-testid="switch-withdrawal-password"
+            />
+          </div>
+
+          {withdrawalPasswordEnabled && showSetWithdrawalPassword && (
+            <div className="space-y-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="withdrawal-new-password">New Withdrawal Password</Label>
+                <Input
+                  id="withdrawal-new-password"
+                  type="password"
+                  value={withdrawalPasswordForm.newPassword}
+                  onChange={(e) => setWithdrawalPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                  placeholder="Enter new withdrawal password"
+                  data-testid="input-withdrawal-new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="withdrawal-confirm-password">Confirm Withdrawal Password</Label>
+                <Input
+                  id="withdrawal-confirm-password"
+                  type="password"
+                  value={withdrawalPasswordForm.confirmPassword}
+                  onChange={(e) => setWithdrawalPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  placeholder="Confirm withdrawal password"
+                  data-testid="input-withdrawal-confirm-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="withdrawal-login-password">Current Login Password</Label>
+                <Input
+                  id="withdrawal-login-password"
+                  type="password"
+                  value={withdrawalPasswordForm.currentLoginPassword}
+                  onChange={(e) => setWithdrawalPasswordForm(prev => ({ ...prev, currentLoginPassword: e.target.value }))}
+                  placeholder="Enter your login password to confirm"
+                  data-testid="input-withdrawal-login-password"
+                />
+              </div>
+              <Button
+                onClick={() => {
+                  if (withdrawalPasswordForm.newPassword !== withdrawalPasswordForm.confirmPassword) {
+                    toast({ title: t("common.error"), description: "Passwords don't match", variant: "destructive" });
+                    return;
+                  }
+                  if (!withdrawalPasswordForm.newPassword || !withdrawalPasswordForm.currentLoginPassword) {
+                    toast({ title: t("common.error"), description: "Please fill in all fields", variant: "destructive" });
+                    return;
+                  }
+                  setWithdrawalPasswordMutation.mutate({
+                    password: withdrawalPasswordForm.newPassword,
+                    loginPassword: withdrawalPasswordForm.currentLoginPassword
+                  });
+                }}
+                disabled={setWithdrawalPasswordMutation.isPending}
+                data-testid="button-set-withdrawal-password"
+              >
+                {setWithdrawalPasswordMutation.isPending && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
+                Set Withdrawal Password
+              </Button>
+            </div>
+          )}
+
+          {withdrawalPasswordEnabled && !showSetWithdrawalPassword && (
+            <div className="pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setShowSetWithdrawalPassword(true)}
+                data-testid="button-reset-withdrawal-password"
+              >
+                <KeyRound className="me-2 h-4 w-4" />
+                Reset Withdrawal Password
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

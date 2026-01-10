@@ -12,7 +12,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { Game } from "@shared/schema";
-import { Plus, Pencil, Trash2, Gamepad2, Loader2 } from "lucide-react";
+import { BackButton } from "@/components/BackButton";
+import { Search, Filter, Plus, Pencil, Trash2, Gamepad2, Loader2, Star, TrendingUp, Zap, Trophy } from "lucide-react";
+
+const categories = [
+  { value: "all", label: "All Games" },
+  { value: "slots", label: "Slots" },
+  { value: "table", label: "Table" },
+  { value: "cards", label: "Cards" },
+  { value: "live", label: "Live" },
+  { value: "crash", label: "Crash" },
+];
 
 export default function GamesPage() {
   const { user } = useAuth();
@@ -20,6 +30,8 @@ export default function GamesPage() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   
   const [formData, setFormData] = useState({
     name: "",
@@ -41,6 +53,14 @@ export default function GamesPage() {
       return res.json();
     },
   });
+
+  const filteredGames = games?.filter(game => {
+    const matchesCategory = categoryFilter === "all" || game.category === categoryFilter;
+    const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  }) || [];
+
+  const mostPlayedGames = [...(games || [])].sort((a, b) => b.playCount - a.playCount).slice(0, 3);
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -138,12 +158,34 @@ export default function GamesPage() {
 
   const isAdmin = user?.role === "admin";
 
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case "slots": return <Zap className="h-4 w-4" />;
+      case "table": return <Gamepad2 className="h-4 w-4" />;
+      case "cards": return <Star className="h-4 w-4" />;
+      case "live": return <TrendingUp className="h-4 w-4" />;
+      case "crash": return <Trophy className="h-4 w-4" />;
+      default: return <Gamepad2 className="h-4 w-4" />;
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-20" />
           <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-10 w-32" />
+        </div>
+        <Skeleton className="h-10 w-full max-w-md" />
+        <div className="flex gap-2">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-10 w-24" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-48" />
+          ))}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
@@ -157,7 +199,13 @@ export default function GamesPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold">Game Management</h1>
+        <div className="flex items-center gap-4">
+          <BackButton fallbackPath="/dashboard" />
+          <div>
+            <h1 className="text-2xl font-bold">Game Management</h1>
+            <p className="text-sm text-muted-foreground">Browse and manage all games</p>
+          </div>
+        </div>
         {isAdmin && (
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open);
@@ -299,81 +347,188 @@ export default function GamesPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {games?.map((game) => (
-          <Card key={game.id} data-testid={`card-game-${game.id}`} className="game-card-hover">
-            <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
-              <div className="flex items-center gap-2">
-                <Gamepad2 className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">{game.name}</CardTitle>
-              </div>
-              <Badge
-                variant={game.status === "active" ? "default" : "secondary"}
-                className={game.status === "active" ? "bg-primary" : ""}
-              >
-                {game.status}
-              </Badge>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">{game.category}</Badge>
-                <Badge variant="outline">{game.volatility} volatility</Badge>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">RTP:</span>{" "}
-                  <span className="font-medium">{game.rtp}%</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">House Edge:</span>{" "}
-                  <span className="font-medium">{game.houseEdge}%</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Min:</span>{" "}
-                  <span className="font-medium">${game.minBet}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Max:</span>{" "}
-                  <span className="font-medium">${game.maxBet}</span>
-                </div>
-              </div>
-              
-              <div className="text-sm text-muted-foreground">
-                {game.playCount} plays | ${parseFloat(game.totalVolume).toLocaleString()} volume
-              </div>
-              
-              {isAdmin && (
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    data-testid={`button-edit-game-${game.id}`}
-                    onClick={() => openEditDialog(game)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    data-testid={`button-delete-game-${game.id}`}
-                    onClick={() => deleteMutation.mutate(game.id)}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          data-testid="input-search-games"
+          placeholder="Search games..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {categories.map((cat) => (
+          <Button
+            key={cat.value}
+            variant={categoryFilter === cat.value ? "default" : "outline"}
+            size="sm"
+            onClick={() => setCategoryFilter(cat.value)}
+            data-testid={`filter-category-${cat.value}`}
+            className="gap-2"
+          >
+            {cat.value !== "all" && getCategoryIcon(cat.value)}
+            {cat.label}
+          </Button>
         ))}
       </div>
+
+      {mostPlayedGames.length > 0 && categoryFilter === "all" && !searchQuery && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold">Most Played</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {mostPlayedGames.map((game, index) => (
+              <Card 
+                key={game.id} 
+                data-testid={`card-featured-game-${game.id}`}
+                className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-card to-card/80 hover-elevate"
+              >
+                <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-3 py-1 text-xs font-bold rounded-bl-lg">
+                  #{index + 1}
+                </div>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      {getCategoryIcon(game.category)}
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">{game.name}</CardTitle>
+                      <p className="text-xs text-muted-foreground capitalize">{game.category}</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Total Plays</span>
+                    <span className="font-bold text-primary">{game.playCount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Volume</span>
+                    <span className="font-medium">${parseFloat(game.totalVolume).toLocaleString()}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Badge variant="outline" className="text-xs">{game.rtp}% RTP</Badge>
+                    <Badge 
+                      variant={game.status === "active" ? "default" : "secondary"}
+                      className={`text-xs ${game.status === "active" ? "bg-primary" : ""}`}
+                    >
+                      {game.status}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Gamepad2 className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-xl font-semibold">
+              {categoryFilter === "all" ? "All Games" : categories.find(c => c.value === categoryFilter)?.label}
+            </h2>
+            <Badge variant="secondary" className="ml-2">{filteredGames.length}</Badge>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredGames.map((game) => (
+            <Card 
+              key={game.id} 
+              data-testid={`card-game-${game.id}`} 
+              className="group hover-elevate transition-all duration-200"
+            >
+              <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-muted group-hover:bg-primary/10 transition-colors">
+                    {getCategoryIcon(game.category)}
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">{game.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground capitalize">{game.category}</p>
+                  </div>
+                </div>
+                <Badge
+                  variant={game.status === "active" ? "default" : "secondary"}
+                  className={game.status === "active" ? "bg-primary" : ""}
+                >
+                  {game.status}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-xs">{game.volatility} volatility</Badge>
+                  <Badge variant="outline" className="text-xs">{game.rtp}% RTP</Badge>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="p-2 rounded-md bg-muted/50">
+                    <span className="text-muted-foreground text-xs block">Min Bet</span>
+                    <span className="font-medium">${game.minBet}</span>
+                  </div>
+                  <div className="p-2 rounded-md bg-muted/50">
+                    <span className="text-muted-foreground text-xs block">Max Bet</span>
+                    <span className="font-medium">${game.maxBet}</span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between text-sm border-t pt-3">
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <TrendingUp className="h-3 w-3" />
+                    <span>{game.playCount} plays</span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    ${parseFloat(game.totalVolume).toLocaleString()} vol
+                  </div>
+                </div>
+                
+                {isAdmin && (
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      data-testid={`button-edit-game-${game.id}`}
+                      onClick={() => openEditDialog(game)}
+                      className="flex-1"
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      data-testid={`button-delete-game-${game.id}`}
+                      onClick={() => deleteMutation.mutate(game.id)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
       
-      {games?.length === 0 && (
+      {filteredGames.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
-            <Gamepad2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No games yet. Add your first game!</p>
+            <div className="p-4 rounded-full bg-muted w-fit mx-auto mb-4">
+              <Gamepad2 className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-1">No games found</h3>
+            <p className="text-muted-foreground text-sm">
+              {searchQuery || categoryFilter !== "all" 
+                ? "Try adjusting your search or filter criteria" 
+                : "Add your first game to get started!"}
+            </p>
           </CardContent>
         </Card>
       )}

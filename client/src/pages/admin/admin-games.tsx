@@ -41,7 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Gamepad2, Users, User, Image } from "lucide-react";
+import { Plus, Pencil, Trash2, Gamepad2, Users, User, Image, DollarSign } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -62,6 +62,9 @@ const gameFormSchema = z.object({
   multiplierMin: z.string(),
   multiplierMax: z.string(),
   isFeatured: z.boolean(),
+  isFreeToPlay: z.boolean(),
+  playPrice: z.string(),
+  pricingType: z.enum(["bet", "fixed", "free"]),
   minPlayers: z.number().min(1),
   maxPlayers: z.number().min(1),
   sortOrder: z.number(),
@@ -87,6 +90,9 @@ interface Game {
   multiplierMin: string;
   multiplierMax: string;
   isFeatured: boolean;
+  isFreeToPlay: boolean;
+  playPrice: string;
+  pricingType: string;
   minPlayers: number;
   maxPlayers: number;
   playCount: number;
@@ -144,6 +150,9 @@ function GameForm({
       multiplierMin: game?.multiplierMin || "0.00",
       multiplierMax: game?.multiplierMax || "100.00",
       isFeatured: game?.isFeatured || false,
+      isFreeToPlay: game?.isFreeToPlay || false,
+      playPrice: game?.playPrice || "0.00",
+      pricingType: (game?.pricingType as "bet" | "fixed" | "free") || "bet",
       minPlayers: game?.minPlayers || 1,
       maxPlayers: game?.maxPlayers || 1,
       sortOrder: game?.sortOrder || 0,
@@ -555,6 +564,64 @@ function GameForm({
           />
         </div>
 
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="isFreeToPlay"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between pt-6">
+                <FormLabel>Free to Play</FormLabel>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    data-testid="switch-free-to-play"
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="pricingType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Pricing Type</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-pricing-type">
+                      <SelectValue placeholder="Select pricing type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="bet">Bet-based</SelectItem>
+                    <SelectItem value="fixed">Fixed Price</SelectItem>
+                    <SelectItem value="free">Free</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {!form.watch("isFreeToPlay") && (
+          <FormField
+            control={form.control}
+            name="playPrice"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Play Price ($)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.01" {...field} data-testid="input-play-price" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
         <div className="flex justify-end gap-2 pt-4">
           <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
             Cancel
@@ -648,6 +715,7 @@ export default function AdminGamesPage() {
                     <TableHead>Name</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Pricing</TableHead>
                     <TableHead>Sections</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>RTP</TableHead>
@@ -693,6 +761,23 @@ export default function AdminGamesPage() {
                               <span>Single</span>
                             </>
                           )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {game.isFreeToPlay || game.pricingType === "free" ? (
+                            <Badge variant="secondary" className="bg-green-600 text-white text-xs">
+                              Free
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">
+                              <DollarSign className="h-3 w-3 me-1" />
+                              {game.playPrice}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="text-xs capitalize">
+                            {game.pricingType}
+                          </Badge>
                         </div>
                       </TableCell>
                       <TableCell>

@@ -40,15 +40,22 @@ Preferred communication style: Simple, everyday language.
 
 ### Database Schema
 The schema (in `shared/schema.ts`) includes:
-- **Users**: Multi-role user system with balance tracking, VIP levels, referrals
+- **Users**: Multi-role user system with balance tracking, VIP levels, referrals, withdrawal password security
 - **Agents**: Agent management with commission rates and payment methods
 - **Affiliates**: Affiliate tracking with promo codes and statistics
 - **Transactions**: Full transaction history (deposits, withdrawals, bets, wins, bonuses)
 - **Complaints**: Ticket system with priority levels and message threads
-- **Games**: Game catalog with session tracking
+- **Games**: Game catalog with session tracking, pricing controls (free/paid, bet-based/fixed pricing)
+- **Chat Messages**: Real-time messaging with disappearing messages support
 - **Promo Codes**: Promotional code management with usage tracking
 - **Audit Logs**: Comprehensive action logging
 - **Financial Limits**: Configurable limits per user/agent
+
+### Recent Features (January 2026)
+- **User Account Caching**: Strong ETag-based caching with HTTP 304 support for efficient user data fetching
+- **Disappearing Messages**: Chat messages can be set to disappear after being read
+- **Free/Paid Games**: Games can be configured as free-to-play or paid with bet-based or fixed pricing
+- **Withdrawal Password**: Separate security password for withdrawals and P2P sells
 
 ### Build and Development
 - **Development**: `npm run dev` - runs tsx with hot reload

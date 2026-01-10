@@ -1581,7 +1581,7 @@ export function registerAdminRoutes(app: Express) {
       const { 
         name, description, imageUrl, thumbnailUrl, category, sections, gameType,
         status, volatility, minBet, maxBet, rtp, houseEdge, multiplierMin, multiplierMax,
-        isFeatured, minPlayers, maxPlayers, sortOrder
+        isFeatured, minPlayers, maxPlayers, sortOrder, isFreeToPlay, playPrice, pricingType
       } = req.body;
 
       const [existing] = await db.select().from(games).where(eq(games.name, name));
@@ -1609,6 +1609,9 @@ export function registerAdminRoutes(app: Express) {
         minPlayers: minPlayers || 1,
         maxPlayers: maxPlayers || 1,
         sortOrder: sortOrder || 0,
+        isFreeToPlay: isFreeToPlay || false,
+        playPrice: playPrice || "0.00",
+        pricingType: pricingType || "bet",
         createdBy: req.admin!.id,
       }).returning();
 

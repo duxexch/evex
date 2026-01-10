@@ -34,6 +34,7 @@ import {
   Award,
   Bell,
   IdCard,
+  Search,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -71,6 +72,7 @@ function AdminSidebar() {
 
   const settingsItems = [
     { title: "App Settings", url: "/admin/app-settings", icon: Cog },
+    { title: "SEO Settings", url: "/admin/seo", icon: Search },
     { title: "Section Controls", url: "/admin/sections", icon: Settings },
     { title: "Languages", url: "/admin/languages", icon: Languages },
     { title: "Badges", url: "/admin/badges", icon: Award },

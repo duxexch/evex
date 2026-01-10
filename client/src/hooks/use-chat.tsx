@@ -27,8 +27,13 @@ interface ChatState {
   isChatEnabled: boolean;
 }
 
+interface SendMessageOptions {
+  isDisappearing?: boolean;
+  disappearAfterRead?: boolean;
+}
+
 interface UseChatReturn extends ChatState {
-  sendMessage: (receiverId: string, content: string, messageType?: string, attachmentUrl?: string) => void;
+  sendMessage: (receiverId: string, content: string, messageType?: string, attachmentUrl?: string, options?: SendMessageOptions) => void;
   setTyping: (receiverId: string, isTyping: boolean) => void;
   selectConversation: (userId: string) => void;
   loadMoreMessages: (userId: string, offset: number) => void;
@@ -175,7 +180,7 @@ export function useChat(): UseChatReturn {
               ...prev,
               messages: prev.messages.map((msg) =>
                 msg.receiverId === data.data.byUserId
-                  ? { ...msg, isRead: true, readAt: new Date().toISOString() }
+                  ? { ...msg, isRead: true, readAt: new Date() }
                   : msg
               ),
             }));
@@ -220,7 +225,8 @@ export function useChat(): UseChatReturn {
       receiverId: string,
       content: string,
       messageType = "text",
-      attachmentUrl?: string
+      attachmentUrl?: string,
+      options?: SendMessageOptions
     ) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
@@ -230,6 +236,8 @@ export function useChat(): UseChatReturn {
             content,
             messageType,
             attachmentUrl,
+            isDisappearing: options?.isDisappearing || false,
+            disappearAfterRead: options?.disappearAfterRead || false,
           })
         );
       }

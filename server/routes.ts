@@ -191,7 +191,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json({ ...user, password: undefined });
+      
+      const userData = { ...user, password: undefined };
+      const etag = `"user-${user.id}-${user.updatedAt?.getTime() || Date.now()}"`;
+      const lastModified = user.updatedAt?.toUTCString() || new Date().toUTCString();
+      
+      res.setHeader("ETag", etag);
+      res.setHeader("Last-Modified", lastModified);
+      res.setHeader("Cache-Control", "private, max-age=60, stale-while-revalidate=300");
+      
+      const clientEtag = req.headers["if-none-match"];
+      if (clientEtag === etag) {
+        return res.status(304).end();
+      }
+      
+      res.json(userData);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -38,6 +38,42 @@ interface RegisterData {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const USER_CACHE_KEY = "pwm_user_cache";
+const CACHE_TTL = 60 * 1000;
+
+interface CachedUser {
+  data: User;
+  etag: string;
+  cachedAt: number;
+}
+
+function getCachedUser(): CachedUser | null {
+  try {
+    const cached = localStorage.getItem(USER_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached) as CachedUser;
+      if (Date.now() - parsed.cachedAt < CACHE_TTL) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function setCachedUser(data: User, etag: string) {
+  try {
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify({
+      data,
+      etag,
+      cachedAt: Date.now()
+    }));
+  } catch {}
+}
+
+function clearUserCache() {
+  localStorage.removeItem(USER_CACHE_KEY);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -47,26 +83,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const savedToken = localStorage.getItem("pwm_token");
     if (savedToken) {
       setToken(savedToken);
-      fetchUser(savedToken);
+      
+      const cached = getCachedUser();
+      if (cached) {
+        setUser(cached.data);
+        setIsLoading(false);
+        fetchUser(savedToken, cached.etag);
+      } else {
+        fetchUser(savedToken);
+      }
     } else {
       setIsLoading(false);
     }
   }, []);
 
-  const fetchUser = async (authToken: string) => {
+  const fetchUser = async (authToken: string, cachedEtag?: string) => {
     try {
-      const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const headers: Record<string, string> = { Authorization: `Bearer ${authToken}` };
+      if (cachedEtag && cachedEtag.length > 0) {
+        headers["If-None-Match"] = cachedEtag;
+      }
+      
+      const res = await fetch("/api/auth/me", { headers });
+      
+      if (res.status === 304 && cachedEtag) {
+        return;
+      }
+      
       if (res.ok) {
         const userData = await res.json();
+        const etag = res.headers.get("ETag");
         setUser(userData);
+        if (etag && etag.length > 0) {
+          setCachedUser(userData, etag);
+        }
       } else {
         localStorage.removeItem("pwm_token");
+        clearUserCache();
         setToken(null);
       }
     } catch {
       localStorage.removeItem("pwm_token");
+      clearUserCache();
       setToken(null);
     } finally {
       setIsLoading(false);
@@ -89,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem("pwm_token", data.token);
+    clearUserCache();
   };
 
   const loginByAccount = async (accountId: string, password: string) => {
@@ -107,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem("pwm_token", data.token);
+    clearUserCache();
   };
 
   const loginByPhone = async (phone: string, password: string) => {
@@ -125,6 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem("pwm_token", data.token);
+    clearUserCache();
   };
 
   const oneClickRegister = async (): Promise<OneClickResult> => {
@@ -170,10 +231,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setToken(null);
     localStorage.removeItem("pwm_token");
+    clearUserCache();
   };
 
   const updateUser = (newUser: User) => {
     setUser(newUser);
+    clearUserCache();
   };
 
   const refreshUser = async () => {
