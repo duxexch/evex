@@ -1,0 +1,57 @@
+ authentication failed for user \"vex_user\""}vix@srv1118737:~/projects/vix$ # 1. إيقاف وحذف كل شيء بما فيها البيانات                  # 1. إيقاف وحذف كل شيء بما فيها البيانات
+docker compose down -v
+
+# 2. إعادة البناء
+docker compose up -d --build
+
+# 3. انتظر ثم تحقق
+sleep 30 && curl http://localhost:5000/api/health
+[+] down 4/4
+ ✔ Container vex-app        Removed                                                               10.2s 
+ ✔ Container vex-db         Removed                                                                0.1s 
+ ✔ Volume vix_postgres_data Removed                                                                0.1s 
+ ✔ Network vix_default      Removed                                                                0.1s 
+[+] Building 0.7s (24/24) FINISHED                                                                      
+ => [internal] load local bake definitions                                                         0.0s
+ => => reading from stdin 476B                                                                     0.0s
+ => [internal] load build definition from Dockerfile                                               0.0s
+ => => transferring dockerfile: 1.30kB                                                             0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                  0.4s
+ => [internal] load .dockerignore                                                                  0.0s
+ => => transferring context: 2B                                                                    0.0s
+ => [internal] load build context                                                                  0.0s
+ => => transferring context: 55.15kB                                                               0.0s
+ => [builder 1/6] FROM docker.io/library/node:20-alpine@sha256:658d0f63e501824d6c23e06d4bb95c71e7  0.0s
+ => => resolve docker.io/library/node:20-alpine@sha256:658d0f63e501824d6c23e06d4bb95c71e7d704537c  0.0s
+ => CACHED [builder 2/6] WORKDIR /app                                                              0.0s
+ => CACHED [production  3/13] RUN apk add --no-cache postgresql-client                             0.0s
+ => CACHED [production  4/13] COPY package*.json ./                                                0.0s
+ => CACHED [production  5/13] RUN npm ci --omit=dev                                                0.0s
+ => CACHED [production  6/13] RUN npm install -g tsx drizzle-kit                                   0.0s
+ => CACHED [builder 3/6] COPY package*.json ./                                                     0.0s
+ => CACHED [builder 4/6] RUN npm ci                                                                0.0s
+ => CACHED [builder 5/6] COPY . .                                                                  0.0s
+ => CACHED [builder 6/6] RUN npm run build                                                         0.0s
+ => CACHED [production  7/13] COPY --from=builder /app/dist ./dist                                 0.0s
+ => CACHED [production  8/13] COPY --from=builder /app/drizzle.config.ts ./                        0.0s
+ => CACHED [production  9/13] COPY --from=builder /app/shared ./shared                             0.0s
+ => CACHED [production 10/13] COPY --from=builder /app/tsconfig.json ./                            0.0s
+ => CACHED [production 11/13] COPY scripts ./scripts                                               0.0s
+ => CACHED [production 12/13] RUN chmod +x scripts/*.sh 2>/dev/null || true                        0.0s
+ => CACHED [production 13/13] RUN mkdir -p logs uploads                                            0.0s
+ => exporting to image                                                                             0.1s
+ => => exporting layers                                                                            0.0s
+ => => exporting manifest sha256:b57e9d8d8e206992c9a176e6af7b4ecc2bd6345073cff31b992a6901f430bb48  0.0s
+ => => exporting config sha256:e23477db00b83a7bd84dda9392c91c95bd9a533a8db4f631ad07015a65b0c807    0.0s
+ => => exporting attestation manifest sha256:f9e98c48cd3716aca5a9d30757e5d803f99851be8611a1981d46  0.0s
+ => => exporting manifest list sha256:6ba75f45448ed12b7ea8f2cf59298578e2df33d6e142dabed400fbccaf5  0.0s
+ => => naming to docker.io/library/vix-app:latest                                                  0.0s
+ => => unpacking to docker.io/library/vix-app:latest                                               0.0s
+ => resolving provenance for metadata file                                                         0.0s
+[+] up 5/5
+ ✔ Image vix-app            Built                                                                  0.8s 
+ ✔ Network vix_default      Created                                                                0.1s 
+ ✔ Volume vix_postgres_data Created                                                                0.0s 
+ ✔ Container vex-db         Healthy                                                               10.8s 
+ ✔ Container vex-app        Created                                                                0.0s 
+{"status":"healthy","timestamp":"2026-01-12T12:20:45.146Z","database":"connected","version":"1.0.0"}vix@srv1118737:~/projects/vix$ 

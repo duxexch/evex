@@ -1,0 +1,55 @@
+ => => exporting config sha256:e23477db00b83a7bd84dda9392c91c95bd9a533a8db4f631ad07015a65b0c807    0.0s
+ => => exporting attestation manifest sha256:309a9d41f717e018e630404468bc29ca602d9a5869a416709a1c  0.0s
+ => => exporting manifest list sha256:64f2a113ede11827a62a966c2bd2c0e41f92978b277eb0a344a8dd42fad  0.0s
+ => => naming to docker.io/library/vix-app:latest                                                  0.0s
+ => => unpacking to docker.io/library/vix-app:latest                                               0.0s
+ => resolving provenance for metadata file                                                         0.0s
+[+] up 4/4
+ ✔ Image vix-app       Built                                                                      16.6s 
+ ✔ Network vix_default Created                                                                     0.0s 
+ ✔ Container vex-db    Healthy                                                                    10.8s 
+ ✔ Container vex-app   Created                                                                     0.0s 
+NAME      IMAGE                COMMAND                  SERVICE   CREATED          STATUS                                     PORTS
+vex-app   vix-app              "docker-entrypoint.s…"   app       11 seconds ago   Up Less than a second (health: starting)   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp
+vex-db    postgres:15-alpine   "docker-entrypoint.s…"   db        11 seconds ago   Up 10 seconds (healthy)                    5432/tcp
+vix@srv1118737:~/projects/vix$ # 1. انتظر 30 ثانية ثم تحقق من الحالة
+sleep 30 && docker compose ps
+
+# 2. إنشاء جداول قاعدة البيانات
+docker compose exec app drizzle-kit push
+
+# 3. تحميل البيانات الأولية
+docker compose exec app tsx scripts/seed-data.ts
+
+# 4. اختبار نقطة الصحة
+curl http://localhost:5000/api/health
+NAME      IMAGE                COMMAND                  SERVICE   CREATED         STATUS                            PORTS
+vex-app   vix-app              "docker-entrypoint.s…"   app       2 minutes ago   Up 2 minutes (health: starting)   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp
+vex-db    postgres:15-alpine   "docker-entrypoint.s…"   db        2 minutes ago   Up 2 minutes (healthy)            5432/tcp
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/app/drizzle.config.ts'
+Cannot find module 'drizzle-kit'
+Require stack:
+- /app/drizzle.config.ts
+- /usr/local/lib/node_modules/drizzle-kit/bin.cjs
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/app/server/db' imported from /app/scripts/seed-data.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    at moduleResolve (node:internal/modules/esm/resolve:952:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    at nextResolve (node:internal/modules/esm/hooks:864:28)
+    at resolveBase (file:///usr/local/lib/node_modules/tsx/dist/esm/index.mjs?1768219956781:2:3744)
+    at async resolveDirectory (file:///usr/local/lib/node_modules/tsx/dist/esm/index.mjs?1768219956781:2:4237)
+    at async resolve (file:///usr/local/lib/node_modules/tsx/dist/esm/index.mjs?1768219956781:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:864:22)
+    at async Hooks.resolve (node:internal/modules/esm/hooks:306:24)
+    at async handleMessage (node:internal/modules/esm/worker:196:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///app/server/db'
+}
+
+Node.js v20.19.6
+{"status":"unhealthy","timestamp":"2026-01-12T12:12:37.002Z","database":"disconnected","error":"Cannot read properties of undefined (reading 'searchParams')"}vix@srv1118737:~/projects/vix$ 

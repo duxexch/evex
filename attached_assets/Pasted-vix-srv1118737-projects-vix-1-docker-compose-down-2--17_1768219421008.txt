@@ -1,0 +1,24 @@
+vix@srv1118737:~/projects/vix$ # 1. إيقاف الحاويات الحالية
+docker compose down
+
+# 2. إعادة البناء والتشغيل
+docker compose up -d --build
+
+# 3. انتظر دقيقة ثم تحقق من الحالة
+docker compose ps
+
+# 4. إنشاء جداول قاعدة البيانات
+docker compose exec app drizzle-kit push
+
+# 5. تحميل البيانات الأولية
+docker compose exec app tsx scripts/seed-data.ts
+
+# 6. اختبار نقطة الصحة
+curl http://localhost:5000/api/health
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.51/containers/json?all=1&filters=%7B%22label%22%3A%7B%22com.docker.compose.config-hash%22%3Atrue%2C%22com.docker.compose.oneoff%3DFalse%22%3Atrue%2C%22com.docker.compose.project%3Dvix%22%3Atrue%7D%7D": dial unix /var/run/docker.sock: connect: permission denied
+unable to get image 'postgres:15-alpine': permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.51/images/postgres:15-alpine/json": dial unix /var/run/docker.sock: connect: permission denied
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.51/containers/json?filters=%7B%22label%22%3A%7B%22com.docker.compose.config-hash%22%3Atrue%2C%22com.docker.compose.oneoff%3DFalse%22%3Atrue%2C%22com.docker.compose.project%3Dvix%22%3Atrue%7D%7D": dial unix /var/run/docker.sock: connect: permission denied
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.51/containers/json?filters=%7B%22label%22%3A%7B%22com.docker.compose.config-hash%22%3Atrue%2C%22com.docker.compose.project%3Dvix%22%3Atrue%2C%22com.docker.compose.service%3Dapp%22%3Atrue%7D%7D": dial unix /var/run/docker.sock: connect: permission denied
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.51/containers/json?filters=%7B%22label%22%3A%7B%22com.docker.compose.config-hash%22%3Atrue%2C%22com.docker.compose.project%3Dvix%22%3Atrue%2C%22com.docker.compose.service%3Dapp%22%3Atrue%7D%7D": dial unix /var/run/docker.sock: connect: permission denied
+curl: (7) Failed to connect to localhost port 5000 after 0 ms: Couldn't connect to server
+vix@srv1118737:~/projects/vix$ 

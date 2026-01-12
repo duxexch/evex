@@ -1,0 +1,38 @@
+{"status":"healthy","timestamp":"2026-01-12T12:20:45.146Z","database":"connected","version":"1.0.0"}vix@vix@srv1118737:~/projects/vix$ # 1. إنشاء جداول قاعدة البيانات
+docker compose exec app npx drizzle-kit push
+
+# 2. تحميل البيانات الأولية (العملات، الألعاب، طرق الدفع)
+docker compose exec app npx tsx scripts/seed-data.ts
+
+# 3. التحقق من حالة التطبيق
+docker compose ps
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/app/drizzle.config.ts'
+Cannot find module 'drizzle-kit'
+Require stack:
+- /app/drizzle.config.ts
+- /usr/local/lib/node_modules/drizzle-kit/bin.cjs
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/app/server/db' imported from /app/scripts/seed-data.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    at moduleResolve (node:internal/modules/esm/resolve:952:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    at nextResolve (node:internal/modules/esm/hooks:864:28)
+    at resolveBase (file:///usr/local/lib/node_modules/tsx/dist/esm/index.mjs?1768220517471:2:3744)
+    at async resolveDirectory (file:///usr/local/lib/node_modules/tsx/dist/esm/index.mjs?1768220517471:2:4237)
+    at async resolve (file:///usr/local/lib/node_modules/tsx/dist/esm/index.mjs?1768220517471:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:864:22)
+    at async Hooks.resolve (node:internal/modules/esm/hooks:306:24)
+    at async handleMessage (node:internal/modules/esm/worker:196:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///app/server/db'
+}
+
+Node.js v20.19.6
+NAME      IMAGE                COMMAND                  SERVICE   CREATED              STATUS                                 PORTS
+vex-app   vix-app              "docker-entrypoint.s…"   app       About a minute ago   Up About a minute (health: starting)   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp
+vex-db    postgres:15-alpine   "docker-entrypoint.s…"   db        About a minute ago   Up About a minute (healthy)            5432/tcp
+vix@srv1118737:~/projects/vix$ 
