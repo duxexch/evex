@@ -29,17 +29,17 @@ RUN apk add --no-cache postgresql-client
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
-RUN npm ci --omit=dev
-
-# Install tsx and drizzle-kit globally for database operations
-RUN npm install -g tsx drizzle-kit
+# Install production dependencies + drizzle-kit for migrations
+RUN npm ci --omit=dev && npm install --no-save drizzle-kit tsx
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/tsconfig.json ./
+
+# Copy server source files for scripts that import from server/
+COPY --from=builder /app/server ./server
 
 # Copy scripts
 COPY scripts ./scripts
