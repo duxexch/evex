@@ -1,8 +1,6 @@
 # VEX Platform - Docker Compose Configuration
 # تكوين Docker Compose لمنصة VEX
 
-version: '3.8'
-
 services:
   # PostgreSQL Database
   db:

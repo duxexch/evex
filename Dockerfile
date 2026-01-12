@@ -32,24 +32,28 @@ COPY package*.json ./
 # Install production dependencies only
 RUN npm ci --omit=dev
 
+# Install tsx and drizzle-kit globally for database operations
+RUN npm install -g tsx drizzle-kit
+
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/tsconfig.json ./
 
 # Copy scripts
 COPY scripts ./scripts
-RUN chmod +x scripts/*.sh
+RUN chmod +x scripts/*.sh 2>/dev/null || true
 
-# Create logs directory
-RUN mkdir -p logs
+# Create necessary directories
+RUN mkdir -p logs uploads
 
 # Expose port
 EXPOSE 5000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1
 
 # Start command
-CMD ["node", "dist/server/index.js"]
+CMD ["node", "dist/index.cjs"]

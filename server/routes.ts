@@ -57,6 +57,28 @@ const agentMiddleware = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   
+  // ==================== HEALTH CHECK ====================
+  
+  app.get("/api/health", async (req: Request, res: Response) => {
+    try {
+      // Check database connection
+      await db.execute(sql`SELECT 1`);
+      res.json({ 
+        status: "healthy", 
+        timestamp: new Date().toISOString(),
+        database: "connected",
+        version: "1.0.0"
+      });
+    } catch (error: any) {
+      res.status(503).json({ 
+        status: "unhealthy", 
+        timestamp: new Date().toISOString(),
+        database: "disconnected",
+        error: error.message 
+      });
+    }
+  });
+  
   // ==================== AUTH ROUTES ====================
   
   // One-click registration - generates account ID and password automatically

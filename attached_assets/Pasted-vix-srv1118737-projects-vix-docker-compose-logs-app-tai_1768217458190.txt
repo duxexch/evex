@@ -1,0 +1,53 @@
+vix@srv1118737:~/projects/vix$ docker compose logs app --tail=50
+WARN[0000] /home/vix/projects/vix/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion
+vex-app  |     at Module._load (node:internal/modules/cjs/loader:1038:27)
+vex-app  |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+vex-app  |     at node:internal/main/run_main_module:28:49 {
+vex-app  |   code: 'MODULE_NOT_FOUND',
+vex-app  |   requireStack: []
+vex-app  | }
+vex-app  |
+vex-app  | Node.js v20.19.6
+vex-app  | node:internal/modules/cjs/loader:1210
+vex-app  |   throw err;
+vex-app  |   ^
+vex-app  |
+vex-app  | Error: Cannot find module '/app/dist/server/index.js'
+vex-app  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+vex-app  |     at Module._load (node:internal/modules/cjs/loader:1038:27)
+vex-app  |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+vex-app  |     at node:internal/main/run_main_module:28:49 {
+vex-app  |   code: 'MODULE_NOT_FOUND',
+vex-app  |   requireStack: []
+vex-app  | }
+vex-app  |
+vex-app  | Node.js v20.19.6
+vex-app  | node:internal/modules/cjs/loader:1210
+vex-app  |   throw err;
+vex-app  |   ^
+vex-app  |
+vex-app  | Error: Cannot find module '/app/dist/server/index.js'
+vex-app  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+vex-app  |     at Module._load (node:internal/modules/cjs/loader:1038:27)
+vex-app  |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+vex-app  |     at node:internal/main/run_main_module:28:49 {
+vex-app  |   code: 'MODULE_NOT_FOUND',
+vex-app  |   requireStack: []
+vex-app  | }
+vex-app  |
+vex-app  | Node.js v20.19.6
+vex-app  | node:internal/modules/cjs/loader:1210
+vex-app  |   throw err;
+vex-app  |   ^
+vex-app  |
+vex-app  | Error: Cannot find module '/app/dist/server/index.js'
+vex-app  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1207:15)
+vex-app  |     at Module._load (node:internal/modules/cjs/loader:1038:27)
+vex-app  |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+vex-app  |     at node:internal/main/run_main_module:28:49 {
+vex-app  |   code: 'MODULE_NOT_FOUND',
+vex-app  |   requireStack: []
+vex-app  | }
+vex-app  |
+vex-app  | Node.js v20.19.6
+vix@srv1118737:~/projects/vix$
