@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   LayoutDashboard,
@@ -44,6 +44,7 @@ import {
   Headset,
   Users,
   MessageCircle,
+  Loader2,
 } from "lucide-react";
 import { apiRequest } from "./lib/queryClient";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -51,45 +52,59 @@ import { ThemeProvider } from "@/lib/theme";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 import NotFound from "@/pages/not-found";
-import LoginPage from "@/pages/login";
-import DashboardPage from "@/pages/dashboard";
-import GamesPage from "@/pages/games";
-import PlayPage from "@/pages/play";
-import TransactionsPage from "@/pages/transactions";
-import ComplaintsPage from "@/pages/complaints";
-import SettingsPage from "@/pages/settings";
-import P2PPage from "@/pages/p2p";
-import AdminAnnouncementsPage from "@/pages/admin/announcements";
-import FreePage from "@/pages/free";
-import ChallengesPage from "@/pages/challenges";
-import P2PProfilePage from "@/pages/p2p-profile";
-import P2PSettingsPage from "@/pages/p2p-settings";
-import WalletPage from "@/pages/wallet";
-import FriendsPage from "@/pages/friends";
-import MultiplayerPage from "@/pages/multiplayer";
-
-import AdminLoginPage from "@/pages/admin/admin-login";
 import AdminLayout from "@/pages/admin/admin-layout";
-import AdminDashboardPage from "@/pages/admin/admin-dashboard";
-import AdminUsersPage from "@/pages/admin/admin-users";
-import AdminP2PPage from "@/pages/admin/admin-p2p";
-import AdminSectionsPage from "@/pages/admin/admin-sections";
-import AdminAntiCheatPage from "@/pages/admin/admin-anti-cheat";
-import AdminAnalyticsPage from "@/pages/admin/admin-analytics";
-import AdminDisputesPage from "@/pages/admin/admin-disputes";
-import AdminSupportPage from "@/pages/admin/admin-support";
-import AdminAppSettingsPage from "@/pages/admin/admin-app-settings";
-import AdminLanguagesPage from "@/pages/admin/admin-languages";
-import AdminBadgesPage from "@/pages/admin/admin-badges";
-import AdminNotificationsPage from "@/pages/admin/admin-notifications";
-import AdminGamesPage from "@/pages/admin/admin-games";
-import AdminIdVerificationPage from "@/pages/admin/admin-id-verification";
-import AdminSeoPage from "@/pages/admin/admin-seo";
-import AdminPaymentMethodsPage from "@/pages/admin/admin-payment-methods";
-import AdminIntegrationsPage from "@/pages/admin/admin-integrations";
-import AdminSocialPlatformsPage from "@/pages/admin/admin-social-platforms";
-import SupportPage from "@/pages/support";
-import ChatPage from "@/pages/chat";
+
+const LoginPage = lazy(() => import("@/pages/login"));
+const DashboardPage = lazy(() => import("@/pages/dashboard"));
+const GamesPage = lazy(() => import("@/pages/games"));
+const PlayPage = lazy(() => import("@/pages/play"));
+const TransactionsPage = lazy(() => import("@/pages/transactions"));
+const ComplaintsPage = lazy(() => import("@/pages/complaints"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
+const P2PPage = lazy(() => import("@/pages/p2p"));
+const AdminAnnouncementsPage = lazy(() => import("@/pages/admin/announcements"));
+const FreePage = lazy(() => import("@/pages/free"));
+const ChallengesPage = lazy(() => import("@/pages/challenges"));
+const P2PProfilePage = lazy(() => import("@/pages/p2p-profile"));
+const P2PSettingsPage = lazy(() => import("@/pages/p2p-settings"));
+const WalletPage = lazy(() => import("@/pages/wallet"));
+const FriendsPage = lazy(() => import("@/pages/friends"));
+const MultiplayerPage = lazy(() => import("@/pages/multiplayer"));
+const SupportPage = lazy(() => import("@/pages/support"));
+const ChatPage = lazy(() => import("@/pages/chat"));
+
+const AdminLoginPage = lazy(() => import("@/pages/admin/admin-login"));
+const AdminDashboardPage = lazy(() => import("@/pages/admin/admin-dashboard"));
+const AdminUsersPage = lazy(() => import("@/pages/admin/admin-users"));
+const AdminP2PPage = lazy(() => import("@/pages/admin/admin-p2p"));
+const AdminSectionsPage = lazy(() => import("@/pages/admin/admin-sections"));
+const AdminAntiCheatPage = lazy(() => import("@/pages/admin/admin-anti-cheat"));
+const AdminAnalyticsPage = lazy(() => import("@/pages/admin/admin-analytics"));
+const AdminDisputesPage = lazy(() => import("@/pages/admin/admin-disputes"));
+const AdminSupportPage = lazy(() => import("@/pages/admin/admin-support"));
+const AdminAppSettingsPage = lazy(() => import("@/pages/admin/admin-app-settings"));
+const AdminLanguagesPage = lazy(() => import("@/pages/admin/admin-languages"));
+const AdminBadgesPage = lazy(() => import("@/pages/admin/admin-badges"));
+const AdminNotificationsPage = lazy(() => import("@/pages/admin/admin-notifications"));
+const AdminGamesPage = lazy(() => import("@/pages/admin/admin-games"));
+const AdminIdVerificationPage = lazy(() => import("@/pages/admin/admin-id-verification"));
+const AdminSeoPage = lazy(() => import("@/pages/admin/admin-seo"));
+const AdminPaymentMethodsPage = lazy(() => import("@/pages/admin/admin-payment-methods"));
+const AdminIntegrationsPage = lazy(() => import("@/pages/admin/admin-integrations"));
+const AdminSocialPlatformsPage = lazy(() => import("@/pages/admin/admin-social-platforms"));
+const AdminAdvertisementsPage = lazy(() => import("@/pages/admin/admin-advertisements"));
+const AdminGameSectionsPage = lazy(() => import("@/pages/admin/admin-game-sections"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <span className="text-sm text-muted-foreground">Loading...</span>
+      </div>
+    </div>
+  );
+}
 
 function SidebarBalanceDisplay({ user, logout, t }: { user: any; logout: () => void; t: (key: string) => string }) {
   const [isHidden, setIsHidden] = useState(() => {
@@ -414,7 +429,9 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               className="absolute bottom-16 left-0 right-0 h-[70vh] bg-background rounded-t-xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <ChatPage />
+              <Suspense fallback={<PageLoader />}>
+                <ChatPage />
+              </Suspense>
             </div>
           </div>
         )}
@@ -425,63 +442,71 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
 
 function AdminRouter() {
   return (
-    <Switch>
-      <Route path="/admin" component={AdminLoginPage} />
-      <Route path="/admin/dashboard">
-        <AdminLayout><AdminDashboardPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/users">
-        <AdminLayout><AdminUsersPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/sections">
-        <AdminLayout><AdminSectionsPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/anti-cheat">
-        <AdminLayout><AdminAntiCheatPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/analytics">
-        <AdminLayout><AdminAnalyticsPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/disputes">
-        <AdminLayout><AdminDisputesPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/p2p">
-        <AdminLayout><AdminP2PPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/support">
-        <AdminLayout><AdminSupportPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/app-settings">
-        <AdminLayout><AdminAppSettingsPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/languages">
-        <AdminLayout><AdminLanguagesPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/badges">
-        <AdminLayout><AdminBadgesPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/notifications">
-        <AdminLayout><AdminNotificationsPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/games">
-        <AdminLayout><AdminGamesPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/id-verification">
-        <AdminLayout><AdminIdVerificationPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/seo">
-        <AdminLayout><AdminSeoPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/payment-methods">
-        <AdminLayout><AdminPaymentMethodsPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/integrations">
-        <AdminLayout><AdminIntegrationsPage /></AdminLayout>
-      </Route>
-      <Route path="/admin/social-platforms">
-        <AdminLayout><AdminSocialPlatformsPage /></AdminLayout>
-      </Route>
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/admin" component={AdminLoginPage} />
+        <Route path="/admin/dashboard">
+          <AdminLayout><AdminDashboardPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/users">
+          <AdminLayout><AdminUsersPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/sections">
+          <AdminLayout><AdminSectionsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/anti-cheat">
+          <AdminLayout><AdminAntiCheatPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/analytics">
+          <AdminLayout><AdminAnalyticsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/disputes">
+          <AdminLayout><AdminDisputesPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/p2p">
+          <AdminLayout><AdminP2PPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/support">
+          <AdminLayout><AdminSupportPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/app-settings">
+          <AdminLayout><AdminAppSettingsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/languages">
+          <AdminLayout><AdminLanguagesPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/badges">
+          <AdminLayout><AdminBadgesPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/notifications">
+          <AdminLayout><AdminNotificationsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/games">
+          <AdminLayout><AdminGamesPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/id-verification">
+          <AdminLayout><AdminIdVerificationPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/seo">
+          <AdminLayout><AdminSeoPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/payment-methods">
+          <AdminLayout><AdminPaymentMethodsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/integrations">
+          <AdminLayout><AdminIntegrationsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/social-platforms">
+          <AdminLayout><AdminSocialPlatformsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/advertisements">
+          <AdminLayout><AdminAdvertisementsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/game-sections">
+          <AdminLayout><AdminGameSectionsPage /></AdminLayout>
+        </Route>
+      </Switch>
+    </Suspense>
   );
 }
 
@@ -523,7 +548,9 @@ function Router() {
   if (location === "/challenges" && !isAuthenticated) {
     return (
       <PublicLayout>
-        <ChallengesPage />
+        <Suspense fallback={<PageLoader />}>
+          <ChallengesPage />
+        </Suspense>
       </PublicLayout>
     );
   }
@@ -539,30 +566,37 @@ function Router() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LoginPage />
+      </Suspense>
+    );
   }
 
   return (
     <AuthenticatedLayout>
-      <Switch>
-        <Route path="/" component={DashboardPage} />
-        <Route path="/games" component={GamesPage} />
-        <Route path="/play" component={PlayPage} />
-        <Route path="/challenges" component={ChallengesPage} />
-        <Route path="/p2p" component={P2PPage} />
-        <Route path="/p2p/profile/:userId?" component={P2PProfilePage} />
-        <Route path="/p2p/settings" component={P2PSettingsPage} />
-        <Route path="/free" component={FreePage} />
-        <Route path="/wallet" component={WalletPage} />
-        <Route path="/transactions" component={TransactionsPage} />
-        <Route path="/complaints" component={ComplaintsPage} />
-        <Route path="/friends" component={FriendsPage} />
-        <Route path="/multiplayer" component={MultiplayerPage} />
-        <Route path="/chat" component={ChatPage} />
-        <Route path="/support" component={SupportPage} />
-        <Route path="/settings" component={SettingsPage} />
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={<PageLoader />}>
+        <Switch>
+          <Route path="/" component={DashboardPage} />
+          <Route path="/games" component={GamesPage} />
+          <Route path="/play" component={PlayPage} />
+          <Route path="/challenges" component={ChallengesPage} />
+          <Route path="/p2p" component={P2PPage} />
+          <Route path="/p2p/profile/:userId?" component={P2PProfilePage} />
+          <Route path="/p2p/settings" component={P2PSettingsPage} />
+          <Route path="/free" component={FreePage} />
+          <Route path="/wallet" component={WalletPage} />
+          <Route path="/transactions" component={TransactionsPage} />
+          <Route path="/complaints" component={ComplaintsPage} />
+          <Route path="/friends" component={FriendsPage} />
+          <Route path="/multiplayer" component={MultiplayerPage} />
+          <Route path="/chat" component={ChatPage} />
+          <Route path="/support" component={SupportPage} />
+          <Route path="/settings" component={SettingsPage} />
+          <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
     </AuthenticatedLayout>
   );
 }
