@@ -1,0 +1,53 @@
+# انتظر ثم شغّل قاعدة البيانات
+sleep 30 && docker compose exec app npx drizzle-kit push
+[+] down 3/3
+ ✔ Container vex-app   Removed                                                                    11.3s 
+ ✔ Container vex-db    Removed                                                                     0.6s 
+ ✔ Network vix_default Removed                                                                     0.0s 
+[+] Building 73.6s (24/24) FINISHED                                                                     
+ => [internal] load local bake definitions                                                         0.0s
+ => => reading from stdin 476B                                                                     0.0s
+ => [internal] load build definition from Dockerfile                                               0.2s
+ => => transferring dockerfile: 1.48kB                                                             0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                  0.9s
+ => [internal] load .dockerignore                                                                  0.0s
+ => => transferring context: 2B                                                                    0.0s
+ => [internal] load build context                                                                  0.3s
+ => => transferring context: 9.08MB                                                                0.3s
+ => [builder 1/6] FROM docker.io/library/node:20-alpine@sha256:658d0f63e501824d6c23e06d4bb95c71e7  0.0s
+ => => resolve docker.io/library/node:20-alpine@sha256:658d0f63e501824d6c23e06d4bb95c71e7d704537c  0.0s
+ => CACHED [builder 2/6] WORKDIR /app                                                              0.0s
+ => CACHED [production  3/13] RUN apk add --no-cache postgresql-client                             0.0s
+ => [production  4/13] COPY package*.json ./                                                       0.1s
+ => [builder 3/6] COPY package*.json ./                                                            0.1s
+ => [builder 4/6] RUN npm ci                                                                      28.1s
+ => [production  5/13] RUN npm ci --omit=dev && npm install --no-save drizzle-kit tsx             35.9s
+ => [builder 5/6] COPY . .                                                                         0.9s
+ => [builder 6/6] RUN npm run build                                                               19.2s
+ => [production  6/13] COPY --from=builder /app/dist ./dist                                        0.4s 
+ => [production  7/13] COPY --from=builder /app/drizzle.config.ts ./                               0.0s 
+ => [production  8/13] COPY --from=builder /app/shared ./shared                                    0.0s 
+ => [production  9/13] COPY --from=builder /app/tsconfig.json ./                                   0.0s 
+ => [production 10/13] COPY --from=builder /app/server ./server                                    0.0s 
+ => [production 11/13] COPY scripts ./scripts                                                      0.0s 
+ => [production 12/13] RUN chmod +x scripts/*.sh 2>/dev/null || true                               0.2s 
+ => [production 13/13] RUN mkdir -p logs uploads                                                   0.2s 
+ => exporting to image                                                                            22.2s 
+ => => exporting layers                                                                           16.2s 
+ => => exporting manifest sha256:78e3b4f5e7021464e9fc88ba22d6f64a11a60960b16b79c6e715963d828c8a2e  0.0s 
+ => => exporting config sha256:bf05c6c16c80d692806ab6d7fc781a63215bd36dee246426dcdc327284a42416    0.0s
+ => => exporting attestation manifest sha256:065291c08d8c70cc4772f992b4abbac5661bf214b280d69875b0  0.0s
+ => => exporting manifest list sha256:73bb0bae855e3056902568a55503ec7d37ab7fd06467a53733f43af386d  0.0s
+ => => naming to docker.io/library/vix-app:latest                                                  0.0s
+ => => unpacking to docker.io/library/vix-app:latest                                               5.9s
+ => resolving provenance for metadata file                                                         0.0s
+[+] up 4/4
+ ✔ Image vix-app       Built                                                                      73.7s 
+ ✔ Network vix_default Created                                                                     0.1s 
+ ✔ Container vex-db    Healthy                                                                    10.9s 
+ ✔ Container vex-app   Created                                                                     0.0s 
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/app/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+[✓] Changes applied

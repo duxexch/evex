@@ -1,0 +1,530 @@
+/projects/vix/: No such file or directory
+vix@srv1118737:~$ cd /projects/vix
+-bash: cd: /projects/vix: No such file or directory
+vix@srv1118737:~$ ^C
+vix@srv1118737:~$ cd ~/projects/vix
+ls -la
+total 520
+drwxrwxr-x 15 vix  vix    4096 Jan 12 14:17 .
+drwxrwxr-x  3 vix  vix    4096 Jan 12 13:05 ..
+-rw-------  1 vix  vix     503 Jan 12 14:17 .env
+drwxrwxr-x  7 vix  vix    4096 Jan 12 13:51 .git
+-rw-rw-r--  1 vix  vix    1334 Jan 12 14:45 Dockerfile
+-rw-rw-r--  1 vix  vix   38087 Jan 12 14:45 README.md
+drwx------  3 vix  vix    4096 Jan 12 14:49 attached_assets
+drwxr-xr-x  2 root root   4096 Jan 12 14:06 backups
+drwx------  4 vix  vix    4096 Jan 12 13:58 client
+-rw-rw-r--  1 vix  vix     459 Jan 12 14:50 components.json
+-rw-rw-r--  1 vix  vix    1935 Jan 12 14:50 design_guidelines.md
+drwx------  2 vix  vix    4096 Jan 12 13:59 docker
+-rw-rw-r--  1 vix  vix    1754 Jan 12 14:50 docker-compose.yml
+drwx------  2 vix  vix    4096 Jan 12 13:59 docs
+-rw-rw-r--  1 vix  vix     325 Jan 12 14:50 drizzle.config.ts
+-rw-rw-r--  1 vix  vix     639 Jan 12 14:50 ecosystem.config.js
+drwx------  3 vix  vix    4096 Jan 12 13:59 flutter_wrapper
+drwxr-xr-x  2 root root   4096 Jan 12 13:52 logs
+-rw-rw-r--  1 vix  vix  310934 Jan 12 14:50 package-lock.json
+-rw-rw-r--  1 vix  vix    3766 Jan 12 14:50 package.json
+-rw-rw-r--  1 vix  vix      80 Jan 12 14:50 postcss.config.js
+-rw-rw-r--  1 vix  vix    4394 Jan 12 14:50 replit.md
+drwx------  2 vix  vix    4096 Jan 12 13:59 script
+drwx------  2 vix  vix    4096 Jan 12 13:59 scripts
+drwx------  2 vix  vix    4096 Jan 12 13:59 server
+drwx------  2 vix  vix    4096 Jan 12 13:59 shared
+-rw-rw-r--  1 vix  vix    4050 Jan 12 14:51 tailwind.config.ts
+-rw-rw-r--  1 vix  vix     657 Jan 12 14:51 tsconfig.json
+drwxr-xr-x  2 root root   4096 Jan 12 13:52 uploads
+-rw-rw-r--  1 vix  vix    1080 Jan 12 14:51 vite.config.ts
+vix@srv1118737:~/projects/vix$ cat ~/projects/vix/.env
+# ========================================
+# DATABASE CONFIGURATION
+# ========================================
+POSTGRES_USER=vex_user
+POSTGRES_PASSWORD=VexSecure2026Strong
+POSTGRES_DB=vex_db
+PGHOST=db
+PGPORT=5432
+DATABASE_URL=postgresql://vex_user:VexSecure2026Strong@db:5432/vex_db
+
+# ========================================
+# APPLICATION SETTINGS
+# ========================================
+NODE_ENV=production
+PORT=5000
+SESSION_SECRET=vMCE2t9nTFyE1La0HCh/09awKXRTFJ7YcMIdx1yTZviHv2n5qz0tHKhZdqVwr/kL
+vix@srv1118737:~/projects/vix$ # إعادة البناء
+docker compose down
+docker compose up -d --build
+
+# انتظر ثم شغّل قاعدة البيانات
+sleep 30 && docker compose exec app npx drizzle-kit push
+[+] down 3/3
+ ✔ Container vex-app   Removed                                                                    11.3s 
+ ✔ Container vex-db    Removed                                                                     0.6s 
+ ✔ Network vix_default Removed                                                                     0.0s 
+[+] Building 73.6s (24/24) FINISHED                                                                     
+ => [internal] load local bake definitions                                                         0.0s
+ => => reading from stdin 476B                                                                     0.0s
+ => [internal] load build definition from Dockerfile                                               0.2s
+ => => transferring dockerfile: 1.48kB                                                             0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                  0.9s
+ => [internal] load .dockerignore                                                                  0.0s
+ => => transferring context: 2B                                                                    0.0s
+ => [internal] load build context                                                                  0.3s
+ => => transferring context: 9.08MB                                                                0.3s
+ => [builder 1/6] FROM docker.io/library/node:20-alpine@sha256:658d0f63e501824d6c23e06d4bb95c71e7  0.0s
+ => => resolve docker.io/library/node:20-alpine@sha256:658d0f63e501824d6c23e06d4bb95c71e7d704537c  0.0s
+ => CACHED [builder 2/6] WORKDIR /app                                                              0.0s
+ => CACHED [production  3/13] RUN apk add --no-cache postgresql-client                             0.0s
+ => [production  4/13] COPY package*.json ./                                                       0.1s
+ => [builder 3/6] COPY package*.json ./                                                            0.1s
+ => [builder 4/6] RUN npm ci                                                                      28.1s
+ => [production  5/13] RUN npm ci --omit=dev && npm install --no-save drizzle-kit tsx             35.9s
+ => [builder 5/6] COPY . .                                                                         0.9s
+ => [builder 6/6] RUN npm run build                                                               19.2s
+ => [production  6/13] COPY --from=builder /app/dist ./dist                                        0.4s 
+ => [production  7/13] COPY --from=builder /app/drizzle.config.ts ./                               0.0s 
+ => [production  8/13] COPY --from=builder /app/shared ./shared                                    0.0s 
+ => [production  9/13] COPY --from=builder /app/tsconfig.json ./                                   0.0s 
+ => [production 10/13] COPY --from=builder /app/server ./server                                    0.0s 
+ => [production 11/13] COPY scripts ./scripts                                                      0.0s 
+ => [production 12/13] RUN chmod +x scripts/*.sh 2>/dev/null || true                               0.2s 
+ => [production 13/13] RUN mkdir -p logs uploads                                                   0.2s 
+ => exporting to image                                                                            22.2s 
+ => => exporting layers                                                                           16.2s 
+ => => exporting manifest sha256:78e3b4f5e7021464e9fc88ba22d6f64a11a60960b16b79c6e715963d828c8a2e  0.0s 
+ => => exporting config sha256:bf05c6c16c80d692806ab6d7fc781a63215bd36dee246426dcdc327284a42416    0.0s
+ => => exporting attestation manifest sha256:065291c08d8c70cc4772f992b4abbac5661bf214b280d69875b0  0.0s
+ => => exporting manifest list sha256:73bb0bae855e3056902568a55503ec7d37ab7fd06467a53733f43af386d  0.0s
+ => => naming to docker.io/library/vix-app:latest                                                  0.0s
+ => => unpacking to docker.io/library/vix-app:latest                                               5.9s
+ => resolving provenance for metadata file                                                         0.0s
+[+] up 4/4
+ ✔ Image vix-app       Built                                                                      73.7s 
+ ✔ Network vix_default Created                                                                     0.1s 
+ ✔ Container vex-db    Healthy                                                                    10.9s 
+ ✔ Container vex-app   Created                                                                     0.0s 
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/app/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+[✓] Changes applied
+vix@srv1118737:~/projects/vix$ # تحميل البيانات الأولية
+docker compose exec app npx tsx scripts/seed-data.ts
+
+# اختبار نقطة الصحة
+curl http://localhost:5000/api/health
+Starting seed...
+Seeding currencies...
+Seeded 68 currencies
+Seeding payment methods...
+Seeded 44 payment methods
+Seeding games...
+Seeded 20 games
+Seed completed successfully!
+{"status":"healthy","timestamp":"2026-01-12T12:58:20.225Z","database":"connected","version":"1.0.0"}vix@vix@srv1118737:~/projects/vix$ # 1. تثبيت Nginx و Certbot
+sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
+
+# 2. إنشاء ملف إعدادات Nginx
+sudo nano /etc/nginx/sites-available/vixo.click
+[sudo] password for vix: 
+Hit:1 http://ftp.halifax.rwth-aachen.de/ubuntu noble-backports InRelease
+Hit:2 http://ftp.halifax.rwth-aachen.de/ubuntu noble InRelease                                                                                                                                                    
+Hit:3 http://ftp.halifax.rwth-aachen.de/ubuntu noble-security InRelease                                                                                                                                           
+Hit:4 http://ftp.halifax.rwth-aachen.de/ubuntu noble-updates InRelease                                                                                                                                            
+Hit:5 http://archive.ubuntu.com/ubuntu noble InRelease                                                                                                                                                            
+Hit:6 http://archive.ubuntu.com/ubuntu noble-updates InRelease                                                                                                                                                    
+Hit:7 http://archive.ubuntu.com/ubuntu noble-backports InRelease                                                                                                                                                  
+Get:8 https://download.docker.com/linux/ubuntu noble InRelease [48.5 kB]                                                                                                              
+Hit:9 https://deb.nodesource.com/node_20.x nodistro InRelease                                                                                                   
+Hit:10 http://archive.ubuntu.com/ubuntu noble-security InRelease                                            
+Hit:11 https://repository.monarx.com/repository/ubuntu-noble noble InRelease
+Fetched 48.5 kB in 1s (41.4 kB/s)
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+1 package can be upgraded. Run 'apt list --upgradable' to see it.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+nginx is already the newest version (1.24.0-2ubuntu7.5).
+The following additional packages will be installed:
+  python3-acme python3-certbot python3-configargparse python3-icu python3-josepy python3-parsedatetime python3-rfc3339
+Suggested packages:
+  python-certbot-doc python3-certbot-apache python-acme-doc python-certbot-nginx-doc
+The following NEW packages will be installed:
+  certbot python3-acme python3-certbot python3-certbot-nginx python3-configargparse python3-icu python3-josepy python3-parsedatetime python3-rfc3339
+0 upgraded, 9 newly installed, 0 to remove and 1 not upgraded.
+Need to get 1097 kB of archives.
+After this operation, 5699 kB of additional disk space will be used.
+Get:1 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 python3-josepy all 1.14.0-1 [22.1 kB]
+Get:2 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 python3-rfc3339 all 1.1-4 [6744 B]
+Get:3 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 python3-acme all 2.9.0-1 [48.5 kB]
+Get:4 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 python3-configargparse all 1.7-1 [31.7 kB]
+Get:5 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 python3-parsedatetime all 2.6-3 [32.8 kB]
+Get:6 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 python3-certbot all 2.9.0-1 [267 kB]
+Get:7 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 certbot all 2.9.0-1 [89.2 kB]
+Get:8 http://ftp.halifax.rwth-aachen.de/ubuntu noble/universe amd64 python3-certbot-nginx all 2.9.0-1 [66.0 kB]
+Get:9 http://ftp.halifax.rwth-aachen.de/ubuntu noble/main amd64 python3-icu amd64 2.12-1build2 [534 kB]
+Fetched 1097 kB in 0s (16.4 MB/s)     
+Preconfiguring packages ...
+Selecting previously unselected package python3-josepy.
+(Reading database ... 83055 files and directories currently installed.)
+Preparing to unpack .../0-python3-josepy_1.14.0-1_all.deb ...
+Unpacking python3-josepy (1.14.0-1) ...
+Selecting previously unselected package python3-rfc3339.
+Preparing to unpack .../1-python3-rfc3339_1.1-4_all.deb ...
+Unpacking python3-rfc3339 (1.1-4) ...
+Selecting previously unselected package python3-acme.
+Preparing to unpack .../2-python3-acme_2.9.0-1_all.deb ...
+Unpacking python3-acme (2.9.0-1) ...
+Selecting previously unselected package python3-configargparse.
+Preparing to unpack .../3-python3-configargparse_1.7-1_all.deb ...
+Unpacking python3-configargparse (1.7-1) ...
+Selecting previously unselected package python3-parsedatetime.
+Preparing to unpack .../4-python3-parsedatetime_2.6-3_all.deb ...
+Unpacking python3-parsedatetime (2.6-3) ...
+Selecting previously unselected package python3-certbot.
+Preparing to unpack .../5-python3-certbot_2.9.0-1_all.deb ...
+Unpacking python3-certbot (2.9.0-1) ...
+Selecting previously unselected package certbot.
+Preparing to unpack .../6-certbot_2.9.0-1_all.deb ...
+Unpacking certbot (2.9.0-1) ...
+Selecting previously unselected package python3-certbot-nginx.
+Preparing to unpack .../7-python3-certbot-nginx_2.9.0-1_all.deb ...
+Unpacking python3-certbot-nginx (2.9.0-1) ...
+Selecting previously unselected package python3-icu.
+Preparing to unpack .../8-python3-icu_2.12-1build2_amd64.deb ...
+Unpacking python3-icu (2.12-1build2) ...
+Setting up python3-configargparse (1.7-1) ...
+Setting up python3-parsedatetime (2.6-3) ...
+Setting up python3-icu (2.12-1build2) ...
+Setting up python3-josepy (1.14.0-1) ...
+Setting up python3-rfc3339 (1.1-4) ...
+Setting up python3-acme (2.9.0-1) ...
+Setting up python3-certbot (2.9.0-1) ...
+Setting up certbot (2.9.0-1) ...
+Created symlink /etc/systemd/system/timers.target.wants/certbot.timer → /usr/lib/systemd/system/certbot.timer.
+Setting up python3-certbot-nginx (2.9.0-1) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Scanning processes...                                                                                                                                                                                              
+Scanning candidates...                                                                                                                                                                                             
+Scanning linux images...                                                                                                                                                                                           
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+vix@srv1118737:~/projects/vix$ # 3. تفعيل الموقع
+sudo ln -s /etc/nginx/sites-available/vixo.click /etc/nginx/sites-enabled/
+
+# 4. اختبار الإعدادات
+sudo nginx -t
+
+# 5. إعادة تشغيل Nginx
+sudo systemctl restart nginx
+
+# 6. الحصول على شهادة SSL مجانية
+sudo certbot --nginx -d vixo.click -d www.vixo.click
+
+# 7. فتح المنافذ في الجدار الناري
+sudo ufw allow 'Nginx Full'
+sudo ufw allow OpenSSH
+sudo ufw enable
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+Enter email address (used for urgent renewal and security notices)
+ (Enter 'c' to cancel): duxexch@gmail.com
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Please read the Terms of Service at
+https://letsencrypt.org/documents/LE-SA-v1.6-August-18-2025.pdf. You must agree
+in order to register with the ACME server. Do you agree?
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+(Y)es/(N)o: y
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Would you be willing, once your first certificate is successfully issued, to
+share your email address with the Electronic Frontier Foundation, a founding
+partner of the Let's Encrypt project and the non-profit organization that
+develops Certbot? We'd like to send you email about our work encrypting the web,
+EFF news, campaigns, and ways to support digital freedom.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+(Y)es/(N)o: y
+Account registered.
+Requesting a certificate for vixo.click and www.vixo.click
+y
+
+Successfully received certificate.
+Certificate is saved at: /etc/letsencrypt/live/vixo.click/fullchain.pem
+Key is saved at:         /etc/letsencrypt/live/vixo.click/privkey.pem
+This certificate expires on 2026-04-12.
+These files will be updated when the certificate renews.
+Certbot has set up a scheduled task to automatically renew this certificate in the background.
+
+Deploying certificate
+Successfully deployed certificate for vixo.click to /etc/nginx/sites-enabled/vixo.click
+Successfully deployed certificate for www.vixo.click to /etc/nginx/sites-enabled/vixo.click
+Congratulations! You have successfully enabled HTTPS on https://vixo.click and https://www.vixo.click
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Rule added
+Rule added (v6)
+Skipping adding existing rule
+Skipping adding existing rule (v6)
+Command may disrupt existing ssh connections. Proceed with operation (y|n)? y
+Firewall is active and enabled on system startup
+vix@srv1118737:~/projects/vix$ ^C
+vix@srv1118737:~/projects/vix$ # تثبيت Nginx و Certbot
+sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
+
+# إنشاء ملف الإعدادات
+sudo tee /etc/nginx/sites-available/vixo.click > /dev/null << 'EOF'
+server {
+    listen 80;
+    server_name vixo.click www.vixo.click;
+
+    location / {
+        proxy_pass http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+
+# تفعيل الموقع
+sudo ln -sf /etc/nginx/sites-available/vixo.click /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx
+
+# الحصول على شهادة SSL
+sudo certbot --nginx -d vixo.click -d www.vixo.click --non-interactive --agree-tos -m duxexch@gmail.com
+Hit:1 http://ftp.halifax.rwth-aachen.de/ubuntu noble-backports InRelease
+Hit:2 http://ftp.halifax.rwth-aachen.de/ubuntu noble InRelease                                                                                                                                                    
+Hit:3 http://ftp.halifax.rwth-aachen.de/ubuntu noble-security InRelease                                                                                                                                           
+Hit:4 http://ftp.halifax.rwth-aachen.de/ubuntu noble-updates InRelease                                                                                                                                            
+Hit:5 http://archive.ubuntu.com/ubuntu noble InRelease                                                                                                                                                            
+Hit:6 http://archive.ubuntu.com/ubuntu noble-updates InRelease                                                                                                                                                    
+Hit:7 http://archive.ubuntu.com/ubuntu noble-backports InRelease                                                                                                                     
+Hit:8 https://download.docker.com/linux/ubuntu noble InRelease                                                                                                                       
+Hit:9 http://archive.ubuntu.com/ubuntu noble-security InRelease                                                                                                                      
+Hit:10 https://deb.nodesource.com/node_20.x nodistro InRelease                                             
+Hit:11 https://repository.monarx.com/repository/ubuntu-noble noble InRelease
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+1 package can be upgraded. Run 'apt list --upgradable' to see it.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+nginx is already the newest version (1.24.0-2ubuntu7.5).
+certbot is already the newest version (2.9.0-1).
+python3-certbot-nginx is already the newest version (2.9.0-1).
+0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+Certificate not yet due for renewal
+Deploying certificate
+Successfully deployed certificate for vixo.click to /etc/nginx/sites-enabled/vixo.click
+Successfully deployed certificate for www.vixo.click to /etc/nginx/sites-enabled/vixo.click
+Congratulations! You have successfully enabled HTTPS on https://vixo.click and https://www.vixo.click
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+vix@srv1118737:~/projects/vix$ # على السيرفر، شغل هذا الأمر
+docker compose exec app npx tsx -e "
+const bcrypt = require('bcryptjs');
+const { db } = require('./server/db');
+const { users } = require('./shared/schema');
+
+async function createAdmin() {
+  const hashedPassword = await bcrypt.hash('admin123', 10);
+  await db.insert(users).values({
+    username: 'admin',
+    password: hashedPassword,
+    email: 'admin@vixo.click',
+    role: 'admin',
+    balance: '0',
+    isActive: true
+  }).onConflictDoNothing();
+  console.log('Admin created: admin / admin123');
+}
+createAdmin();
+"
+Admin created: admin / admin123
+vix@srv1118737:~/projects/vix$ docker compose restart app
+[+] restart 0/1
+ ⠸ Container vex-app Restarting                                                                                                                                                                              10.4s 
+vix@srv1118737:~/projects/vix$ sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
+Hit:1 http://ftp.halifax.rwth-aachen.de/ubuntu noble-backports InRelease
+Hit:2 https://download.docker.com/linux/ubuntu noble InRelease                                                                                                                                                    
+Hit:3 https://deb.nodesource.com/node_20.x nodistro InRelease                                                                                                                                                     
+Hit:4 http://ftp.halifax.rwth-aachen.de/ubuntu noble InRelease                                                                                                                                                    
+Hit:5 http://ftp.halifax.rwth-aachen.de/ubuntu noble-security InRelease                                                                                                                                           
+Hit:6 http://ftp.halifax.rwth-aachen.de/ubuntu noble-updates InRelease                                                                                                                                            
+Hit:7 http://archive.ubuntu.com/ubuntu noble InRelease                                                                                                                                                            
+Get:8 http://archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]                                                                                                                                           
+Hit:9 https://repository.monarx.com/repository/ubuntu-noble noble InRelease                     
+Get:10 http://archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]                      
+Get:11 http://archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:12 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1690 kB]
+Get:13 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [175 kB]
+Get:14 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1510 kB]
+Get:15 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [378 kB]
+Get:16 http://archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B]
+Get:17 http://archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:18 http://archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7300 B]
+Get:19 http://archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [10.5 kB]
+Get:20 http://archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [216 B]
+Get:21 http://archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B]
+Get:22 http://archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1402 kB]
+Get:23 http://archive.ubuntu.com/ubuntu noble-security/main Translation-en [227 kB]
+Get:24 http://archive.ubuntu.com/ubuntu noble-security/main amd64 Components [21.5 kB]
+Get:25 http://archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [71.5 kB]
+Get:26 http://archive.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2293 kB]
+Get:27 http://archive.ubuntu.com/ubuntu noble-security/restricted Translation-en [525 kB]
+Get:28 http://archive.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B]
+Get:29 http://archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [212 B]
+Fetched 8691 kB in 2s (4303 kB/s)                                 
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+1 package can be upgraded. Run 'apt list --upgradable' to see it.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+nginx is already the newest version (1.24.0-2ubuntu7.5).
+certbot is already the newest version (2.9.0-1).
+python3-certbot-nginx is already the newest version (2.9.0-1).
+0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+vix@srv1118737:~/projects/vix$ sudo tee /etc/nginx/sites-available/vixo.click > /dev/null << 'EOF'
+server {
+    listen 80;
+    server_name vixo.click www.vixo.click;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+EOF
+vix@srv1118737:~/projects/vix$ sudo ln -sf /etc/nginx/sites-available/vixo.click /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx && sudo systemctl enable nginx
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+Synchronizing state of nginx.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable nginx
+vix@srv1118737:~/projects/vix$ sudo certbot --nginx -d vixo.click -d www.vixo.click
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+Certificate not yet due for renewal
+
+You have an existing certificate that has exactly the same domains or certificate name you requested and isn't close to expiry.
+(ref: /etc/letsencrypt/renewal/vixo.click.conf)
+
+What would you like to do?
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+1: Attempt to reinstall this existing certificate
+2: Renew & replace the certificate (may be subject to CA rate limits)
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 1
+Deploying certificate
+Successfully deployed certificate for vixo.click to /etc/nginx/sites-enabled/vixo.click
+Successfully deployed certificate for www.vixo.click to /etc/nginx/sites-enabled/vixo.click
+Congratulations! You have successfully enabled HTTPS on https://vixo.click and https://www.vixo.click
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+vix@srv1118737:~/projects/vix$ sudo systemctl enable docker
+cd ~/projects/vix && docker compose up -d
+Synchronizing state of docker.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable docker
+WARN[0000] No services to build                         
+[+] up 2/2
+ ✔ Container vex-db  Healthy                                                                                                                                                                                  0.5s 
+ ✔ Container vex-app Running                                                                                                                                                                                  0.0s 
+vix@srv1118737:~/projects/vix$ sudo ufw allow 22
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw --force enable
+sudo ufw status
+Rule added
+Rule added (v6)
+Skipping adding existing rule
+Skipping adding existing rule (v6)
+Skipping adding existing rule
+Skipping adding existing rule (v6)
+Firewall is active and enabled on system startup
+Status: active
+
+To                         Action      From
+--                         ------      ----
+5000/tcp                   ALLOW       Anywhere                  
+OpenSSH                    ALLOW       Anywhere                  
+80/tcp                     ALLOW       Anywhere                  
+443/tcp                    ALLOW       Anywhere                  
+5000                       ALLOW       Anywhere                  
+2222/tcp                   ALLOW       Anywhere                  
+80                         ALLOW       Anywhere                  
+443                        ALLOW       Anywhere                  
+Nginx Full                 ALLOW       Anywhere                  
+22                         ALLOW       Anywhere                  
+5000/tcp (v6)              ALLOW       Anywhere (v6)             
+OpenSSH (v6)               ALLOW       Anywhere (v6)             
+80/tcp (v6)                ALLOW       Anywhere (v6)             
+443/tcp (v6)               ALLOW       Anywhere (v6)             
+5000 (v6)                  ALLOW       Anywhere (v6)             
+2222/tcp (v6)              ALLOW       Anywhere (v6)             
+80 (v6)                    ALLOW       Anywhere (v6)             
+443 (v6)                   ALLOW       Anywhere (v6)             
+Nginx Full (v6)            ALLOW       Anywhere (v6)             
+22 (v6)                    ALLOW       Anywhere (v6)             
+
+vix@srv1118737:~/projects/vix$ mkdir -p ~/backups
+
+# إنشاء سكربت النسخ الاحتياطي
+cat > ~/backup-db.sh << 'EOF'
+#!/bin/bash
+cd ~/projects/vix
+docker compose exec -T db pg_dump -U vex_user vex_db > ~/backups/vex_$(date +%Y%m%d_%H%M%S).sql
+find ~/backups -name "*.sql" -mtime +7 -delete
+EOF
+
+chmod +x ~/backup-db.sh
+
+# جدولة يومية الساعة 3 صباحاً
+(crontab -l 2>/dev/null; echo "0 3 * * * ~/backup-db.sh") | crontab -
+vix@srv1118737:~/projects/vix$ (crontab -l 2>/dev/null; echo "0 0 1 * * certbot renew --quiet") | crontab -
+vix@srv1118737:~/projects/vix$ 

@@ -1,0 +1,79 @@
+vix@srv1118737:~/projects/vix$ (crontab -l 2>/dev/null; echo "0 0 1 * * certbot renew --quiet") | crontab -
+vix@srv1118737:~/projects/vix$ # 2. إنشاء إعدادات Nginx (بدون nano)
+sudo tee /etc/nginx/sites-available/vixo.click > /dev/null << 'EOF'
+server {
+    listen 80;
+    server_name vixo.click www.vixo.click;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+EOF
+
+# 3. تفعيل الموقع
+sudo ln -sf /etc/nginx/sites-available/vixo.click /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx && sudo systemctl enable nginx
+
+# 4. شهادة SSL
+sudo certbot --nginx -d vixo.click -d www.vixo.click
+
+# 5. Docker يبدأ تلقائياً
+sudo systemctl enable docker
+
+# 6. جدار ناري
+sudo ufw allow 22 && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw --force enable
+
+# 7. نسخ احتياطي يومي
+mkdir -p ~/backups
+cat > ~/backup-db.sh << 'EOF'
+#!/bin/bash
+cd ~/projects/vix
+docker compose exec -T db pg_dump -U vex_user vex_db > ~/backups/vex_$(date +%Y%m%d_%H%M%S).sql
+find ~/backups -name "*.sql" -mtime +7 -delete
+EOF
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+Synchronizing state of nginx.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable nginx
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+Certificate not yet due for renewal
+
+You have an existing certificate that has exactly the same domains or certificate name you requested and isn't close to expiry.
+(ref: /etc/letsencrypt/renewal/vixo.click.conf)
+
+What would you like to do?
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+1: Attempt to reinstall this existing certificate
+2: Renew & replace the certificate (may be subject to CA rate limits)
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 1
+Deploying certificate
+Successfully deployed certificate for vixo.click to /etc/nginx/sites-enabled/vixo.click
+Successfully deployed certificate for www.vixo.click to /etc/nginx/sites-enabled/vixo.click
+Congratulations! You have successfully enabled HTTPS on https://vixo.click and https://www.vixo.click
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Synchronizing state of docker.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable docker
+Skipping adding existing rule
+Skipping adding existing rule (v6)
+Skipping adding existing rule
+Skipping adding existing rule (v6)
+Skipping adding existing rule
+Skipping adding existing rule (v6)
+Firewall is active and enabled on system startup
+vix@srv1118737:~/projects/vix$ 
