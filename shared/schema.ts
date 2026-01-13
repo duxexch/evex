@@ -986,7 +986,7 @@ export const p2pTraderPaymentMethods = pgTable("p2p_trader_payment_methods", {
 
 // ==================== NOTIFICATIONS ====================
 
-export const notificationTypeEnum = pgEnum("notification_type", ["announcement", "transaction", "security", "promotion", "system", "p2p"]);
+export const notificationTypeEnum = pgEnum("notification_type", ["announcement", "transaction", "security", "promotion", "system", "p2p", "id_verification", "success", "warning"]);
 export const notificationPriorityEnum = pgEnum("notification_priority", ["low", "normal", "high", "urgent"]);
 
 export const notifications = pgTable("notifications", {

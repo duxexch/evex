@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { z } from "zod";
 import { 
@@ -20,7 +21,40 @@ import { setupWebSocket, sendNotification } from "./websocket";
 import { db } from "./db";
 import { eq, desc, and, or, sql } from "drizzle-orm";
 
-const JWT_SECRET = process.env.SESSION_SECRET || "pwm-secret-key-change-in-production";
+// Security: JWT_SECRET must be set in production
+const JWT_SECRET = process.env.SESSION_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('CRITICAL: SESSION_SECRET environment variable must be set in production!');
+}
+const JWT_SIGNING_KEY = JWT_SECRET || 'dev-only-insecure-key';
+
+// Rate limiting for authentication endpoints (brute-force protection)
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  message: { error: "Too many login attempts, please try again after 15 minutes" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Only count failed login attempts
+});
+
+// Rate limiter for registration (counts all attempts including successful)
+const registrationRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 registrations per window
+  message: { error: "Too many registration attempts, please try again after 15 minutes" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false, // Count ALL requests including successful
+});
+
+const strictRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 attempts per hour
+  message: { error: "Too many attempts, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Auth middleware
 interface AuthRequest extends Request {
@@ -33,7 +67,7 @@ const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunctio
     return res.status(401).json({ error: "Unauthorized" });
   }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, JWT_SIGNING_KEY) as any;
     req.user = decoded;
     next();
   } catch {
@@ -82,7 +116,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ==================== AUTH ROUTES ====================
   
   // One-click registration - generates account ID and password automatically
-  app.post("/api/auth/one-click-register", async (req: Request, res: Response) => {
+  app.post("/api/auth/one-click-register", registrationRateLimiter, async (req: Request, res: Response) => {
     try {
       const accountId = await storage.generateUniqueAccountId();
       const plainPassword = crypto.randomBytes(8).toString("hex");
@@ -96,7 +130,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "active",
       });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -121,7 +155,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   
-  app.post("/api/auth/register", async (req: Request, res: Response) => {
+  app.post("/api/auth/register", registrationRateLimiter, async (req: Request, res: Response) => {
     try {
       const { username, password, email, firstName, lastName, referralCode } = req.body;
       
@@ -155,7 +189,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "active",
       });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -171,7 +205,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
+  app.post("/api/auth/login", authRateLimiter, async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
       
@@ -191,7 +225,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -235,7 +269,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   
   // Login by account ID (one-click generated users)
-  app.post("/api/auth/login-by-account", async (req: Request, res: Response) => {
+  app.post("/api/auth/login-by-account", authRateLimiter, async (req: Request, res: Response) => {
     try {
       const { accountId, password } = req.body;
       
@@ -255,7 +289,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -273,7 +307,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   
   // Login by phone number
-  app.post("/api/auth/login-by-phone", async (req: Request, res: Response) => {
+  app.post("/api/auth/login-by-phone", authRateLimiter, async (req: Request, res: Response) => {
     try {
       const { phone, password } = req.body;
       
@@ -293,7 +327,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -311,7 +345,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   
   // Request password reset
-  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+  app.post("/api/auth/forgot-password", strictRateLimiter, async (req: Request, res: Response) => {
     try {
       const { email, phone, accountId } = req.body;
       
@@ -348,7 +382,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   
   // Reset password with token
-  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+  app.post("/api/auth/reset-password", strictRateLimiter, async (req: Request, res: Response) => {
     try {
       const { token, newPassword } = req.body;
       
@@ -3831,12 +3865,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const admin of adminUsers) {
         await db.insert(notifications).values({
           userId: admin.id,
-          type: 'id_verification_request',
+          type: 'id_verification',
           title: 'New ID Verification Request',
           titleAr: 'طلب توثيق هوية جديد',
           message: `User ${req.user!.username} has submitted ID verification documents`,
           messageAr: `قام المستخدم ${req.user!.username} بتقديم وثائق التحقق من الهوية`,
-          data: { userId: req.user!.id },
+          metadata: JSON.stringify({ userId: req.user!.id }),
           isRead: false,
         });
         sendNotification(admin.id, {
@@ -3927,7 +3961,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await db.insert(notifications).values({
         userId,
-        type: 'id_verification_result',
+        type: 'id_verification',
         title: notificationTitle,
         titleAr: notificationTitleAr,
         message: notificationMessage,
@@ -4109,7 +4143,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.createNotification({
         userId,
-        type: action === 'approve' ? 'success' : 'warning',
+        type: 'id_verification',
         priority: 'high',
         title: notificationTitle,
         titleAr: notificationTitleAr,
@@ -4119,10 +4153,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.createAuditLog({
         userId: req.user!.id,
-        action: `id_verification_${action}`,
+        action: 'user_update',
         entityType: 'user',
         entityId: userId,
-        details: reason || '',
+        details: `ID verification ${action}: ${reason || ''}`,
       });
       
       res.json({ success: true });

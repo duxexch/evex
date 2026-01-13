@@ -56,6 +56,10 @@ The schema (in `shared/schema.ts`) includes:
 - **Disappearing Messages**: Chat messages can be set to disappear after being read
 - **Free/Paid Games**: Games can be configured as free-to-play or paid with bet-based or fixed pricing
 - **Withdrawal Password**: Separate security password for withdrawals and P2P sells
+- **Rate Limiting**: Authentication endpoints protected with express-rate-limit (10 attempts/15 min)
+- **Enhanced Security**: JWT_SECRET enforcement in production mode (fails if not set)
+- **Docker Entrypoint**: Automatic database migrations and health checks on container startup
+- **Lazy Loading**: 40+ pages use React.lazy() for improved initial load times
 
 ### Build and Development
 - **Development**: `npm run dev` - runs tsx with hot reload
@@ -74,6 +78,14 @@ The schema (in `shared/schema.ts`) includes:
 - **bcryptjs**: Password hashing
 - **express-session**: Session management
 - **connect-pg-simple**: PostgreSQL session store
+- **express-rate-limit**: Brute-force protection for auth endpoints
+
+### Security Notes
+- **SESSION_SECRET**: Required in production (app will fail to start without it)
+- **Rate Limiting**: All auth endpoints protected (login, register, forgot-password, reset-password)
+  - Login/register: 10 attempts per 15 minutes
+  - Password reset: 5 attempts per hour
+- **Docker Deployment**: Uses entrypoint.sh for automatic migrations with validation
 
 ### Third-Party Services (Potential)
 Based on dependencies, the platform is prepared for:

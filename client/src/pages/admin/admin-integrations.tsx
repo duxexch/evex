@@ -276,8 +276,8 @@ function IntegrationCard({ integration, isArabic }: { integration: IntegrationSt
             </DialogTitle>
             <DialogDescription>
               {isArabic 
-                ? "أضف المتغيرات التالية إلى إعدادات البيئة في Replit Secrets"
-                : "Add the following environment variables to your Replit Secrets"}
+                ? "أضف المتغيرات التالية إلى ملف .env الخاص بك"
+                : "Add the following environment variables to your .env file"}
             </DialogDescription>
           </DialogHeader>
           
@@ -307,7 +307,7 @@ function IntegrationCard({ integration, isArabic }: { integration: IntegrationSt
                 {isArabic ? "كيفية الإضافة:" : "How to add:"}
               </h4>
               <ol className="text-xs text-blue-600 dark:text-blue-400 space-y-1 list-decimal list-inside">
-                <li>{isArabic ? "اذهب إلى تبويب 'Secrets' في Replit" : "Go to the 'Secrets' tab in Replit"}</li>
+                <li>{isArabic ? "افتح ملف .env على الخادم" : "Open the .env file on your server"}</li>
                 <li>{isArabic ? "أضف كل متغير مع القيمة المناسبة" : "Add each variable with the appropriate value"}</li>
                 <li>{isArabic ? "أعد تشغيل التطبيق لتفعيل التغييرات" : "Restart the application to apply changes"}</li>
               </ol>
