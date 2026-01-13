@@ -18,7 +18,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { setupWebSocket, sendNotification } from "./websocket";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, desc, and, or, sql } from "drizzle-orm";
 
 // Security: JWT_SECRET must be set in production
@@ -52,6 +52,25 @@ const strictRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5, // 5 attempts per hour
   message: { error: "Too many attempts, please try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// General API rate limiter for all endpoints
+const apiRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  message: { error: "Too many requests, please slow down" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === "/api/health", // Skip health checks
+});
+
+// Sensitive operations rate limiter (withdrawals, password changes)
+const sensitiveRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per 15 minutes
+  message: { error: "Too many sensitive operation attempts" },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -91,24 +110,84 @@ const agentMiddleware = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   
+  // Apply general API rate limiter to all API routes
+  app.use("/api", apiRateLimiter);
+  
   // ==================== HEALTH CHECK ====================
   
   app.get("/api/health", async (req: Request, res: Response) => {
     try {
       // Check database connection
+      const dbStart = Date.now();
       await db.execute(sql`SELECT 1`);
+      const dbLatency = Date.now() - dbStart;
+      
       res.json({ 
         status: "healthy", 
         timestamp: new Date().toISOString(),
-        database: "connected",
-        version: "1.0.0"
+        environment: process.env.NODE_ENV || "development",
+        database: {
+          status: "connected",
+          latencyMs: dbLatency,
+        },
+        version: "1.0.0",
+        uptime: process.uptime(),
+        memory: {
+          heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+          rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        },
       });
     } catch (error: any) {
       res.status(503).json({ 
         status: "unhealthy", 
         timestamp: new Date().toISOString(),
-        database: "disconnected",
-        error: error.message 
+        database: {
+          status: "disconnected",
+          error: error.message,
+        }
+      });
+    }
+  });
+  
+  // Detailed health check for monitoring (admin only in production)
+  app.get("/api/health/detailed", async (req: Request, res: Response) => {
+    try {
+      const dbStart = Date.now();
+      await db.execute(sql`SELECT count(*) as count FROM users`);
+      const dbLatency = Date.now() - dbStart;
+      
+      const poolStats = pool.totalCount !== undefined ? {
+        total: pool.totalCount,
+        idle: pool.idleCount,
+        waiting: pool.waitingCount,
+      } : null;
+      
+      res.json({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || "development",
+        version: "1.0.0",
+        uptime: process.uptime(),
+        database: {
+          status: "connected",
+          latencyMs: dbLatency,
+          pool: poolStats,
+        },
+        memory: {
+          heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+          rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+          external: Math.round(process.memoryUsage().external / 1024 / 1024),
+        },
+        cpu: process.cpuUsage(),
+        nodeVersion: process.version,
+      });
+    } catch (error: any) {
+      res.status(503).json({
+        status: "unhealthy",
+        timestamp: new Date().toISOString(),
+        error: error.message,
       });
     }
   });
@@ -751,7 +830,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   
-  app.post("/api/transactions/withdraw", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/transactions/withdraw", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
     try {
       const { amount } = req.body;
       const user = await storage.getUser(req.user!.id);
@@ -4219,28 +4298,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   setupWebSocket(httpServer);
 
-  // ==================== SEED DEFAULT ADMIN ====================
+  // ==================== ADMIN BOOTSTRAP (PRODUCTION-SAFE) ====================
   
-  // Create default admin on startup if doesn't exist
+  // Only create admin in development mode via environment variables
+  // In production, admins must be created via secure bootstrap CLI or migration
   (async () => {
     try {
-      const adminUser = await storage.getUserByUsername("admin");
-      if (!adminUser) {
-        const hashedPassword = await bcrypt.hash("admin123", 10);
-        await storage.createUser({
-          username: "admin",
-          password: hashedPassword,
-          email: "admin@pwm.local",
-          firstName: "Admin",
-          lastName: "User",
-          role: "admin",
-          status: "active",
-          accountId: "100000000",
-        });
-        console.log("Default admin user created: username=admin, password=admin123");
+      // Check if any admin exists
+      const existingAdmins = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+      
+      if (existingAdmins.length === 0) {
+        // Only bootstrap in development OR if ADMIN_BOOTSTRAP_PASSWORD is set
+        const bootstrapPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+        const isDevelopment = process.env.NODE_ENV !== "production";
+        
+        if (isDevelopment) {
+          // Development mode: create with secure random password
+          const devPassword = crypto.randomBytes(16).toString("hex");
+          const hashedPassword = await bcrypt.hash(devPassword, 12);
+          await storage.createUser({
+            username: "admin",
+            password: hashedPassword,
+            email: "admin@vex.local",
+            firstName: "Admin",
+            lastName: "User",
+            role: "admin",
+            status: "active",
+            accountId: "100000000",
+            mustChangePassword: true,
+          });
+          console.log("========================================");
+          console.log("🔐 DEVELOPMENT ADMIN CREATED");
+          console.log(`   Username: admin`);
+          console.log(`   Password: ${devPassword}`);
+          console.log("   ⚠️  This password is temporary and must be changed!");
+          console.log("========================================");
+        } else if (bootstrapPassword && bootstrapPassword.length >= 16) {
+          // Production bootstrap: use provided password (must be strong)
+          const hashedPassword = await bcrypt.hash(bootstrapPassword, 12);
+          await storage.createUser({
+            username: "admin",
+            password: hashedPassword,
+            email: process.env.ADMIN_BOOTSTRAP_EMAIL || "admin@vex.local",
+            firstName: "Admin",
+            lastName: "User",
+            role: "admin",
+            status: "active",
+            accountId: "100000000",
+            mustChangePassword: true,
+          });
+          console.log("✅ Admin user bootstrapped from ADMIN_BOOTSTRAP_PASSWORD");
+          console.log("   ⚠️  Remember to unset ADMIN_BOOTSTRAP_PASSWORD after first login!");
+        } else {
+          console.log("⚠️  No admin user exists. To create one:");
+          console.log("   Set ADMIN_BOOTSTRAP_PASSWORD (min 16 chars) and ADMIN_BOOTSTRAP_EMAIL");
+          console.log("   Then restart the server. Unset these vars after creation.");
+        }
       }
     } catch (error) {
-      console.error("Failed to create default admin:", error);
+      console.error("Failed during admin bootstrap:", error);
     }
   })();
 

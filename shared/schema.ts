@@ -61,6 +61,7 @@ export const users = pgTable("users", {
   isOnline: boolean("is_online").notNull().default(false),
   stealthMode: boolean("stealth_mode").notNull().default(false),
   lastActiveAt: timestamp("last_active_at"),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at"),

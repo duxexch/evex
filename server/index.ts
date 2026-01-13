@@ -7,6 +7,10 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+// Trust proxy for rate limiting behind nginx/load balancers
+// Number of proxies between user and server (1 for nginx)
+app.set("trust proxy", process.env.NODE_ENV === "production" ? 1 : false);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
@@ -64,12 +68,28 @@ app.use((req, res, next) => {
   await registerRoutes(httpServer, app);
   registerAdminRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // Global error handler - catches unhandled errors without crashing the server
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const message = process.env.NODE_ENV === "production" 
+      ? "Internal Server Error" 
+      : err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Log error details for debugging (never crash)
+    const errorLog = {
+      timestamp: new Date().toISOString(),
+      method: req.method,
+      path: req.path,
+      status,
+      error: err.message,
+      stack: process.env.NODE_ENV !== "production" ? err.stack : undefined,
+    };
+    console.error("[ERROR]", JSON.stringify(errorLog));
+
+    // Only send response if headers haven't been sent
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
   // importantly only setup vite in development and after

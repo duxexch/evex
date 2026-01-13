@@ -1,11 +1,12 @@
 #!/bin/sh
 # VEX Platform - Docker Entrypoint Script
-# Handles database migrations and startup
+# Production-safe database migrations and startup
 
 set -e
 
 echo "========================================"
 echo "🚀 VEX Platform - Starting Up"
+echo "   Environment: ${NODE_ENV:-development}"
 echo "========================================"
 
 # Validate required environment variables
@@ -23,6 +24,17 @@ if [ -z "$SESSION_SECRET" ]; then
     echo "❌ ERROR: SESSION_SECRET environment variable is required"
     echo "   Generate one with: openssl rand -hex 32"
     exit 1
+fi
+
+# Validate SESSION_SECRET strength in production
+if [ "$NODE_ENV" = "production" ]; then
+    SECRET_LENGTH=${#SESSION_SECRET}
+    if [ "$SECRET_LENGTH" -lt 32 ]; then
+        echo "❌ ERROR: SESSION_SECRET must be at least 32 characters in production"
+        echo "   Current length: $SECRET_LENGTH"
+        echo "   Generate one with: openssl rand -hex 32"
+        exit 1
+    fi
 fi
 echo "✅ SESSION_SECRET is set"
 
@@ -60,7 +72,7 @@ until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" 2>/dev/null; do
 done
 echo "✅ Database connection established!"
 
-# Run database migrations using drizzle-kit
+# Database migration strategy
 echo ""
 echo "📦 Running database migrations..."
 
@@ -70,14 +82,48 @@ if ! command -v npx >/dev/null 2>&1; then
     exit 1
 fi
 
-# Run migrations with visible output
-if npx drizzle-kit push --force 2>&1; then
-    echo "✅ Database migrations completed successfully"
+# Production: Safe migrations only (no --force)
+# Development: Allow schema push with force
+if [ "$NODE_ENV" = "production" ]; then
+    echo "   ⚠️  Production mode: Running safe migrations only"
+    echo "   To apply breaking changes, set ALLOW_FORCE_MIGRATIONS=true"
+    
+    if [ "$ALLOW_FORCE_MIGRATIONS" = "true" ]; then
+        echo "   🔓 ALLOW_FORCE_MIGRATIONS enabled - proceeding with force push"
+        if npx drizzle-kit push --force 2>&1; then
+            echo "✅ Database migrations completed successfully"
+        else
+            echo "❌ Database migrations failed!"
+            echo "   Review the error above and fix schema issues"
+            exit 1
+        fi
+    else
+        # Try without force first - will fail on breaking changes
+        if npx drizzle-kit push 2>&1; then
+            echo "✅ Database migrations completed successfully"
+        else
+            echo "⚠️  Migration requires manual review (breaking changes detected)"
+            echo "   Options:"
+            echo "   1. Review changes: npx drizzle-kit generate"
+            echo "   2. Force apply (DANGER): Set ALLOW_FORCE_MIGRATIONS=true"
+            echo "   3. Apply manually via SQL"
+            exit 1
+        fi
+    fi
 else
-    echo "❌ Database migrations failed!"
-    echo "   Check your schema and database connection"
-    echo "   You may need to run migrations manually"
-    exit 1
+    # Development: allow force push
+    echo "   Development mode: Applying schema changes..."
+    if npx drizzle-kit push 2>&1; then
+        echo "✅ Database migrations completed successfully"
+    else
+        echo "⚠️  Standard push failed, trying with --force for development..."
+        if npx drizzle-kit push --force 2>&1; then
+            echo "✅ Database migrations completed with --force"
+        else
+            echo "❌ Database migrations failed!"
+            exit 1
+        fi
+    fi
 fi
 
 echo ""
@@ -87,5 +133,5 @@ echo "🎮 Starting VEX Platform server..."
 echo "========================================"
 echo ""
 
-# Start the application
+# Start the application with proper signal handling
 exec node dist/index.cjs
