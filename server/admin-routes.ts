@@ -8,7 +8,7 @@ import {
   appSettings, loginMethodConfigs, managedLanguages, badgeCatalog, broadcastNotifications, chatSettings, gameplaySettings,
   insertAppSettingSchema, insertLoginMethodConfigSchema, insertManagedLanguageSchema, insertBadgeCatalogSchema,
   insertBroadcastNotificationSchema, insertChatSettingSchema, insertGameplaySettingSchema,
-  notifications, games
+  notifications, games, insertSocialPlatformSchema
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql, like, or, gte, lte } from "drizzle-orm";
@@ -1678,6 +1678,106 @@ export function registerAdminRoutes(app: Express) {
       }, req);
 
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== SOCIAL PLATFORMS MANAGEMENT ====================
+
+  // Get all social platforms (admin)
+  app.get("/api/admin/social-platforms", adminAuthMiddleware, async (_req: AdminRequest, res: Response) => {
+    try {
+      const platforms = await storage.listSocialPlatforms();
+      res.json(platforms);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create social platform
+  app.post("/api/admin/social-platforms", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const validatedData = insertSocialPlatformSchema.parse(req.body);
+      const platform = await storage.createSocialPlatform(validatedData);
+      
+      await logAdminAction(req.admin!.id, "settings_change", "social_platform", platform.id, {
+        newValue: JSON.stringify({ name: platform.name, displayName: platform.displayName })
+      }, req);
+      
+      res.json(platform);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update social platform
+  app.patch("/api/admin/social-platforms/:id", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updateSchema = insertSocialPlatformSchema.partial();
+      const validatedData = updateSchema.parse(req.body);
+      
+      const existing = await storage.getSocialPlatform(id);
+      const platform = await storage.updateSocialPlatform(id, validatedData);
+      if (!platform) {
+        return res.status(404).json({ error: "Platform not found" });
+      }
+      
+      await logAdminAction(req.admin!.id, "settings_change", "social_platform", id, {
+        previousValue: existing ? JSON.stringify({ name: existing.name }) : undefined,
+        newValue: JSON.stringify({ name: platform.name })
+      }, req);
+      
+      res.json(platform);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete social platform
+  app.delete("/api/admin/social-platforms/:id", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getSocialPlatform(id);
+      
+      await storage.deleteSocialPlatform(id);
+      
+      if (existing) {
+        await logAdminAction(req.admin!.id, "settings_change", "social_platform", id, {
+          previousValue: JSON.stringify({ name: existing.name }),
+          reason: "Platform deleted"
+        }, req);
+      }
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Toggle social platform enabled/disabled
+  app.post("/api/admin/social-platforms/:id/toggle", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const platform = await storage.getSocialPlatform(id);
+      if (!platform) {
+        return res.status(404).json({ error: "Platform not found" });
+      }
+      const updated = await storage.updateSocialPlatform(id, { isEnabled: !platform.isEnabled });
+      
+      await logAdminAction(req.admin!.id, "settings_change", "social_platform", id, {
+        previousValue: JSON.stringify({ isEnabled: platform.isEnabled }),
+        newValue: JSON.stringify({ isEnabled: updated?.isEnabled })
+      }, req);
+      
+      res.json(updated);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

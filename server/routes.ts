@@ -4165,17 +4165,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ==================== SOCIAL PLATFORMS MANAGEMENT ====================
-
-  // Get all social platforms (admin)
-  app.get("/api/admin/social-platforms", authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
-    try {
-      const platforms = await storage.listSocialPlatforms();
-      res.json(platforms);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // ==================== SOCIAL PLATFORMS (PUBLIC) ====================
 
   // Get enabled social platforms (public - for login/register pages)
   app.get("/api/social-platforms", async (_req: Request, res: Response) => {
@@ -4191,65 +4181,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         otpEnabled: p.otpEnabled,
       }));
       res.json(publicPlatforms);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Create social platform
-  app.post("/api/admin/social-platforms", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const validatedData = insertSocialPlatformSchema.parse(req.body);
-      const platform = await storage.createSocialPlatform(validatedData);
-      res.json(platform);
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: error.errors });
-      }
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update social platform
-  app.patch("/api/admin/social-platforms/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const updateSchema = insertSocialPlatformSchema.partial();
-      const validatedData = updateSchema.parse(req.body);
-      const platform = await storage.updateSocialPlatform(id, validatedData);
-      if (!platform) {
-        return res.status(404).json({ error: "Platform not found" });
-      }
-      res.json(platform);
-    } catch (error: any) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Validation error", details: error.errors });
-      }
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Delete social platform
-  app.delete("/api/admin/social-platforms/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      await storage.deleteSocialPlatform(id);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Toggle social platform enabled/disabled
-  app.post("/api/admin/social-platforms/:id/toggle", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const platform = await storage.getSocialPlatform(id);
-      if (!platform) {
-        return res.status(404).json({ error: "Platform not found" });
-      }
-      const updated = await storage.updateSocialPlatform(id, { isEnabled: !platform.isEnabled });
-      res.json(updated);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
