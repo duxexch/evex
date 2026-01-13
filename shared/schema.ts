@@ -1838,3 +1838,42 @@ export const advertisementsRelations = relations(advertisements, ({ one }) => ({
 export const insertAdvertisementSchema = createInsertSchema(advertisements).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertAdvertisement = z.infer<typeof insertAdvertisementSchema>;
 export type Advertisement = typeof advertisements.$inferSelect;
+
+// ==================== SOCIAL PLATFORMS (OAuth & OTP Settings) ====================
+
+export const socialPlatformTypeEnum = pgEnum("social_platform_type", ["oauth", "otp", "both"]);
+
+export const socialPlatforms = pgTable("social_platforms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  displayNameAr: text("display_name_ar"),
+  icon: text("icon").notNull(),
+  type: socialPlatformTypeEnum("type").notNull().default("oauth"),
+  isEnabled: boolean("is_enabled").notNull().default(false),
+  clientId: text("client_id"),
+  clientSecret: text("client_secret"),
+  apiKey: text("api_key"),
+  apiSecret: text("api_secret"),
+  webhookUrl: text("webhook_url"),
+  callbackUrl: text("callback_url"),
+  botToken: text("bot_token"),
+  phoneNumberId: text("phone_number_id"),
+  businessAccountId: text("business_account_id"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  otpEnabled: boolean("otp_enabled").notNull().default(false),
+  otpTemplate: text("otp_template"),
+  otpExpiry: integer("otp_expiry").notNull().default(300),
+  sortOrder: integer("sort_order").notNull().default(0),
+  settings: text("settings"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_social_platforms_enabled").on(table.isEnabled),
+  index("idx_social_platforms_sort").on(table.sortOrder),
+]);
+
+export const insertSocialPlatformSchema = createInsertSchema(socialPlatforms).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSocialPlatform = z.infer<typeof insertSocialPlatformSchema>;
+export type SocialPlatform = typeof socialPlatforms.$inferSelect;

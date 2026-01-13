@@ -11,7 +11,7 @@ import {
   chatMessages, chatSettings, users, matchmakingQueue, gameMatches, games, gameplaySettings,
   gameplayEmojis, gameplayMessages, gameSections, advertisements,
   insertGameSectionSchema, insertAdvertisementSchema,
-  insertCountryPaymentMethodSchema
+  insertCountryPaymentMethodSchema, insertSocialPlatformSchema
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -4130,6 +4130,119 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ==================== SOCIAL PLATFORMS MANAGEMENT ====================
+
+  // Get all social platforms (admin)
+  app.get("/api/admin/social-platforms", authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
+    try {
+      const platforms = await storage.listSocialPlatforms();
+      res.json(platforms);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get enabled social platforms (public - for login/register pages)
+  app.get("/api/social-platforms", async (_req: Request, res: Response) => {
+    try {
+      const platforms = await storage.getEnabledSocialPlatforms();
+      const publicPlatforms = platforms.map(p => ({
+        id: p.id,
+        name: p.name,
+        displayName: p.displayName,
+        displayNameAr: p.displayNameAr,
+        icon: p.icon,
+        type: p.type,
+        otpEnabled: p.otpEnabled,
+      }));
+      res.json(publicPlatforms);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create social platform
+  app.post("/api/admin/social-platforms", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const validatedData = insertSocialPlatformSchema.parse(req.body);
+      const platform = await storage.createSocialPlatform(validatedData);
+      res.json(platform);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update social platform
+  app.patch("/api/admin/social-platforms/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updateSchema = insertSocialPlatformSchema.partial();
+      const validatedData = updateSchema.parse(req.body);
+      const platform = await storage.updateSocialPlatform(id, validatedData);
+      if (!platform) {
+        return res.status(404).json({ error: "Platform not found" });
+      }
+      res.json(platform);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete social platform
+  app.delete("/api/admin/social-platforms/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSocialPlatform(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Toggle social platform enabled/disabled
+  app.post("/api/admin/social-platforms/:id/toggle", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const platform = await storage.getSocialPlatform(id);
+      if (!platform) {
+        return res.status(404).json({ error: "Platform not found" });
+      }
+      const updated = await storage.updateSocialPlatform(id, { isEnabled: !platform.isEnabled });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Seed default social platforms if none exist
+  (async () => {
+    try {
+      const existingPlatforms = await storage.listSocialPlatforms();
+      if (existingPlatforms.length === 0) {
+        const defaultPlatforms = [
+          { name: "google", displayName: "Google", displayNameAr: "جوجل", icon: "SiGoogle", type: "oauth" as const, sortOrder: 1 },
+          { name: "facebook", displayName: "Facebook", displayNameAr: "فيسبوك", icon: "SiFacebook", type: "oauth" as const, sortOrder: 2 },
+          { name: "telegram", displayName: "Telegram", displayNameAr: "تيليجرام", icon: "SiTelegram", type: "both" as const, sortOrder: 3 },
+          { name: "whatsapp", displayName: "WhatsApp", displayNameAr: "واتساب", icon: "SiWhatsapp", type: "otp" as const, sortOrder: 4 },
+          { name: "twitter", displayName: "X (Twitter)", displayNameAr: "إكس (تويتر)", icon: "SiX", type: "oauth" as const, sortOrder: 5 },
+          { name: "apple", displayName: "Apple", displayNameAr: "آبل", icon: "SiApple", type: "oauth" as const, sortOrder: 6 },
+        ];
+        for (const platform of defaultPlatforms) {
+          await storage.createSocialPlatform(platform);
+        }
+        console.log("Default social platforms seeded");
+      }
+    } catch (error) {
+      console.error("Failed to seed social platforms:", error);
+    }
+  })();
 
   // ==================== WEBSOCKET SETUP ====================
 

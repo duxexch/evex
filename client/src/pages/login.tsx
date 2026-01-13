@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Gamepad2, Loader2, Copy, Check, Smartphone, Mail, User, Zap, KeyRound, Share2 } from "lucide-react";
-import { SiGoogle, SiFacebook, SiTelegram, SiWhatsapp, SiTelegram as TelegramIcon } from "react-icons/si";
+import { SiGoogle, SiFacebook, SiTelegram, SiWhatsapp, SiX, SiApple } from "react-icons/si";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface AuthSettings {
@@ -22,6 +22,25 @@ interface AuthSettings {
   twitterLoginEnabled: boolean;
 }
 
+interface SocialPlatform {
+  id: string;
+  name: string;
+  displayName: string;
+  displayNameAr: string | null;
+  icon: string;
+  type: "oauth" | "otp" | "both";
+  otpEnabled: boolean;
+}
+
+const PLATFORM_ICONS: Record<string, any> = {
+  SiGoogle: SiGoogle,
+  SiFacebook: SiFacebook,
+  SiTelegram: SiTelegram,
+  SiWhatsapp: SiWhatsapp,
+  SiX: SiX,
+  SiApple: SiApple,
+};
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { login, loginByAccount, loginByPhone, oneClickRegister, confirmOneClickLogin, register } = useAuth();
@@ -29,6 +48,7 @@ export default function LoginPage() {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [authSettings, setAuthSettings] = useState<AuthSettings | null>(null);
+  const [socialPlatforms, setSocialPlatforms] = useState<SocialPlatform[]>([]);
   
   const getEnabledTabs = () => {
     if (!authSettings) return ["account"];
@@ -64,6 +84,11 @@ export default function LoginPage() {
     fetch("/api/auth/settings")
       .then(res => res.json())
       .then(setAuthSettings)
+      .catch(() => {});
+    
+    fetch("/api/social-platforms")
+      .then(res => res.json())
+      .then(setSocialPlatforms)
       .catch(() => {});
   }, []);
 
@@ -472,25 +497,24 @@ export default function LoginPage() {
                 </button>
               </div>
               
-              {(authSettings?.googleLoginEnabled || authSettings?.facebookLoginEnabled || authSettings?.telegramLoginEnabled) && (
+              {socialPlatforms.length > 0 && (
                 <div className="pt-4 border-t border-border">
                   <p className="text-xs text-muted-foreground text-center mb-3">Or continue with</p>
-                  <div className="flex justify-center gap-3">
-                    {authSettings?.googleLoginEnabled && (
-                      <Button variant="outline" size="icon" data-testid="button-google-login">
-                        <SiGoogle className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {authSettings?.facebookLoginEnabled && (
-                      <Button variant="outline" size="icon" data-testid="button-facebook-login">
-                        <SiFacebook className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {authSettings?.telegramLoginEnabled && (
-                      <Button variant="outline" size="icon" data-testid="button-telegram-login">
-                        <SiTelegram className="w-4 h-4" />
-                      </Button>
-                    )}
+                  <div className="flex justify-center gap-3 flex-wrap">
+                    {socialPlatforms.map((platform) => {
+                      const Icon = PLATFORM_ICONS[platform.icon];
+                      return (
+                        <Button
+                          key={platform.id}
+                          variant="outline"
+                          size="icon"
+                          className="w-12 h-12 rounded-full"
+                          data-testid={`button-${platform.name}-login`}
+                        >
+                          {Icon && <Icon className="w-5 h-5" />}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

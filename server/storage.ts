@@ -4,7 +4,7 @@ import {
   auditLogs, financialLimits, systemSettings, linkAnalytics, promoCodeUsages,
   passwordResetTokens, countryPaymentMethods,
   notifications, userSessions, loginHistory, announcements, announcementViews, userPreferences,
-  userRelationships,
+  userRelationships, socialPlatforms,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -21,6 +21,7 @@ import {
   type AnnouncementView,
   type UserPreferences, type InsertUserPreferences,
   type UserRelationship, type InsertUserRelationship,
+  type SocialPlatform, type InsertSocialPlatform,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, asc, or, like, ne } from "drizzle-orm";
@@ -805,6 +806,44 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(users.username)
       .limit(50);
+  }
+
+  async listSocialPlatforms(): Promise<SocialPlatform[]> {
+    return db.select().from(socialPlatforms).orderBy(asc(socialPlatforms.sortOrder));
+  }
+
+  async getEnabledSocialPlatforms(): Promise<SocialPlatform[]> {
+    return db.select().from(socialPlatforms)
+      .where(eq(socialPlatforms.isEnabled, true))
+      .orderBy(asc(socialPlatforms.sortOrder));
+  }
+
+  async getSocialPlatform(id: string): Promise<SocialPlatform | undefined> {
+    const [platform] = await db.select().from(socialPlatforms).where(eq(socialPlatforms.id, id));
+    return platform || undefined;
+  }
+
+  async getSocialPlatformByName(name: string): Promise<SocialPlatform | undefined> {
+    const [platform] = await db.select().from(socialPlatforms).where(eq(socialPlatforms.name, name));
+    return platform || undefined;
+  }
+
+  async createSocialPlatform(platform: InsertSocialPlatform): Promise<SocialPlatform> {
+    const [created] = await db.insert(socialPlatforms).values(platform).returning();
+    return created;
+  }
+
+  async updateSocialPlatform(id: string, data: Partial<InsertSocialPlatform>): Promise<SocialPlatform | undefined> {
+    const [updated] = await db.update(socialPlatforms)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(socialPlatforms.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteSocialPlatform(id: string): Promise<boolean> {
+    const result = await db.delete(socialPlatforms).where(eq(socialPlatforms.id, id));
+    return true;
   }
 }
 

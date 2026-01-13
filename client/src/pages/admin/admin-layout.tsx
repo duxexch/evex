@@ -36,6 +36,7 @@ import {
   IdCard,
   Search,
   CreditCard,
+  Share2,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -75,6 +76,7 @@ function AdminSidebar() {
     { title: "App Settings", url: "/admin/app-settings", icon: Cog },
     { title: "SEO Settings", url: "/admin/seo", icon: Search },
     { title: "Section Controls", url: "/admin/sections", icon: Settings },
+    { title: "Social Platforms", url: "/admin/social-platforms", icon: Share2 },
     { title: "Languages", url: "/admin/languages", icon: Languages },
     { title: "Badges", url: "/admin/badges", icon: Award },
     { title: "Notifications", url: "/admin/notifications", icon: Bell },
