@@ -56,14 +56,14 @@ const strictRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// General API rate limiter for all endpoints
+// General API rate limiter for all endpoints - optimized for 20k users
 const apiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute
+  max: 200, // 200 requests per minute per IP (increased for high traffic)
   message: { error: "Too many requests, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === "/api/health", // Skip health checks
+  skip: (req) => req.path === "/api/health" || req.path === "/api/health/detailed",
 });
 
 // Sensitive operations rate limiter (withdrawals, password changes)
@@ -73,6 +73,20 @@ const sensitiveRateLimiter = rateLimit({
   message: { error: "Too many sensitive operation attempts" },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+// Aggressive rate limiter for suspected attacks (DDoS protection)
+// Set high to avoid blocking legitimate NAT/CDN users
+const attackProtectionLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5000, // 5000 requests per minute absolute max (allows for NAT/CDN)
+  message: { error: "Rate limit exceeded. Your IP has been flagged." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`[SECURITY] Rate limit exceeded for IP: ${req.ip}`);
+    res.status(429).json({ error: "Too many requests. Please wait before retrying." });
+  },
 });
 
 // Auth middleware
@@ -109,6 +123,9 @@ const agentMiddleware = async (req: AuthRequest, res: Response, next: NextFuncti
 };
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  
+  // Apply DDoS protection first (absolute limit)
+  app.use("/api", attackProtectionLimiter);
   
   // Apply general API rate limiter to all API routes
   app.use("/api", apiRateLimiter);

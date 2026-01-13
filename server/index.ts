@@ -7,25 +7,100 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+const isProduction = process.env.NODE_ENV === "production";
+
 // Trust proxy for rate limiting behind nginx/load balancers
 // Number of proxies between user and server (1 for nginx)
-app.set("trust proxy", process.env.NODE_ENV === "production" ? 1 : false);
+app.set("trust proxy", isProduction ? 1 : false);
+
+// ==================== SECURITY MIDDLEWARE ====================
+
+// Security headers (Helmet-like protection without external dependency)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  // Prevent clickjacking attacks
+  res.setHeader("X-Frame-Options", "DENY");
+  
+  // Prevent MIME type sniffing
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  
+  // Enable XSS filter in browsers
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  
+  // Control referrer information
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  
+  // Permissions policy - restrict browser features
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  
+  // Content Security Policy (CSP) - prevent XSS and injection attacks
+  if (isProduction) {
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data: https:; " +
+      "font-src 'self' data:; " +
+      "connect-src 'self' wss: https:; " +
+      "frame-ancestors 'none';"
+    );
+    
+    // Strict Transport Security (HSTS) - force HTTPS
+    res.setHeader(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains; preload"
+    );
+  }
+  
+  // Remove X-Powered-By header (hide Express)
+  res.removeHeader("X-Powered-By");
+  
+  next();
+});
+
+// Request size limits to prevent DoS attacks
+app.use(express.json({ 
+  limit: "10mb", // Max JSON body size
+  verify: (req, _res, buf) => {
+    (req as any).rawBody = buf;
+  },
+}));
+
+app.use(express.urlencoded({ extended: false, limit: "10mb" }));
+
+// Protect against prototype pollution attacks (safe, non-destructive)
+const sanitizeKeys = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeKeys);
+  }
+  if (obj && typeof obj === "object") {
+    const sanitized: any = {};
+    for (const key of Object.keys(obj)) {
+      // Block prototype pollution attacks only
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
+        console.warn(`[SECURITY] Blocked prototype pollution attempt: ${key}`);
+        continue;
+      }
+      sanitized[key] = sanitizeKeys(obj[key]);
+    }
+    return sanitized;
+  }
+  return obj;
+};
+
+// Apply prototype pollution protection only (preserves user data)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.body && typeof req.body === "object") {
+    req.body = sanitizeKeys(req.body);
+  }
+  next();
+});
 
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
-
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
-
-app.use(express.urlencoded({ extended: false }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

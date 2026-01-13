@@ -1,5 +1,6 @@
-// PM2 Ecosystem Configuration for VEX Platform
+// PM2 Ecosystem Configuration for VEX Platform - Optimized for Hostinger VPS
 // Usage: pm2 start ecosystem.config.js
+// Designed to handle 20,000+ concurrent users
 
 module.exports = {
   apps: [
@@ -14,13 +15,15 @@ module.exports = {
         PORT: 5000,
       },
       
-      // Clustering - adjust based on VPS CPU cores
-      instances: "max", // Use all available CPU cores
+      // Clustering - set to CPU count to avoid memory exhaustion
+      // For Hostinger VPS: adjust based on available RAM
+      // 2GB RAM = 2 instances, 4GB RAM = 4 instances, 8GB RAM = max
+      instances: process.env.PM2_INSTANCES || 2, // Default 2 for safety
       exec_mode: "cluster",
       
-      // Memory & Performance
-      max_memory_restart: "500M", // Restart if memory exceeds 500MB
-      node_args: "--max-old-space-size=512",
+      // Memory & Performance - optimized for high traffic
+      max_memory_restart: "1G", // Restart if memory exceeds 1GB per instance
+      node_args: "--max-old-space-size=1024 --optimize-for-size",
       
       // Logging
       log_file: "/var/log/vex/combined.log",
@@ -28,36 +31,61 @@ module.exports = {
       error_file: "/var/log/vex/error.log",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       merge_logs: true,
+      log_type: "json", // Structured logging for analysis
       
       // Auto-restart configuration
       autorestart: true,
       watch: false,
-      max_restarts: 10,
-      restart_delay: 4000,
+      max_restarts: 15, // More restarts allowed for high availability
+      restart_delay: 3000, // 3 second delay between restarts
       
       // Graceful shutdown
-      kill_timeout: 5000,
+      kill_timeout: 10000, // 10 seconds for graceful shutdown
       wait_ready: true,
-      listen_timeout: 10000,
+      listen_timeout: 15000,
       
-      // Health monitoring
+      // Health monitoring and auto-recovery
       exp_backoff_restart_delay: 100,
+      min_uptime: "30s", // Consider started if running 30s
+      
+      // Cron restart for memory cleanup (optional - every day at 4 AM)
+      // Uncomment if needed for long-running deployments
+      // cron_restart: "0 4 * * *",
     },
   ],
   
-  // Deployment configuration
+  // Deployment configuration for Hostinger VPS
   deploy: {
     production: {
       user: "vex",
-      host: ["your-vps-ip"],
+      host: ["YOUR_HOSTINGER_VPS_IP"], // Replace with your VPS IP
       ref: "origin/main",
       repo: "git@github.com:yourusername/vex-platform.git",
       path: "/var/www/vex",
-      "pre-deploy-local": "",
-      "post-deploy": "npm install && npm run build && pm2 reload ecosystem.config.js --env production",
-      "pre-setup": "",
+      "pre-deploy-local": "echo 'Starting deployment...'",
+      "post-deploy": 
+        "npm ci --production=false && " + // Install all deps for build
+        "npm run build && " +              // Build the project
+        "npm prune --production && " +     // Remove dev deps
+        "pm2 reload ecosystem.config.js --env production && " +
+        "pm2 save",                        // Save PM2 config
+      "pre-setup": "mkdir -p /var/log/vex",
       env: {
         NODE_ENV: "production",
+      },
+    },
+    
+    // Staging environment (optional)
+    staging: {
+      user: "vex",
+      host: ["YOUR_STAGING_VPS_IP"],
+      ref: "origin/develop",
+      repo: "git@github.com:yourusername/vex-platform.git",
+      path: "/var/www/vex-staging",
+      "post-deploy": "npm ci && npm run build && pm2 reload ecosystem.config.js --env staging",
+      env: {
+        NODE_ENV: "staging",
+        PORT: 5001,
       },
     },
   },

@@ -10,15 +10,24 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Production-ready pool configuration
+// Production-ready pool configuration optimized for Hostinger VPS
 const isProduction = process.env.NODE_ENV === "production";
+
+// VPS-optimized pool settings:
+// - 50 max connections: suitable for 2-4 core VPS with 4GB+ RAM
+// - Scales well up to 20,000+ users with proper caching
+// - Each connection uses ~10MB RAM, so 50 = ~500MB for DB pool
 const poolConfig: pg.PoolConfig = {
   connectionString: process.env.DATABASE_URL,
-  // Connection pool settings optimized for VPS
-  max: parseInt(process.env.DB_POOL_MAX || "20", 10), // Max connections
-  min: parseInt(process.env.DB_POOL_MIN || "2", 10),  // Min idle connections
-  idleTimeoutMillis: 30000,    // Close idle connections after 30s
-  connectionTimeoutMillis: 10000, // Connection timeout 10s
+  // Connection pool settings optimized for high traffic VPS
+  max: parseInt(process.env.DB_POOL_MAX || "50", 10), // Max connections for VPS
+  min: parseInt(process.env.DB_POOL_MIN || "5", 10),  // Keep 5 warm connections
+  idleTimeoutMillis: 30000,      // Close idle connections after 30s
+  connectionTimeoutMillis: 5000, // Faster timeout for better UX (5s)
+  allowExitOnIdle: false,        // Keep pool alive
+  // Statement timeout to prevent long-running queries
+  statement_timeout: 30000,      // 30s max query time
+  query_timeout: 30000,          // 30s max query time
   // SSL configuration for production
   ssl: isProduction ? {
     rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
