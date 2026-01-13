@@ -417,6 +417,7 @@ export default function AdminSocialPlatformsPage() {
   const { data: platforms, isLoading } = useQuery<SocialPlatform[]>({
     queryKey: ["/api/admin/social-platforms"],
     queryFn: () => adminFetch("/api/admin/social-platforms"),
+    enabled: !!getAdminToken(),
   });
 
   const toggleMutation = useMutation({
