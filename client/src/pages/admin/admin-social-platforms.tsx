@@ -57,6 +57,10 @@ function getAdminToken() {
 
 async function adminFetch(url: string, options?: RequestInit) {
   const token = getAdminToken();
+  if (!token) {
+    window.location.href = "/admin/login";
+    throw new Error("No auth token");
+  }
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -65,6 +69,11 @@ async function adminFetch(url: string, options?: RequestInit) {
       ...options?.headers,
     },
   });
+  if (res.status === 401) {
+    localStorage.removeItem("adminToken");
+    window.location.href = "/admin/login";
+    throw new Error("Session expired");
+  }
   if (!res.ok) throw new Error("Failed to fetch");
   return res.json();
 }
@@ -413,6 +422,14 @@ export default function AdminSocialPlatformsPage() {
 
   const [editingPlatform, setEditingPlatform] = useState<SocialPlatform | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newPlatform, setNewPlatform] = useState({
+    name: "",
+    displayName: "",
+    displayNameAr: "",
+    type: "oauth" as "oauth" | "otp" | "both",
+    icon: "SiGoogle",
+  });
 
   const { data: platforms, isLoading } = useQuery<SocialPlatform[]>({
     queryKey: ["/api/admin/social-platforms"],
@@ -468,6 +485,37 @@ export default function AdminSocialPlatformsPage() {
     },
   });
 
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof newPlatform) => {
+      return adminFetch("/api/admin/social-platforms", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/social-platforms"] });
+      setShowAddDialog(false);
+      setNewPlatform({
+        name: "",
+        displayName: "",
+        displayNameAr: "",
+        type: "oauth",
+        icon: "SiGoogle",
+      });
+      toast({
+        title: isArabic ? "تمت الإضافة" : "Added",
+        description: isArabic ? "تمت إضافة المنصة بنجاح" : "Platform added successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: isArabic ? "خطأ" : "Error",
+        description: isArabic ? "فشل إضافة المنصة" : "Failed to add platform",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="space-y-6 p-6">
@@ -503,8 +551,112 @@ export default function AdminSocialPlatformsPage() {
           <Badge variant="outline" className="text-sm">
             {enabledPlatforms.length} {isArabic ? "مفعّل" : "enabled"}
           </Badge>
+          <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-platform">
+            <Plus className="w-4 h-4 me-2" />
+            {isArabic ? "إضافة منصة" : "Add Platform"}
+          </Button>
         </div>
       </div>
+
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {isArabic ? "إضافة منصة جديدة" : "Add New Platform"}
+            </DialogTitle>
+            <DialogDescription>
+              {isArabic 
+                ? "أدخل تفاصيل المنصة الجديدة" 
+                : "Enter the details for the new platform"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">{isArabic ? "الاسم (معرف)" : "Name (identifier)"}</Label>
+              <Input
+                id="name"
+                value={newPlatform.name}
+                onChange={(e) => setNewPlatform({ ...newPlatform, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                placeholder="e.g., discord"
+                data-testid="input-new-platform-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="displayName">{isArabic ? "اسم العرض (English)" : "Display Name"}</Label>
+              <Input
+                id="displayName"
+                value={newPlatform.displayName}
+                onChange={(e) => setNewPlatform({ ...newPlatform, displayName: e.target.value })}
+                placeholder="e.g., Discord"
+                data-testid="input-new-platform-display-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="displayNameAr">{isArabic ? "اسم العرض (عربي)" : "Display Name (Arabic)"}</Label>
+              <Input
+                id="displayNameAr"
+                value={newPlatform.displayNameAr}
+                onChange={(e) => setNewPlatform({ ...newPlatform, displayNameAr: e.target.value })}
+                placeholder="ديسكورد"
+                data-testid="input-new-platform-display-name-ar"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{isArabic ? "النوع" : "Type"}</Label>
+              <Select
+                value={newPlatform.type}
+                onValueChange={(v) => setNewPlatform({ ...newPlatform, type: v as "oauth" | "otp" | "both" })}
+              >
+                <SelectTrigger data-testid="select-new-platform-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="oauth">OAuth</SelectItem>
+                  <SelectItem value="otp">OTP</SelectItem>
+                  <SelectItem value="both">{isArabic ? "كلاهما" : "Both"}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{isArabic ? "الأيقونة" : "Icon"}</Label>
+              <Select
+                value={newPlatform.icon}
+                onValueChange={(v) => setNewPlatform({ ...newPlatform, icon: v })}
+              >
+                <SelectTrigger data-testid="select-new-platform-icon">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SiGoogle">Google</SelectItem>
+                  <SelectItem value="SiFacebook">Facebook</SelectItem>
+                  <SelectItem value="SiTelegram">Telegram</SelectItem>
+                  <SelectItem value="SiWhatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="SiX">X (Twitter)</SelectItem>
+                  <SelectItem value="SiApple">Apple</SelectItem>
+                  <SelectItem value="Globe">{isArabic ? "عام" : "Generic"}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)} data-testid="button-cancel-add">
+              {isArabic ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button 
+              onClick={() => createMutation.mutate(newPlatform)} 
+              disabled={createMutation.isPending || !newPlatform.name || !newPlatform.displayName}
+              data-testid="button-confirm-add"
+            >
+              {createMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin me-2" />
+              ) : (
+                <Plus className="w-4 h-4 me-2" />
+              )}
+              {isArabic ? "إضافة" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {enabledPlatforms.length > 0 && (
         <div className="space-y-4">
