@@ -463,21 +463,23 @@ export default function ChallengesPage() {
         </Card>
       </section>
 
-      <Tabs defaultValue="arena">
-        <TabsList className="mb-4 flex-wrap">
-          <TabsTrigger value="arena" data-testid="tab-arena">
-            <Globe className="h-4 w-4 me-1" />
-            {t('challenges.publicArena')}
-          </TabsTrigger>
-          <TabsTrigger value="available" data-testid="tab-available">
-            <Users className="h-4 w-4 me-1" />
-            {t('challenges.available')}
-          </TabsTrigger>
-          <TabsTrigger value="my" data-testid="tab-my-challenges">
-            <Swords className="h-4 w-4 me-1" />
-            {t('challenges.myChallenges')}
-          </TabsTrigger>
-        </TabsList>
+      {/* Challenges Tabs Section */}
+      <section>
+        <Tabs defaultValue="arena" className="w-full">
+          <TabsList className="w-full grid grid-cols-3 mb-4 h-auto">
+            <TabsTrigger value="arena" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-2 text-xs sm:text-sm" data-testid="tab-arena">
+              <Globe className="h-4 w-4" />
+              <span className="truncate">{t('challenges.publicArena')}</span>
+            </TabsTrigger>
+            <TabsTrigger value="available" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-2 text-xs sm:text-sm" data-testid="tab-available">
+              <Users className="h-4 w-4" />
+              <span className="truncate">{t('challenges.available')}</span>
+            </TabsTrigger>
+            <TabsTrigger value="my" className="flex flex-col sm:flex-row items-center gap-1 py-2 px-2 text-xs sm:text-sm" data-testid="tab-my-challenges">
+              <Swords className="h-4 w-4" />
+              <span className="truncate">{t('challenges.myChallenges')}</span>
+            </TabsTrigger>
+          </TabsList>
 
         <TabsContent value="arena">
           <div className="space-y-4">
@@ -765,7 +767,8 @@ export default function ChallengesPage() {
             )}
           </div>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </section>
 
       {/* Create Challenge Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

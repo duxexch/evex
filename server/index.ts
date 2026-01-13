@@ -10,8 +10,10 @@ const httpServer = createServer(app);
 const isProduction = process.env.NODE_ENV === "production";
 
 // Trust proxy for rate limiting behind nginx/load balancers
-// Number of proxies between user and server (1 for nginx)
-app.set("trust proxy", isProduction ? 1 : false);
+// Enable in Replit environment or production (both use proxies)
+// Number of proxies between user and server (1 for nginx/Replit proxy)
+const isReplit = process.env.REPLIT || process.env.REPL_ID;
+app.set("trust proxy", isProduction || isReplit ? 1 : false);
 
 // ==================== SECURITY MIDDLEWARE ====================
 
