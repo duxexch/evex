@@ -351,110 +351,117 @@ export default function ChallengesPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <BackButton className="mb-4" />
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      <BackButton className="mb-2" />
       
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-challenges-title">
-            <Swords className="h-6 w-6 text-primary" />
+      {/* Header Section */}
+      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold flex items-center gap-2 truncate" data-testid="text-challenges-title">
+            <Swords className="h-6 w-6 text-primary flex-shrink-0" />
             {t('nav.challenges')}
           </h1>
-          <p className="text-muted-foreground">{t('challenges.description')}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('challenges.description')}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowGiftShop(true)} data-testid="button-gift-shop">
-            <ShoppingBag className="h-4 w-4 me-2" />
-            {t('challenges.giftShop')}
+        <div className="flex gap-2 flex-shrink-0">
+          <Button variant="outline" size="sm" onClick={() => setShowGiftShop(true)} data-testid="button-gift-shop">
+            <ShoppingBag className="h-4 w-4 sm:me-2" />
+            <span className="hidden sm:inline">{t('challenges.giftShop')}</span>
           </Button>
-          <Button onClick={() => setShowCreateDialog(true)} data-testid="button-create-challenge">
-            <Swords className="h-4 w-4 me-2" />
-            {t('challenges.createChallenge')}
+          <Button size="sm" onClick={() => setShowCreateDialog(true)} data-testid="button-create-challenge">
+            <Swords className="h-4 w-4 sm:me-2" />
+            <span className="hidden sm:inline">{t('challenges.createChallenge')}</span>
           </Button>
         </div>
-      </div>
+      </section>
 
+      {/* Rating Stats Section */}
       {userRating && (
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-primary/20">
-                  <Trophy className="h-6 w-6 text-primary" />
+        <section>
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-center">
+                <div className="col-span-2 flex items-center gap-3">
+                  <div className="p-3 rounded-full bg-primary/20 flex-shrink-0">
+                    <Trophy className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{t('challenges.yourRating')}</p>
+                    <Badge className={RANK_COLORS[userRating.rank] || RANK_COLORS.bronze}>
+                      {userRating.rank.toUpperCase()}
+                    </Badge>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold">{t('challenges.yourRating')}</p>
-                  <Badge className={RANK_COLORS[userRating.rank] || RANK_COLORS.bronze}>
-                    {userRating.rank.toUpperCase()}
-                  </Badge>
-                </div>
-              </div>
-              <div className="flex gap-6 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-green-500">{userRating.wins}</p>
+                <div className="text-center p-2 rounded-lg bg-green-500/10">
+                  <p className="text-xl font-bold text-green-500">{userRating.wins}</p>
                   <p className="text-xs text-muted-foreground">{t('challenges.wins')}</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-red-500">{userRating.losses}</p>
+                <div className="text-center p-2 rounded-lg bg-red-500/10">
+                  <p className="text-xl font-bold text-red-500">{userRating.losses}</p>
                   <p className="text-xs text-muted-foreground">{t('challenges.losses')}</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">{userRating.winRate}%</p>
+                <div className="text-center p-2 rounded-lg bg-muted">
+                  <p className="text-xl font-bold">{userRating.winRate}%</p>
                   <p className="text-xs text-muted-foreground">{t('challenges.winRate')}</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-primary">{userRating.currentStreak}</p>
+                <div className="text-center p-2 rounded-lg bg-primary/10">
+                  <p className="text-xl font-bold text-primary">{userRating.currentStreak}</p>
                   <p className="text-xs text-muted-foreground">{t('challenges.streak')}</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {/* Game Filter Section */}
+      <section>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium text-sm">{t('challenges.filterByGame')}</span>
+              </div>
+              {gameFilter.length > 0 && (
+                <Badge variant="secondary">
+                  {gameFilter.length} {t('challenges.selected')}
+                </Badge>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {CHALLENGE_GAMES.map(game => {
+                const Icon = game.icon;
+                const isSelected = gameFilter.includes(game.id);
+                return (
+                  <Button
+                    key={game.id}
+                    variant={isSelected ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => toggleGameFilter(game.id)}
+                    className="gap-2"
+                    data-testid={`button-filter-${game.id}`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {game.name}
+                  </Button>
+                );
+              })}
+              {gameFilter.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setGameFilter([])}
+                  className="text-muted-foreground"
+                  data-testid="button-clear-filter"
+                >
+                  {t('challenges.clearFilter')}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
-      )}
-
-      <Card className="mb-6">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium text-sm">{t('challenges.filterByGame')}</span>
-            {gameFilter.length > 0 && (
-              <Badge variant="secondary" className="ms-auto">
-                {gameFilter.length} {t('challenges.selected')}
-              </Badge>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {CHALLENGE_GAMES.map(game => {
-              const Icon = game.icon;
-              const isSelected = gameFilter.includes(game.id);
-              return (
-                <Button
-                  key={game.id}
-                  variant={isSelected ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => toggleGameFilter(game.id)}
-                  className="gap-2"
-                  data-testid={`button-filter-${game.id}`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {game.name}
-                </Button>
-              );
-            })}
-            {gameFilter.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setGameFilter([])}
-                className="text-muted-foreground"
-                data-testid="button-clear-filter"
-              >
-                {t('challenges.clearFilter')}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      </section>
 
       <Tabs defaultValue="arena">
         <TabsList className="mb-4 flex-wrap">

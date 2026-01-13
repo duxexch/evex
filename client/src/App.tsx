@@ -391,7 +391,7 @@ function BottomNavigation({ onChatToggle, isChatOpen }: { onChatToggle: () => vo
 }
 
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
-  const { language, dir } = useI18n();
+  const { t, language, dir } = useI18n();
   const sidebarSide = language === 'ar' ? 'right' : 'left';
   const [isChatOpen, setIsChatOpen] = useState(false);
   
@@ -412,6 +412,12 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
           <header className="flex items-center justify-between gap-4 p-3 border-b bg-background sticky top-0 z-50">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-3 flex-wrap">
+              <Link href="/wallet">
+                <Button variant="outline" size="sm" className="gap-2" data-testid="button-header-wallet">
+                  <Wallet className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('nav.wallet')}</span>
+                </Button>
+              </Link>
               <ThemeToggle />
               <NotificationBell />
               <LanguageSwitcher />
