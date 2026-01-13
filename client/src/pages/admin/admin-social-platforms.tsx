@@ -49,7 +49,7 @@ import {
   Power,
   PowerOff,
 } from "lucide-react";
-import { SiGoogle, SiFacebook, SiTelegram, SiWhatsapp, SiX, SiApple } from "react-icons/si";
+import { SiGoogle, SiFacebook, SiTelegram, SiWhatsapp, SiX, SiApple, SiDiscord, SiLinkedin, SiGithub, SiTiktok, SiInstagram } from "react-icons/si";
 
 function getAdminToken() {
   return localStorage.getItem("adminToken");
@@ -111,6 +111,13 @@ const PLATFORM_ICONS: Record<string, any> = {
   SiWhatsapp: SiWhatsapp,
   SiX: SiX,
   SiApple: SiApple,
+  SiDiscord: SiDiscord,
+  SiLinkedin: SiLinkedin,
+  SiGithub: SiGithub,
+  SiTiktok: SiTiktok,
+  SiInstagram: SiInstagram,
+  Phone: Phone,
+  Globe: Globe,
 };
 
 const PLATFORM_FIELDS: Record<string, { label: string; labelAr: string; fields: string[] }> = {
@@ -143,6 +150,36 @@ const PLATFORM_FIELDS: Record<string, { label: string; labelAr: string; fields: 
     label: "Apple Sign-In",
     labelAr: "تسجيل دخول آبل",
     fields: ["clientId", "clientSecret", "callbackUrl"],
+  },
+  discord: {
+    label: "Discord OAuth",
+    labelAr: "مصادقة ديسكورد",
+    fields: ["clientId", "clientSecret", "callbackUrl"],
+  },
+  linkedin: {
+    label: "LinkedIn OAuth",
+    labelAr: "مصادقة لينكدإن",
+    fields: ["clientId", "clientSecret", "callbackUrl"],
+  },
+  github: {
+    label: "GitHub OAuth",
+    labelAr: "مصادقة جيت هاب",
+    fields: ["clientId", "clientSecret", "callbackUrl"],
+  },
+  tiktok: {
+    label: "TikTok Business",
+    labelAr: "تيك توك للأعمال",
+    fields: ["clientId", "clientSecret", "callbackUrl"],
+  },
+  instagram: {
+    label: "Instagram Graph API",
+    labelAr: "API إنستجرام",
+    fields: ["clientId", "clientSecret", "accessToken", "callbackUrl"],
+  },
+  sms: {
+    label: "SMS Provider",
+    labelAr: "مزود الرسائل النصية",
+    fields: ["apiKey", "apiSecret", "phoneNumberId", "otpTemplate"],
   },
 };
 
@@ -633,6 +670,12 @@ export default function AdminSocialPlatformsPage() {
                   <SelectItem value="SiWhatsapp">WhatsApp</SelectItem>
                   <SelectItem value="SiX">X (Twitter)</SelectItem>
                   <SelectItem value="SiApple">Apple</SelectItem>
+                  <SelectItem value="SiDiscord">Discord</SelectItem>
+                  <SelectItem value="SiLinkedin">LinkedIn</SelectItem>
+                  <SelectItem value="SiGithub">GitHub</SelectItem>
+                  <SelectItem value="SiTiktok">TikTok</SelectItem>
+                  <SelectItem value="SiInstagram">Instagram</SelectItem>
+                  <SelectItem value="Phone">SMS</SelectItem>
                   <SelectItem value="Globe">{isArabic ? "عام" : "Generic"}</SelectItem>
                 </SelectContent>
               </Select>

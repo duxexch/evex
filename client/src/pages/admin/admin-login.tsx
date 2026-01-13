@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Shield, Lock, User } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function AdminLoginPage() {
   const [, setLocation] = useLocation();
@@ -28,6 +28,7 @@ export default function AdminLoginPage() {
       if (data.token) {
         localStorage.setItem("adminToken", data.token);
         localStorage.setItem("adminUser", JSON.stringify(data.admin));
+        queryClient.invalidateQueries();
         toast({
           title: "Welcome Admin",
           description: "Successfully logged into admin panel",
