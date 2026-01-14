@@ -82,6 +82,8 @@ export default function SupportPage() {
 
   const { data: contacts, isLoading } = useQuery<SupportContact[]>({
     queryKey: ["/api/support/contacts"],
+    staleTime: 10 * 60 * 1000, // 10 minutes - support contacts rarely change
+    gcTime: 30 * 60 * 1000, // 30 minutes cache
   });
 
   const activeContacts = contacts?.filter(c => c.isActive) || [];
