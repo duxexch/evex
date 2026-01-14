@@ -1932,46 +1932,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "Trade already completed" });
       }
       
+      if (trade.status === "cancelled") {
+        return res.status(400).json({ error: "Cannot complete a cancelled trade" });
+      }
+      
       // Extract amount value
       const amountStr = trade.amount.split(" ")[0];
       const amount = parseFloat(amountStr);
+      
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: "Invalid trade amount" });
+      }
       
       // Update balances instantly
       const buyer = await storage.getUser(trade.buyerId);
       const seller = await storage.getUser(trade.sellerId);
       
-      if (buyer && seller) {
-        // Credit buyer with the crypto amount
-        const newBuyerBalance = parseFloat(buyer.balance) + amount;
-        await storage.updateUser(trade.buyerId, { balance: newBuyerBalance.toFixed(2) });
-        
-        // Debit seller's balance
-        const newSellerBalance = parseFloat(seller.balance) - amount;
-        await storage.updateUser(trade.sellerId, { balance: newSellerBalance.toFixed(2) });
-        
-        // Create transaction records
-        await storage.createTransaction({
-          userId: trade.buyerId,
-          type: "deposit",
-          amount: amount.toString(),
-          status: "completed",
-          method: "p2p_buy",
-          reference: trade.id,
-        });
-        
-        await storage.createTransaction({
-          userId: trade.sellerId,
-          type: "withdrawal",
-          amount: amount.toString(),
-          status: "completed",
-          method: "p2p_sell",
-          reference: trade.id,
-        });
-        
-        // Broadcast balance updates via WebSocket
+      if (!buyer || !seller) {
+        return res.status(400).json({ error: "Trade participants not found" });
+      }
+      
+      const sellerBalance = parseFloat(seller.balance);
+      
+      // Verify seller has sufficient balance to release
+      if (sellerBalance < amount) {
+        return res.status(400).json({ error: "Insufficient seller balance to complete trade" });
+      }
+      
+      // Credit buyer with the crypto amount
+      const newBuyerBalance = parseFloat(buyer.balance) + amount;
+      await storage.updateUser(trade.buyerId, { balance: newBuyerBalance.toFixed(2) });
+      
+      // Debit seller's balance (validated above)
+      const newSellerBalance = sellerBalance - amount;
+      await storage.updateUser(trade.sellerId, { balance: newSellerBalance.toFixed(2) });
+      
+      // Create transaction records
+      await storage.createTransaction({
+        userId: trade.buyerId,
+        type: "deposit",
+        amount: amount.toString(),
+        status: "completed",
+        method: "p2p_buy",
+        reference: trade.id,
+      });
+      
+      await storage.createTransaction({
+        userId: trade.sellerId,
+        type: "withdrawal",
+        amount: amount.toString(),
+        status: "completed",
+        method: "p2p_sell",
+        reference: trade.id,
+      });
+      
+      // Broadcast balance updates via WebSocket
+      try {
         const { broadcastBalanceUpdate } = await import("./websocket");
         broadcastBalanceUpdate(trade.buyerId, "p2p_trade", amount.toString(), trade.id);
         broadcastBalanceUpdate(trade.sellerId, "p2p_trade", amount.toString(), trade.id);
+      } catch (wsError) {
+        console.error("WebSocket broadcast error:", wsError);
       }
       
       // Update trade status
