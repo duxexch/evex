@@ -50,6 +50,7 @@ import { apiRequest } from "./lib/queryClient";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ThemeProvider } from "@/lib/theme";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { prefetchPage } from "@/components/PrefetchLink";
 
 import NotFound from "@/pages/not-found";
 import AdminLayout from "@/pages/admin/admin-layout";
@@ -229,6 +230,7 @@ function AppSidebar({ side }: { side: "left" | "right" }) {
                   <SidebarMenuButton 
                     isActive={location === item.url}
                     onClick={() => handleNavClick(item.url)}
+                    onMouseEnter={() => prefetchPage(item.url)}
                     data-testid={`link-${item.key}`}
                   >
                     <item.icon />
