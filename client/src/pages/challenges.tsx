@@ -943,9 +943,9 @@ export default function ChallengesPage() {
               <div>
                 <Label className="flex items-center gap-2 mb-2">
                   <Coins className="h-4 w-4" />
-                  {t('challenges.placeBet')}
+                  {t('challenges.placeStake')}
                 </Label>
-                <p className="text-xs text-muted-foreground mb-3">{t('challenges.betWarning')}</p>
+                <p className="text-xs text-muted-foreground mb-3">{t('challenges.stakeWarning')}</p>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <Button
                     variant={selectedPlayer === spectatingChallenge.player1Id ? "default" : "outline"}
@@ -971,7 +971,7 @@ export default function ChallengesPage() {
                     data-testid="input-spectator-bet"
                   />
                   <Button onClick={handlePlaceBet} disabled={!selectedPlayer || !spectatorBetAmount}>
-                    {t('challenges.bet')}
+                    {t('challenges.stake')}
                   </Button>
                 </div>
               </div>
