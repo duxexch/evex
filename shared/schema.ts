@@ -1381,6 +1381,57 @@ export const challengeFollowNotifications = pgTable("challenge_follow_notificati
   index("idx_follow_notif_challenge").on(table.challengeId),
 ]);
 
+// Backgammon moves table
+export const backgammonMoves = pgTable("backgammon_moves", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => challengeGameSessions.id),
+  playerId: varchar("player_id").notNull().references(() => users.id),
+  moveNumber: integer("move_number").notNull(),
+  fromPoint: integer("from_point").notNull(), // -1 = bar, 24 = bearing off
+  toPoint: integer("to_point").notNull(),
+  dieUsed: integer("die_used").notNull(),
+  isHit: boolean("is_hit").notNull().default(false),
+  isBearOff: boolean("is_bear_off").notNull().default(false),
+  boardState: text("board_state"),
+  timeSpent: integer("time_spent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_backgammon_moves_session").on(table.sessionId),
+  index("idx_backgammon_moves_player").on(table.playerId),
+]);
+
+// Tarneeb/Baloot card plays table
+export const cardGamePlays = pgTable("card_game_plays", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => challengeGameSessions.id),
+  playerId: varchar("player_id").notNull().references(() => users.id),
+  roundNumber: integer("round_number").notNull(),
+  trickNumber: integer("trick_number").notNull(),
+  cardSuit: text("card_suit").notNull(),
+  cardRank: text("card_rank").notNull(),
+  playOrder: integer("play_order").notNull(),
+  wonTrick: boolean("won_trick").notNull().default(false),
+  timeSpent: integer("time_spent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_card_plays_session").on(table.sessionId),
+  index("idx_card_plays_player").on(table.playerId),
+]);
+
+// Card game bids table
+export const cardGameBids = pgTable("card_game_bids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => challengeGameSessions.id),
+  playerId: varchar("player_id").notNull().references(() => users.id),
+  roundNumber: integer("round_number").notNull(),
+  bidValue: integer("bid_value"), // null = pass
+  bidSuit: text("bid_suit"), // for Baloot hokm
+  isPass: boolean("is_pass").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_card_bids_session").on(table.sessionId),
+]);
+
 export const insertChallengeGameSessionSchema = createInsertSchema(challengeGameSessions).omit({
   id: true,
   createdAt: true,
