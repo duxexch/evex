@@ -14,11 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import type { Transaction, CountryPaymentMethod } from "@shared/schema";
 import { ArrowDownCircle, ArrowUpCircle, Clock, CheckCircle, XCircle, Loader2, Wallet, Copy, AlertCircle } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export default function TransactionsPage() {
   const { user, updateUser } = useAuth();
   const headers = useAuthHeaders();
   const { toast } = useToast();
+  const { t, dir } = useI18n();
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [amount, setAmount] = useState("");
@@ -63,10 +65,10 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       setDepositOpen(false);
       resetDepositForm();
-      toast({ title: "Success", description: "Deposit request submitted. An agent will confirm it shortly." });
+      toast({ title: t('transactions.success'), description: t('transactions.depositSuccess') });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -78,10 +80,10 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       setWithdrawOpen(false);
       setAmount("");
-      toast({ title: "Success", description: "Withdrawal request submitted" });
+      toast({ title: t('transactions.success'), description: t('transactions.withdrawSuccess') });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -93,10 +95,10 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      toast({ title: "Success", description: "Transaction processed" });
+      toast({ title: t('transactions.success'), description: t('transactions.processed') });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -113,13 +115,13 @@ export default function TransactionsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
-        return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>;
+        return <Badge variant="secondary"><Clock className="w-3 h-3 me-1" /> {t('transactions.pending')}</Badge>;
       case "completed":
       case "approved":
-        return <Badge className="bg-primary"><CheckCircle className="w-3 h-3 mr-1" /> Completed</Badge>;
+        return <Badge className="bg-primary"><CheckCircle className="w-3 h-3 me-1" /> {t('transactions.completed')}</Badge>;
       case "rejected":
       case "cancelled":
-        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> {status}</Badge>;
+        return <Badge variant="destructive"><XCircle className="w-3 h-3 me-1" /> {t('common.rejected')}</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -142,7 +144,7 @@ export default function TransactionsPage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: "Copied", description: "Copied to clipboard" });
+    toast({ title: t('transactions.copied'), description: t('transactions.copiedToClipboard') });
   };
 
   if (isLoading) {
@@ -159,7 +161,7 @@ export default function TransactionsPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold">Transactions</h1>
+        <h1 className="text-2xl font-bold">{t('transactions.title')}</h1>
         <div className="flex gap-2 flex-wrap">
           <Dialog open={depositOpen} onOpenChange={(open) => {
             setDepositOpen(open);
@@ -167,24 +169,24 @@ export default function TransactionsPage() {
           }}>
             <DialogTrigger asChild>
               <Button data-testid="button-deposit">
-                <ArrowDownCircle className="mr-2 h-4 w-4" /> Deposit
+                <ArrowDownCircle className="me-2 h-4 w-4" /> {t('transactions.deposit')}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Deposit Funds</DialogTitle>
+                <DialogTitle>{t('transactions.depositFunds')}</DialogTitle>
                 <DialogDescription>
-                  Select a payment method and follow the instructions
+                  {t('transactions.selectPaymentMethod')}
                 </DialogDescription>
               </DialogHeader>
               
               {depositStep === 'method' && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Select Payment Method</Label>
+                    <Label>{t('transactions.selectMethod')}</Label>
                     <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                       <SelectTrigger data-testid="select-payment-method">
-                        <SelectValue placeholder="Choose payment method" />
+                        <SelectValue placeholder={t('transactions.chooseMethod')} />
                       </SelectTrigger>
                       <SelectContent>
                         {paymentMethods?.map((method) => (
@@ -203,15 +205,15 @@ export default function TransactionsPage() {
                     <Card className="bg-muted/50">
                       <CardContent className="p-4 space-y-2">
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Min Amount</span>
+                          <span className="text-muted-foreground">{t('transactions.minAmount')}</span>
                           <span className="font-medium">${selectedMethod.minAmount}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Max Amount</span>
+                          <span className="text-muted-foreground">{t('transactions.maxAmount')}</span>
                           <span className="font-medium">${selectedMethod.maxAmount}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Processing Time</span>
+                          <span className="text-muted-foreground">{t('transactions.processingTime')}</span>
                           <span className="font-medium">{selectedMethod.processingTime || 'Varies'}</span>
                         </div>
                       </CardContent>
@@ -219,13 +221,13 @@ export default function TransactionsPage() {
                   )}
 
                   <div className="space-y-2">
-                    <Label>Amount ($)</Label>
+                    <Label>{t('transactions.amount')} ($)</Label>
                     <Input
                       type="number"
                       data-testid="input-deposit-amount"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      placeholder={selectedMethod ? `${selectedMethod.minAmount} - ${selectedMethod.maxAmount}` : "Enter amount"}
+                      placeholder={selectedMethod ? `${selectedMethod.minAmount} - ${selectedMethod.maxAmount}` : t('transactions.enterAmount')}
                       min={selectedMethod?.minAmount || "10"}
                       max={selectedMethod?.maxAmount || "10000"}
                       step="0.01"
@@ -238,7 +240,7 @@ export default function TransactionsPage() {
                     disabled={!paymentMethod || !amount || (selectedMethod && (parseFloat(amount) < parseFloat(selectedMethod.minAmount) || parseFloat(amount) > parseFloat(selectedMethod.maxAmount)))}
                     data-testid="button-next-step"
                   >
-                    Continue
+                    {t('transactions.continue')}
                   </Button>
                 </div>
               )}
@@ -250,7 +252,7 @@ export default function TransactionsPage() {
                       <div className="flex items-start gap-3">
                         <AlertCircle className="w-5 h-5 text-primary mt-0.5" />
                         <div className="space-y-2 text-sm">
-                          <p className="font-medium">Payment Instructions</p>
+                          <p className="font-medium">{t('transactions.paymentInstructions')}</p>
                           <p className="text-muted-foreground">
                             {selectedMethod.instructions || `Send ${amount} USD via ${selectedMethod.name} to the agent wallet provided below.`}
                           </p>
@@ -260,25 +262,25 @@ export default function TransactionsPage() {
                   </Card>
 
                   <div className="space-y-2">
-                    <Label>Your Payment Reference / Transaction ID</Label>
+                    <Label>{t('transactions.paymentReference')}</Label>
                     <Input
                       data-testid="input-payment-reference"
                       value={paymentReference}
                       onChange={(e) => setPaymentReference(e.target.value)}
-                      placeholder="Enter your payment transaction ID"
+                      placeholder={t('transactions.enterReference')}
                     />
                     <p className="text-xs text-muted-foreground">
-                      This is the reference number from your payment app/bank after sending
+                      {t('transactions.referenceNote')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Your Wallet/Phone Number (Optional)</Label>
+                    <Label>{t('transactions.walletNumber')}</Label>
                     <Input
                       data-testid="input-wallet-number"
                       value={walletNumber}
                       onChange={(e) => setWalletNumber(e.target.value)}
-                      placeholder="Your sender wallet or phone number"
+                      placeholder={t('transactions.senderWallet')}
                     />
                   </div>
 
@@ -288,7 +290,7 @@ export default function TransactionsPage() {
                       onClick={() => setDepositStep('method')}
                       className="flex-1"
                     >
-                      Back
+                      {t('transactions.back')}
                     </Button>
                     <Button
                       className="flex-1"
@@ -301,8 +303,8 @@ export default function TransactionsPage() {
                       })}
                       disabled={depositMutation.isPending || !paymentReference}
                     >
-                      {depositMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Submit Request
+                      {depositMutation.isPending && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
+                      {t('transactions.submitRequest')}
                     </Button>
                   </div>
                 </div>
@@ -313,31 +315,31 @@ export default function TransactionsPage() {
           <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="button-withdraw">
-                <ArrowUpCircle className="mr-2 h-4 w-4" /> Withdraw
+                <ArrowUpCircle className="me-2 h-4 w-4" /> {t('transactions.withdraw')}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Request Withdrawal</DialogTitle>
+                <DialogTitle>{t('transactions.requestWithdrawal')}</DialogTitle>
                 <DialogDescription>
-                  Enter the amount you want to withdraw
+                  {t('transactions.enterWithdrawAmount')}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Amount ($)</Label>
+                  <Label>{t('transactions.amount')} ($)</Label>
                   <Input
                     type="number"
                     data-testid="input-withdraw-amount"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Enter amount"
+                    placeholder={t('transactions.enterAmount')}
                     min="20"
                     step="0.01"
                     max={user?.balance}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Available: <span className="text-primary font-medium">${parseFloat(user?.balance || "0").toFixed(2)}</span>
+                    {t('transactions.availableBalance')}: <span className="text-primary font-medium">${parseFloat(user?.balance || "0").toFixed(2)}</span>
                   </p>
                 </div>
                 <Button
@@ -346,8 +348,8 @@ export default function TransactionsPage() {
                   onClick={() => withdrawMutation.mutate({ amount })}
                   disabled={withdrawMutation.isPending || !amount || parseFloat(amount) > parseFloat(user?.balance || "0")}
                 >
-                  {withdrawMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Submit Withdrawal Request
+                  {withdrawMutation.isPending && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
+                  {t('transactions.submitRequest')}
                 </Button>
               </div>
             </DialogContent>
@@ -357,8 +359,8 @@ export default function TransactionsPage() {
 
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all" data-testid="tab-all-transactions">All Transactions</TabsTrigger>
-          {isAgentOrAdmin && <TabsTrigger value="pending" data-testid="tab-pending">Pending ({pendingTx?.length || 0})</TabsTrigger>}
+          <TabsTrigger value="all" data-testid="tab-all-transactions">{t('transactions.myTransactions')}</TabsTrigger>
+          {isAgentOrAdmin && <TabsTrigger value="pending" data-testid="tab-pending">{t('transactions.pending')} ({pendingTx?.length || 0})</TabsTrigger>}
         </TabsList>
         
         <TabsContent value="all" className="mt-4">
@@ -396,7 +398,7 @@ export default function TransactionsPage() {
                 
                 {transactions?.length === 0 && (
                   <div className="p-8 text-center text-muted-foreground">
-                    No transactions yet
+                    {t('transactions.noTransactions')}
                   </div>
                 )}
               </div>
@@ -408,8 +410,7 @@ export default function TransactionsPage() {
           <TabsContent value="pending" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle>Pending Transactions</CardTitle>
-                <CardDescription>Review and process pending deposit/withdrawal requests</CardDescription>
+                <CardTitle>{t('transactions.pendingApprovals')}</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="divide-y">
@@ -449,7 +450,7 @@ export default function TransactionsPage() {
                           onClick={() => processMutation.mutate({ id: tx.id, status: "completed" })}
                           disabled={processMutation.isPending}
                         >
-                          {processMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm"}
+                          {processMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t('transactions.approve')}
                         </Button>
                         <Button
                           size="sm"
@@ -458,7 +459,7 @@ export default function TransactionsPage() {
                           onClick={() => processMutation.mutate({ id: tx.id, status: "rejected" })}
                           disabled={processMutation.isPending}
                         >
-                          Reject
+                          {t('transactions.reject')}
                         </Button>
                       </div>
                     </div>
@@ -466,7 +467,7 @@ export default function TransactionsPage() {
                   
                   {pendingTx?.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground">
-                      No pending transactions
+                      {t('transactions.noPending')}
                     </div>
                   )}
                 </div>
