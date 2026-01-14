@@ -2,7 +2,10 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import jwt from "jsonwebtoken";
 import { db } from "./db";
-import { notifications, chatMessages, chatSettings, users, matchmakingQueue, gameMatches, games } from "@shared/schema";
+import { 
+  notifications, chatMessages, chatSettings, users, matchmakingQueue, gameMatches, games,
+  challengeGameSessions, challengeChatMessages, challenges
+} from "@shared/schema";
 import { eq, desc, and, or, sql } from "drizzle-orm";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "pwm-secret-key-change-in-production";
@@ -16,6 +19,12 @@ const clients = new Map<string, Set<AuthenticatedSocket>>();
 
 // Voice chat rooms for WebRTC signaling
 const voiceRooms = new Map<string, Map<string, AuthenticatedSocket>>();
+
+// Challenge game rooms
+const challengeGameRooms = new Map<string, {
+  players: Map<string, AuthenticatedSocket>;
+  spectators: Map<string, AuthenticatedSocket>;
+}>();
 
 export function setupWebSocket(server: Server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
@@ -552,6 +561,314 @@ export function setupWebSocket(server: Server) {
               voiceRooms.delete(matchId);
             }
           }
+        }
+
+        // ========== CHALLENGE GAME HANDLERS ==========
+
+        // Join challenge game room
+        if (data.type === "join_challenge_game" && ws.userId) {
+          const { challengeId, isSpectator } = data;
+          
+          // Verify challenge exists
+          const [challenge] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
+          if (!challenge) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Challenge not found" }));
+            return;
+          }
+
+          // Initialize room if needed
+          if (!challengeGameRooms.has(challengeId)) {
+            challengeGameRooms.set(challengeId, {
+              players: new Map(),
+              spectators: new Map(),
+            });
+          }
+
+          const room = challengeGameRooms.get(challengeId)!;
+
+          if (isSpectator) {
+            room.spectators.set(ws.userId, ws);
+            
+            // Notify players about new spectator
+            const [spectatorUser] = await db.select({
+              id: users.id,
+              username: users.username,
+              avatarUrl: users.avatarUrl,
+            }).from(users).where(eq(users.id, ws.userId));
+
+            room.players.forEach((socket) => {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ 
+                  type: "spectator_joined", 
+                  spectator: spectatorUser 
+                }));
+              }
+            });
+          } else {
+            room.players.set(ws.userId, ws);
+          }
+
+          // Broadcast spectator count
+          const spectatorCount = room.spectators.size;
+          [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "spectator_count", count: spectatorCount }));
+            }
+          });
+
+          // Send current game state
+          const [session] = await db.select().from(challengeGameSessions)
+            .where(eq(challengeGameSessions.challengeId, challengeId))
+            .orderBy(desc(challengeGameSessions.createdAt))
+            .limit(1);
+
+          if (session) {
+            ws.send(JSON.stringify({ type: "game_state_sync", session }));
+          }
+
+          ws.send(JSON.stringify({ type: "joined_challenge_game", challengeId }));
+        }
+
+        // Leave challenge game room
+        if (data.type === "leave_challenge_game" && ws.userId) {
+          const { challengeId } = data;
+          const room = challengeGameRooms.get(challengeId);
+          
+          if (room) {
+            if (room.spectators.has(ws.userId)) {
+              room.spectators.delete(ws.userId);
+              
+              // Notify players about spectator leaving
+              room.players.forEach((socket) => {
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ 
+                    type: "spectator_left", 
+                    spectatorId: ws.userId 
+                  }));
+                }
+              });
+
+              // Broadcast updated spectator count
+              const spectatorCount = room.spectators.size;
+              [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ type: "spectator_count", count: spectatorCount }));
+                }
+              });
+            } else {
+              room.players.delete(ws.userId);
+            }
+
+            // Clean up empty room
+            if (room.players.size === 0 && room.spectators.size === 0) {
+              challengeGameRooms.delete(challengeId);
+            }
+          }
+        }
+
+        // Handle game move
+        if (data.type === "game_move" && ws.userId) {
+          const { challengeId, move } = data;
+          const room = challengeGameRooms.get(challengeId);
+          
+          if (!room || !room.players.has(ws.userId)) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Not a player in this game" }));
+            return;
+          }
+
+          // Get current session
+          const [session] = await db.select().from(challengeGameSessions)
+            .where(eq(challengeGameSessions.challengeId, challengeId))
+            .orderBy(desc(challengeGameSessions.createdAt))
+            .limit(1);
+
+          if (!session || session.status !== "playing") {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Game not in progress" }));
+            return;
+          }
+
+          if (session.currentTurn !== ws.userId) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Not your turn" }));
+            return;
+          }
+
+          // Get challenge to find opponent
+          const [challenge] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
+          if (!challenge) return;
+
+          const opponentId = challenge.player1Id === ws.userId ? challenge.player2Id : challenge.player1Id;
+          
+          // Update game state (simplified - actual game logic should validate move)
+          let gameState;
+          try {
+            gameState = session.gameState ? JSON.parse(session.gameState) : {};
+          } catch {
+            gameState = {};
+          }
+          
+          // Apply move to game state (this is simplified - real implementation would validate)
+          gameState.lastMove = move;
+          gameState.moveCount = (gameState.moveCount || 0) + 1;
+
+          const [updatedSession] = await db.update(challengeGameSessions)
+            .set({
+              gameState: JSON.stringify(gameState),
+              currentTurn: opponentId,
+              totalMoves: (session.totalMoves || 0) + 1,
+              lastMoveAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(challengeGameSessions.id, session.id))
+            .returning();
+
+          // Broadcast to all in room
+          [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ 
+                type: "game_move", 
+                session: updatedSession,
+                move,
+                playerId: ws.userId,
+              }));
+            }
+          });
+        }
+
+        // Handle challenge chat
+        if (data.type === "challenge_chat" && ws.userId) {
+          const { challengeId, message, isQuickMessage, quickMessageKey } = data;
+          const room = challengeGameRooms.get(challengeId);
+          
+          if (!room) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Room not found" }));
+            return;
+          }
+
+          const isSpectator = room.spectators.has(ws.userId);
+
+          // Get session
+          const [session] = await db.select().from(challengeGameSessions)
+            .where(eq(challengeGameSessions.challengeId, challengeId))
+            .limit(1);
+
+          if (!session) return;
+
+          // Get sender info
+          const [sender] = await db.select({
+            id: users.id,
+            username: users.username,
+            avatarUrl: users.avatarUrl,
+          }).from(users).where(eq(users.id, ws.userId));
+
+          // Save message
+          const [savedMessage] = await db.insert(challengeChatMessages).values({
+            sessionId: session.id,
+            senderId: ws.userId,
+            message,
+            isQuickMessage: isQuickMessage || false,
+            quickMessageKey,
+            isSpectator,
+          }).returning();
+
+          const messageWithSender = {
+            ...savedMessage,
+            senderName: sender.username,
+            senderAvatar: sender.avatarUrl,
+          };
+
+          // Broadcast to all (players can see spectator messages too)
+          [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ 
+                type: "chat_message", 
+                message: messageWithSender 
+              }));
+            }
+          });
+        }
+
+        // Handle resign
+        if (data.type === "game_resign" && ws.userId) {
+          const { challengeId } = data;
+          const room = challengeGameRooms.get(challengeId);
+          
+          if (!room || !room.players.has(ws.userId)) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Not a player" }));
+            return;
+          }
+
+          // Get challenge
+          const [challenge] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
+          if (!challenge) return;
+
+          const winnerId = challenge.player1Id === ws.userId ? challenge.player2Id : challenge.player1Id;
+
+          // Update session
+          const [session] = await db.select().from(challengeGameSessions)
+            .where(eq(challengeGameSessions.challengeId, challengeId))
+            .limit(1);
+
+          if (session) {
+            await db.update(challengeGameSessions)
+              .set({
+                status: "finished",
+                winnerId,
+                winReason: "resignation",
+                updatedAt: new Date(),
+              })
+              .where(eq(challengeGameSessions.id, session.id));
+          }
+
+          // Update challenge
+          await db.update(challenges)
+            .set({
+              status: "completed",
+              winnerId,
+              completedAt: new Date(),
+            })
+            .where(eq(challenges.id, challengeId));
+
+          // Broadcast game ended
+          [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ 
+                type: "game_ended", 
+                winnerId,
+                reason: "resignation",
+              }));
+            }
+          });
+        }
+
+        // Gift sent notification to players
+        if (data.type === "gift_to_player" && ws.userId) {
+          const { challengeId, recipientId, giftId, giftName, amount } = data;
+          const room = challengeGameRooms.get(challengeId);
+          
+          if (!room) return;
+
+          // Get sender info
+          const [sender] = await db.select({
+            id: users.id,
+            username: users.username,
+          }).from(users).where(eq(users.id, ws.userId));
+
+          // Broadcast gift animation
+          [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ 
+                type: "gift_received",
+                gift: {
+                  id: giftId,
+                  senderId: ws.userId,
+                  senderName: sender.username,
+                  recipientId,
+                  giftName,
+                  amount,
+                }
+              }));
+            }
+          });
         }
 
       } catch (error) {

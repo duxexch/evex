@@ -2700,6 +2700,124 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ==================== CHALLENGE GAME SESSIONS ====================
+
+  app.get("/api/challenges/:id/session", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { challengeGameSessions: sessions } = await import("@shared/schema");
+      const [session] = await db.select()
+        .from(sessions)
+        .where(eq(sessions.challengeId, req.params.id))
+        .orderBy(desc(sessions.createdAt))
+        .limit(1);
+      res.json(session || null);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/challenges/:id/session", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { challengeGameSessions: sessions, challenges: challengesTable } = await import("@shared/schema");
+      
+      const [challenge] = await db.select().from(challengesTable).where(eq(challengesTable.id, req.params.id));
+      if (!challenge) {
+        return res.status(404).json({ error: "Challenge not found" });
+      }
+      
+      if (challenge.player1Id !== req.user!.id && challenge.player2Id !== req.user!.id) {
+        return res.status(403).json({ error: "Not a participant in this challenge" });
+      }
+
+      const initialState = challenge.gameType === "chess" 
+        ? { fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moveCount: 0 }
+        : { myHand: [], opponentTileCount: 7, boardTiles: [], leftEnd: -1, rightEnd: -1, boneyard: 14 };
+
+      const [session] = await db.insert(sessions).values({
+        challengeId: req.params.id,
+        gameType: challenge.gameType,
+        currentTurn: challenge.player1Id,
+        player1TimeRemaining: challenge.timeLimit || 300,
+        player2TimeRemaining: challenge.timeLimit || 300,
+        gameState: JSON.stringify(initialState),
+        status: "playing",
+      }).returning();
+
+      await db.update(challengesTable)
+        .set({ status: "in_progress", startedAt: new Date() })
+        .where(eq(challengesTable.id, req.params.id));
+
+      res.json(session);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== CHALLENGE POINTS ====================
+
+  app.post("/api/challenge-points", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { challengePointsLedger } = await import("@shared/schema");
+      const { challengeId, targetPlayerId, pointsAmount } = req.body;
+
+      if (!challengeId || !targetPlayerId || !pointsAmount) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const [entry] = await db.insert(challengePointsLedger).values({
+        challengeId,
+        userId: req.user!.id,
+        targetPlayerId,
+        pointsAmount: parseInt(pointsAmount),
+        reason: "boost_challenge",
+      }).returning();
+
+      res.json(entry);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/challenges/:id/points", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { challengePointsLedger } = await import("@shared/schema");
+      const points = await db.select()
+        .from(challengePointsLedger)
+        .where(eq(challengePointsLedger.challengeId, req.params.id))
+        .orderBy(desc(challengePointsLedger.createdAt));
+      res.json(points);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== CHALLENGER FOLLOWS ====================
+
+  app.get("/api/challenger-follows", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      res.json([]);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/challenger-follows", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { followedId } = req.body;
+      res.json({ id: `follow-${Date.now()}`, followerId: req.user!.id, followedId, createdAt: new Date().toISOString() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/challenger-follows/:userId", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/user/rating", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       res.json({

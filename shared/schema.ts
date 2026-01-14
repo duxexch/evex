@@ -1267,6 +1267,163 @@ export const challengeSpectators = pgTable("challenge_spectators", {
   index("idx_challenge_spectators_user").on(table.userId),
 ]);
 
+// ==================== CHALLENGE GAME SESSIONS ====================
+
+export const challengeGameSessions = pgTable("challenge_game_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  challengeId: varchar("challenge_id").notNull().references(() => challenges.id),
+  gameType: text("game_type").notNull(),
+  currentTurn: varchar("current_turn").references(() => users.id),
+  player1TimeRemaining: integer("player1_time_remaining").notNull().default(300),
+  player2TimeRemaining: integer("player2_time_remaining").notNull().default(300),
+  gameState: text("game_state"),
+  status: text("status").notNull().default("waiting"),
+  winnerId: varchar("winner_id").references(() => users.id),
+  winReason: text("win_reason"),
+  totalMoves: integer("total_moves").notNull().default(0),
+  spectatorCount: integer("spectator_count").notNull().default(0),
+  lastMoveAt: timestamp("last_move_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_game_sessions_challenge").on(table.challengeId),
+  index("idx_game_sessions_status").on(table.status),
+]);
+
+export const chessMoves = pgTable("chess_moves", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => challengeGameSessions.id),
+  playerId: varchar("player_id").notNull().references(() => users.id),
+  moveNumber: integer("move_number").notNull(),
+  fromSquare: text("from_square").notNull(),
+  toSquare: text("to_square").notNull(),
+  piece: text("piece").notNull(),
+  capturedPiece: text("captured_piece"),
+  isCheck: boolean("is_check").notNull().default(false),
+  isCheckmate: boolean("is_checkmate").notNull().default(false),
+  isCastling: boolean("is_castling").notNull().default(false),
+  isEnPassant: boolean("is_en_passant").notNull().default(false),
+  promotionPiece: text("promotion_piece"),
+  fen: text("fen").notNull(),
+  notation: text("notation").notNull(),
+  timeSpent: integer("time_spent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_chess_moves_session").on(table.sessionId),
+  index("idx_chess_moves_player").on(table.playerId),
+]);
+
+export const dominoMoves = pgTable("domino_moves", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => challengeGameSessions.id),
+  playerId: varchar("player_id").notNull().references(() => users.id),
+  moveNumber: integer("move_number").notNull(),
+  tileLeft: integer("tile_left").notNull(),
+  tileRight: integer("tile_right").notNull(),
+  placedEnd: text("placed_end"),
+  isPassed: boolean("is_passed").notNull().default(false),
+  boardState: text("board_state"),
+  timeSpent: integer("time_spent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_domino_moves_session").on(table.sessionId),
+  index("idx_domino_moves_player").on(table.playerId),
+]);
+
+export const challengeChatMessages = pgTable("challenge_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => challengeGameSessions.id),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  message: text("message").notNull(),
+  isQuickMessage: boolean("is_quick_message").notNull().default(false),
+  quickMessageKey: text("quick_message_key"),
+  isSpectator: boolean("is_spectator").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_chat_messages_session").on(table.sessionId),
+  index("idx_chat_messages_sender").on(table.senderId),
+]);
+
+export const challengePointsLedger = pgTable("challenge_points_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  challengeId: varchar("challenge_id").notNull().references(() => challenges.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  targetPlayerId: varchar("target_player_id").notNull().references(() => users.id),
+  pointsAmount: integer("points_amount").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_points_ledger_challenge").on(table.challengeId),
+  index("idx_points_ledger_user").on(table.userId),
+  index("idx_points_ledger_target").on(table.targetPlayerId),
+]);
+
+export const challengeFollows = pgTable("challenge_follows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  followerId: varchar("follower_id").notNull().references(() => users.id),
+  followedId: varchar("followed_id").notNull().references(() => users.id),
+  notifyOnMatch: boolean("notify_on_match").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_follows_follower").on(table.followerId),
+  index("idx_follows_followed").on(table.followedId),
+]);
+
+export const challengeFollowNotifications = pgTable("challenge_follow_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  followerId: varchar("follower_id").notNull().references(() => users.id),
+  challengerId: varchar("challenger_id").notNull().references(() => users.id),
+  challengeId: varchar("challenge_id").notNull().references(() => challenges.id),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_follow_notif_follower").on(table.followerId),
+  index("idx_follow_notif_challenge").on(table.challengeId),
+]);
+
+export const insertChallengeGameSessionSchema = createInsertSchema(challengeGameSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertChallengeGameSession = z.infer<typeof insertChallengeGameSessionSchema>;
+export type ChallengeGameSession = typeof challengeGameSessions.$inferSelect;
+
+export const insertChessMoveSchema = createInsertSchema(chessMoves).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertChessMove = z.infer<typeof insertChessMoveSchema>;
+export type ChessMove = typeof chessMoves.$inferSelect;
+
+export const insertDominoMoveSchema = createInsertSchema(dominoMoves).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDominoMove = z.infer<typeof insertDominoMoveSchema>;
+export type DominoMove = typeof dominoMoves.$inferSelect;
+
+export const insertChallengeChatMessageSchema = createInsertSchema(challengeChatMessages).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertChallengeChatMessage = z.infer<typeof insertChallengeChatMessageSchema>;
+export type ChallengeChatMessage = typeof challengeChatMessages.$inferSelect;
+
+export const insertChallengePointsLedgerSchema = createInsertSchema(challengePointsLedger).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertChallengePointsLedger = z.infer<typeof insertChallengePointsLedgerSchema>;
+export type ChallengePointsLedgerEntry = typeof challengePointsLedger.$inferSelect;
+
+export const insertChallengeFollowSchema = createInsertSchema(challengeFollows).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertChallengeFollow = z.infer<typeof insertChallengeFollowSchema>;
+export type ChallengeFollow = typeof challengeFollows.$inferSelect;
+
 // ==================== APP SETTINGS ====================
 
 export const appSettings = pgTable("app_settings", {
