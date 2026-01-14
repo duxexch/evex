@@ -1863,6 +1863,151 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // POST /api/p2p/trades/initiate - Initiate a trade from an offer
+  app.post("/api/p2p/trades/initiate", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
+    try {
+      const { offerId, amount } = req.body;
+      
+      // Find the offer
+      const offer = [...mockP2POffers, ...userP2POffers].find(o => o.id === offerId);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+      
+      // Can't trade with yourself
+      if (offer.userId === req.user!.id) {
+        return res.status(400).json({ error: "Cannot trade with your own offer" });
+      }
+      
+      const user = await storage.getUser(req.user!.id);
+      const tradeAmount = parseFloat(amount);
+      
+      // Check balance for buyers
+      if (offer.type === "sell") {
+        const balance = parseFloat(user?.balance || "0");
+        const totalCost = tradeAmount * parseFloat(offer.price);
+        if (balance < totalCost) {
+          return res.status(400).json({ error: "Insufficient balance" });
+        }
+      }
+      
+      const newTrade = {
+        id: `trade-${Date.now()}`,
+        offerId,
+        buyerId: offer.type === "sell" ? req.user!.id : offer.userId,
+        sellerId: offer.type === "sell" ? offer.userId : req.user!.id,
+        amount: `${amount} ${offer.currency}`,
+        price: offer.price,
+        totalPrice: (tradeAmount * parseFloat(offer.price)).toFixed(2),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        counterpartyUsername: offer.username,
+        buyerUsername: offer.type === "sell" ? user?.username : offer.username,
+        sellerUsername: offer.type === "sell" ? offer.username : user?.username,
+      };
+      
+      userP2PTrades.push(newTrade);
+      
+      res.status(201).json(newTrade);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/complete - Complete a trade (updates balances instantly)
+  app.post("/api/p2p/trades/:id/complete", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = userP2PTrades.find(t => t.id === req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      // Only seller can mark as complete
+      if (trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Only seller can complete the trade" });
+      }
+      
+      if (trade.status === "completed") {
+        return res.status(400).json({ error: "Trade already completed" });
+      }
+      
+      // Extract amount value
+      const amountStr = trade.amount.split(" ")[0];
+      const amount = parseFloat(amountStr);
+      
+      // Update balances instantly
+      const buyer = await storage.getUser(trade.buyerId);
+      const seller = await storage.getUser(trade.sellerId);
+      
+      if (buyer && seller) {
+        // Credit buyer with the crypto amount
+        const newBuyerBalance = parseFloat(buyer.balance) + amount;
+        await storage.updateUser(trade.buyerId, { balance: newBuyerBalance.toFixed(2) });
+        
+        // Debit seller's balance
+        const newSellerBalance = parseFloat(seller.balance) - amount;
+        await storage.updateUser(trade.sellerId, { balance: newSellerBalance.toFixed(2) });
+        
+        // Create transaction records
+        await storage.createTransaction({
+          userId: trade.buyerId,
+          type: "deposit",
+          amount: amount.toString(),
+          status: "completed",
+          method: "p2p_buy",
+          reference: trade.id,
+        });
+        
+        await storage.createTransaction({
+          userId: trade.sellerId,
+          type: "withdrawal",
+          amount: amount.toString(),
+          status: "completed",
+          method: "p2p_sell",
+          reference: trade.id,
+        });
+        
+        // Broadcast balance updates via WebSocket
+        const { broadcastBalanceUpdate } = await import("./websocket");
+        broadcastBalanceUpdate(trade.buyerId, "p2p_trade", amount.toString(), trade.id);
+        broadcastBalanceUpdate(trade.sellerId, "p2p_trade", amount.toString(), trade.id);
+      }
+      
+      // Update trade status
+      trade.status = "completed";
+      trade.completedAt = new Date().toISOString();
+      
+      res.json({ success: true, trade });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/cancel - Cancel a pending trade
+  app.post("/api/p2p/trades/:id/cancel", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = userP2PTrades.find(t => t.id === req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      // Only participants can cancel
+      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      if (trade.status !== "pending") {
+        return res.status(400).json({ error: "Can only cancel pending trades" });
+      }
+      
+      trade.status = "cancelled";
+      res.json({ success: true, trade });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== P2P DISPUTES ====================
 
   // Mock data for disputes

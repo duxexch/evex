@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useWebSocket } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -287,6 +288,8 @@ function MarketplaceTab() {
 
   const { data: offers, isLoading, refetch } = useQuery<P2POffer[]>({
     queryKey: ["/api/p2p/offers", { type: typeFilter, currency: currencyFilter, payment: paymentFilter }],
+    staleTime: 30_000,
+    gcTime: 60_000,
   });
 
   const filteredOffers = offers?.filter(offer => {
@@ -476,6 +479,8 @@ function MyOffersTab() {
 
   const { data: myOffers, isLoading } = useQuery<P2POffer[]>({
     queryKey: ["/api/p2p/my-offers"],
+    staleTime: 30_000,
+    gcTime: 60_000,
   });
 
   const form = useForm<CreateOfferForm>({
@@ -783,6 +788,8 @@ function MyTradesTab() {
 
   const { data: trades, isLoading } = useQuery<P2PTrade[]>({
     queryKey: ["/api/p2p/my-trades"],
+    staleTime: 60_000,
+    gcTime: 120_000,
   });
 
   const getStatusBadge = (status: string) => {
@@ -1626,6 +1633,13 @@ function DisputesTab() {
 
 export default function P2PPage() {
   const { t, dir } = useI18n();
+  const { lastMessage } = useWebSocket();
+
+  useEffect(() => {
+    if (lastMessage?.type === "balance_updated") {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    }
+  }, [lastMessage]);
 
   return (
     <div className="p-2 md:p-3" dir={dir}>
