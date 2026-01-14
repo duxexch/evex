@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Gamepad2, Loader2, Copy, Check, Smartphone, Mail, User, Zap, KeyRound, Share2 } from "lucide-react";
+import { Gamepad2, Loader2, Copy, Check, Smartphone, Mail, User, Zap, KeyRound, Share2, CheckCircle, XCircle } from "lucide-react";
 import { SiGoogle, SiFacebook, SiTelegram, SiWhatsapp, SiX, SiApple } from "react-icons/si";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -67,6 +67,7 @@ export default function LoginPage() {
   const [nickname, setNickname] = useState("");
   const [nicknameError, setNicknameError] = useState("");
   const [isCheckingNickname, setIsCheckingNickname] = useState(false);
+  const [nicknameAvailable, setNicknameAvailable] = useState<boolean | null>(null);
   const [generatedCredentials, setGeneratedCredentials] = useState<{ accountId: string; password: string } | null>(null);
   const [pendingUser, setPendingUser] = useState<any>(null);
   const [pendingToken, setPendingToken] = useState<string | null>(null);
@@ -232,20 +233,33 @@ export default function LoginPage() {
   const checkNicknameAvailability = async (value: string) => {
     if (value.length < 3) {
       setNicknameError("Nickname must be at least 3 characters");
+      setNicknameAvailable(null);
       return false;
     }
+    
+    // Validate English letters, numbers, and underscores only
+    const englishOnlyRegex = /^[a-zA-Z0-9_]+$/;
+    if (!englishOnlyRegex.test(value)) {
+      setNicknameError("Only English letters, numbers, and underscores allowed");
+      setNicknameAvailable(false);
+      return false;
+    }
+    
     setIsCheckingNickname(true);
     try {
       const res = await fetch(`/api/user/check-nickname/${encodeURIComponent(value)}`);
       const data = await res.json();
       if (!data.available) {
         setNicknameError("Nickname already taken");
+        setNicknameAvailable(false);
         return false;
       }
       setNicknameError("");
+      setNicknameAvailable(true);
       return true;
     } catch {
       setNicknameError("Error checking nickname");
+      setNicknameAvailable(null);
       return false;
     } finally {
       setIsCheckingNickname(false);
@@ -734,29 +748,35 @@ export default function LoginPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="nickname">Nickname</Label>
+              <Label htmlFor="nickname">Nickname (English only)</Label>
               <div className="relative">
                 <Input
                   id="nickname"
                   data-testid="input-nickname"
                   value={nickname}
                   onChange={(e) => {
-                    setNickname(e.target.value);
+                    const value = e.target.value.replace(/[^a-zA-Z0-9_]/g, '');
+                    setNickname(value);
                     setNicknameError("");
+                    setNicknameAvailable(null);
                   }}
                   onBlur={() => nickname.length >= 3 && checkNicknameAvailability(nickname)}
                   placeholder="Enter your unique nickname"
-                  className={nicknameError ? "border-destructive" : ""}
+                  className={`pe-10 ${nicknameAvailable === true ? "border-green-500 focus-visible:ring-green-500" : nicknameAvailable === false ? "border-destructive" : ""}`}
                 />
-                {isCheckingNickname && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-                )}
+                {isCheckingNickname ? (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-muted-foreground" />
+                ) : nicknameAvailable === true ? (
+                  <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+                ) : nicknameAvailable === false ? (
+                  <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive" />
+                ) : null}
               </div>
               {nicknameError && (
                 <p className="text-xs text-destructive">{nicknameError}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                Minimum 3 characters. This will be visible to other users.
+                English letters, numbers, and underscore only. Minimum 3 characters.
               </p>
             </div>
             <Button
