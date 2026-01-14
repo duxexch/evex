@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Transaction, CountryPaymentMethod } from "@shared/schema";
 import { ArrowDownCircle, ArrowUpCircle, Clock, CheckCircle, XCircle, Loader2, Wallet, Copy, AlertCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { BackButton } from "@/components/BackButton";
 
 export default function TransactionsPage() {
   const { user, updateUser } = useAuth();
@@ -161,7 +162,10 @@ export default function TransactionsPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold">{t('transactions.title')}</h1>
+        <div className="flex items-center gap-3">
+          <BackButton fallbackPath="/dashboard" />
+          <h1 className="text-2xl font-bold">{t('transactions.title')}</h1>
+        </div>
         <div className="flex gap-2 flex-wrap">
           <Dialog open={depositOpen} onOpenChange={(open) => {
             setDepositOpen(open);

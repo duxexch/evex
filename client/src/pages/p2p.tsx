@@ -27,6 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Star, Filter, RefreshCw, Trash2, Edit2, Check, ChevronsUpDown, AlertTriangle, MessageSquare, Upload, FileCheck, Camera, Video, Ban, Clock, ChevronRight, Send, Paperclip, Eye, Shield, Scale, History, User, Settings } from "lucide-react";
 import { Link } from "wouter";
+import { BackButton } from "@/components/BackButton";
 import { cn } from "@/lib/utils";
 
 const WORLD_CURRENCIES = [
@@ -1644,9 +1645,12 @@ export default function P2PPage() {
   return (
     <div className="p-2 md:p-3" dir={dir}>
       <div className="mb-4 flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-p2p-title">{t('nav.p2p')}</h1>
-          <p className="text-muted-foreground">{t('p2p.description')}</p>
+        <div className="flex items-center gap-3">
+          <BackButton fallbackPath="/dashboard" />
+          <div>
+            <h1 className="text-2xl font-bold" data-testid="text-p2p-title">{t('nav.p2p')}</h1>
+            <p className="text-muted-foreground">{t('p2p.description')}</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Link href="/p2p/profile/me">

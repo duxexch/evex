@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import type { Complaint, ComplaintMessage } from "@shared/schema";
 import { AlertTriangle, MessageSquare, Clock, CheckCircle, Loader2, Plus, Send } from "lucide-react";
+import { BackButton } from "@/components/BackButton";
 
 interface ComplaintWithMessages extends Complaint {
   messages?: ComplaintMessage[];
@@ -153,7 +154,10 @@ export default function ComplaintsPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold">Complaints</h1>
+        <div className="flex items-center gap-3">
+          <BackButton fallbackPath="/dashboard" />
+          <h1 className="text-2xl font-bold">Complaints</h1>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-new-complaint">

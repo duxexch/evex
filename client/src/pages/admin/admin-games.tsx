@@ -53,6 +53,8 @@ const gameFormSchema = z.object({
   category: z.string().min(1, "Category is required"),
   sections: z.array(z.string()).min(1, "Select at least one section"),
   gameType: z.enum(["single", "multiplayer"]),
+  gameEngine: z.string().optional(),
+  performanceProfile: z.string().optional(),
   status: z.enum(["active", "inactive", "maintenance"]),
   volatility: z.enum(["low", "medium", "high"]),
   minBet: z.string().min(1, "Min bet is required"),
@@ -67,6 +69,11 @@ const gameFormSchema = z.object({
   pricingType: z.enum(["bet", "fixed", "free"]),
   minPlayers: z.number().min(1),
   maxPlayers: z.number().min(1),
+  maxConcurrentSessions: z.number().optional(),
+  enableSpectators: z.boolean().optional(),
+  enableChat: z.boolean().optional(),
+  enableVoiceChat: z.boolean().optional(),
+  antiCheatLevel: z.enum(["none", "basic", "advanced", "strict"]).optional(),
   sortOrder: z.number(),
 });
 
@@ -81,6 +88,8 @@ interface Game {
   category: string;
   sections: string[];
   gameType: string;
+  gameEngine: string | null;
+  performanceProfile: string | null;
   status: string;
   volatility: string;
   minBet: string;
@@ -95,6 +104,11 @@ interface Game {
   pricingType: string;
   minPlayers: number;
   maxPlayers: number;
+  maxConcurrentSessions: number | null;
+  enableSpectators: boolean;
+  enableChat: boolean;
+  enableVoiceChat: boolean;
+  antiCheatLevel: string | null;
   playCount: number;
   totalVolume: string;
   sortOrder: number;
@@ -110,14 +124,40 @@ const sections = [
 ];
 
 const categories = [
-  { value: "slots", label: "Slots" },
-  { value: "cards", label: "Cards" },
-  { value: "dice", label: "Dice" },
-  { value: "crash", label: "Crash" },
-  { value: "roulette", label: "Roulette" },
-  { value: "arcade", label: "Arcade" },
-  { value: "sports", label: "Sports" },
-  { value: "other", label: "Other" },
+  { value: "slots", label: "Slots / سلوتس" },
+  { value: "cards", label: "Card Games / ألعاب الورق" },
+  { value: "board", label: "Board Games / ألعاب الطاولة" },
+  { value: "dice", label: "Dice Games / ألعاب النرد" },
+  { value: "crash", label: "Crash Games / كراش" },
+  { value: "roulette", label: "Roulette / روليت" },
+  { value: "arcade", label: "Arcade / آركيد" },
+  { value: "sports", label: "Sports / رياضة" },
+  { value: "puzzle", label: "Puzzle / ألغاز" },
+  { value: "strategy", label: "Strategy / استراتيجية" },
+  { value: "racing", label: "Racing / سباق" },
+  { value: "action", label: "Action / أكشن" },
+  { value: "trivia", label: "Trivia / معلومات" },
+  { value: "lottery", label: "Lottery / يانصيب" },
+  { value: "instant", label: "Instant Win / فوز فوري" },
+  { value: "other", label: "Other / أخرى" },
+];
+
+const gameEngineTypes = [
+  { value: "html5_canvas", label: "HTML5 Canvas - Fast rendering for 2D games", description: "Best for card games, board games, casual games" },
+  { value: "webgl", label: "WebGL - High-performance 3D graphics", description: "Best for 3D games, racing, action games" },
+  { value: "websocket_realtime", label: "WebSocket Realtime - Live multiplayer", description: "Best for Chess, Domino, Backgammon, Tarneeb, Baloot" },
+  { value: "server_authoritative", label: "Server Authoritative - Anti-cheat protected", description: "Secure games with server-side validation" },
+  { value: "p2p_mesh", label: "P2P Mesh - Direct player connections", description: "Low latency for competitive games" },
+  { value: "turn_based", label: "Turn Based - Asynchronous play", description: "Best for strategy games, can handle many concurrent games" },
+  { value: "iframe_embed", label: "iFrame Embed - External game provider", description: "Embed games from third-party providers" },
+  { value: "native_react", label: "Native React - Built-in game engine", description: "Games built directly in React components" },
+];
+
+const performanceProfiles = [
+  { value: "ultra_light", label: "Ultra Light - 10,000+ concurrent players", specs: "< 1MB, instant load" },
+  { value: "light", label: "Light - 5,000+ concurrent players", specs: "1-5MB, fast load" },
+  { value: "standard", label: "Standard - 2,000+ concurrent players", specs: "5-20MB, normal load" },
+  { value: "heavy", label: "Heavy - 500+ concurrent players", specs: "20MB+, slower load" },
 ];
 
 function GameForm({ 
@@ -138,9 +178,11 @@ function GameForm({
       description: game?.description || "",
       imageUrl: game?.imageUrl || "",
       thumbnailUrl: game?.thumbnailUrl || "",
-      category: game?.category || "slots",
-      sections: game?.sections || ["play"],
-      gameType: (game?.gameType as "single" | "multiplayer") || "single",
+      category: game?.category || "cards",
+      sections: game?.sections || ["challenges"],
+      gameType: (game?.gameType as "single" | "multiplayer") || "multiplayer",
+      gameEngine: game?.gameEngine || "websocket_realtime",
+      performanceProfile: game?.performanceProfile || "light",
       status: (game?.status as "active" | "inactive" | "maintenance") || "active",
       volatility: (game?.volatility as "low" | "medium" | "high") || "medium",
       minBet: game?.minBet || "1.00",
@@ -153,8 +195,13 @@ function GameForm({
       isFreeToPlay: game?.isFreeToPlay || false,
       playPrice: game?.playPrice || "0.00",
       pricingType: (game?.pricingType as "bet" | "fixed" | "free") || "bet",
-      minPlayers: game?.minPlayers || 1,
-      maxPlayers: game?.maxPlayers || 1,
+      minPlayers: game?.minPlayers || 2,
+      maxPlayers: game?.maxPlayers || 4,
+      maxConcurrentSessions: game?.maxConcurrentSessions || 4000,
+      enableSpectators: game?.enableSpectators ?? true,
+      enableChat: game?.enableChat ?? true,
+      enableVoiceChat: game?.enableVoiceChat ?? false,
+      antiCheatLevel: (game?.antiCheatLevel as "none" | "basic" | "advanced" | "strict") || "advanced",
       sortOrder: game?.sortOrder || 0,
     },
   });
@@ -293,8 +340,8 @@ function GameForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="single">Single Player</SelectItem>
-                    <SelectItem value="multiplayer">Multiplayer</SelectItem>
+                    <SelectItem value="single">Single Player / لاعب واحد</SelectItem>
+                    <SelectItem value="multiplayer">Multiplayer / متعدد اللاعبين</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -302,6 +349,173 @@ function GameForm({
             )}
           />
         </div>
+
+        <Card className="p-4 bg-muted/30">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <Gamepad2 className="h-4 w-4" />
+            Game Engine & Performance (4000+ Users Support)
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="gameEngine"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Game Engine Type</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value || "websocket_realtime"}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-game-engine">
+                        <SelectValue placeholder="Select engine type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {gameEngineTypes.map((engine) => (
+                        <SelectItem key={engine.value} value={engine.value}>
+                          <div className="flex flex-col">
+                            <span>{engine.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {gameEngineTypes.find(e => e.value === field.value)?.description || "Select engine for optimal performance"}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="performanceProfile"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Performance Profile</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value || "light"}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-performance-profile">
+                        <SelectValue placeholder="Select performance level" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {performanceProfiles.map((profile) => (
+                        <SelectItem key={profile.value} value={profile.value}>
+                          {profile.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {performanceProfiles.find(p => p.value === field.value)?.specs || "Select profile for capacity"}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <FormField
+              control={form.control}
+              name="maxConcurrentSessions"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Max Concurrent Sessions</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      {...field}
+                      value={field.value || 4000}
+                      onChange={(e) => field.onChange(parseInt(e.target.value) || 4000)}
+                      data-testid="input-max-sessions" 
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">Default: 4000 concurrent games</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="antiCheatLevel"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Anti-Cheat Level</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value || "advanced"}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-anti-cheat">
+                        <SelectValue placeholder="Select anti-cheat level" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">None / بدون</SelectItem>
+                      <SelectItem value="basic">Basic / أساسي</SelectItem>
+                      <SelectItem value="advanced">Advanced / متقدم</SelectItem>
+                      <SelectItem value="strict">Strict / صارم</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <FormField
+              control={form.control}
+              name="enableSpectators"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between p-3 rounded-md border">
+                  <FormLabel className="text-sm">Enable Spectators</FormLabel>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      data-testid="switch-spectators"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="enableChat"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between p-3 rounded-md border">
+                  <FormLabel className="text-sm">Enable Text Chat</FormLabel>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      data-testid="switch-chat"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="enableVoiceChat"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between p-3 rounded-md border">
+                  <FormLabel className="text-sm">Enable Voice Chat</FormLabel>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      data-testid="switch-voice-chat"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </div>
+        </Card>
 
         <FormField
           control={form.control}

@@ -22,6 +22,7 @@ import {
   CheckCircle,
   Loader2,
 } from "lucide-react";
+import { BackButton } from "@/components/BackButton";
 import type { User } from "@shared/schema";
 
 type UserWithFollowStatus = Omit<User, "password"> & { isFollowing?: boolean };
@@ -352,13 +353,16 @@ export default function FriendsPage() {
 
   return (
     <div className="container max-w-4xl mx-auto p-4 space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold" data-testid="text-friends-title">
-          {t("friends.title")}
-        </h1>
-        <p className="text-muted-foreground" data-testid="text-friends-subtitle">
-          {t("friends.subtitle")}
-        </p>
+      <div className="flex items-center gap-3 mb-2">
+        <BackButton fallbackPath="/dashboard" />
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold" data-testid="text-friends-title">
+            {t("friends.title")}
+          </h1>
+          <p className="text-muted-foreground" data-testid="text-friends-subtitle">
+            {t("friends.subtitle")}
+          </p>
+        </div>
       </div>
 
       <Tabs defaultValue="friends" className="w-full">
