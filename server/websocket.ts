@@ -7,6 +7,10 @@ import {
   challengeGameSessions, challengeChatMessages, challenges
 } from "@shared/schema";
 import { eq, desc, and, or, sql } from "drizzle-orm";
+import * as ChessEngine from "./game-engines/chess-engine";
+import * as DominoEngine from "./game-engines/domino-engine";
+import * as BackgammonEngine from "./game-engines/backgammon-engine";
+import * as CardGameEngine from "./game-engines/card-game-engine";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "pwm-secret-key-change-in-production";
 
@@ -698,25 +702,133 @@ export function setupWebSocket(server: Server) {
 
           const opponentId = challenge.player1Id === ws.userId ? challenge.player2Id : challenge.player1Id;
           
-          // Update game state (simplified - actual game logic should validate move)
+          // Get game type and validate move using appropriate engine
           let gameState;
           try {
-            gameState = session.gameState ? JSON.parse(session.gameState) : {};
+            gameState = session.gameState ? JSON.parse(session.gameState) : null;
           } catch {
-            gameState = {};
+            gameState = null;
           }
           
-          // Apply move to game state (this is simplified - real implementation would validate)
-          gameState.lastMove = move;
-          gameState.moveCount = (gameState.moveCount || 0) + 1;
+          const gameType = session.gameType;
+          let moveResult: any = { valid: false, error: 'Unknown game type' };
+          let isGameOver = false;
+          let winnerId: string | null = null;
+
+          // Validate and apply move based on game type
+          if (gameType === 'chess') {
+            const position = gameState ? ChessEngine.fenToPosition(gameState.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') : ChessEngine.createInitialPosition();
+            moveResult = ChessEngine.validateAndMakeMove(position, move);
+            
+            if (moveResult.valid && moveResult.newPosition) {
+              gameState = {
+                fen: ChessEngine.positionToFEN(moveResult.newPosition),
+                lastMove: move,
+                notation: moveResult.notation,
+                isCheck: moveResult.isCheck,
+                moveCount: (gameState?.moveCount || 0) + 1,
+              };
+              
+              if (moveResult.isCheckmate || moveResult.isDraw) {
+                isGameOver = true;
+                winnerId = moveResult.isCheckmate ? ws.userId : null;
+              }
+            }
+          } else if (gameType === 'domino') {
+            if (!gameState) {
+              gameState = DominoEngine.createInitialState([challenge.player1Id, challenge.player2Id!]);
+            }
+            moveResult = DominoEngine.makeMove(gameState, ws.userId, move);
+            
+            if (moveResult.valid && moveResult.newState) {
+              gameState = moveResult.newState;
+              const status = DominoEngine.getGameStatus(gameState);
+              if (status.isGameOver) {
+                isGameOver = true;
+                winnerId = status.winner || null;
+              }
+            }
+          } else if (gameType === 'backgammon') {
+            if (!gameState) {
+              gameState = BackgammonEngine.createInitialState();
+            }
+            moveResult = BackgammonEngine.makeMove(gameState, move);
+            
+            if (moveResult.valid && moveResult.newState) {
+              gameState = moveResult.newState;
+              const status = BackgammonEngine.getGameStatus(gameState);
+              if (status.isGameOver) {
+                isGameOver = true;
+                winnerId = status.winner === 'white' ? challenge.player1Id : challenge.player2Id;
+              }
+            }
+          } else if (gameType === 'tarneeb') {
+            if (!gameState) {
+              gameState = CardGameEngine.createTarneebState([challenge.player1Id, challenge.player2Id!, '', '']);
+            }
+            
+            if (move.type === 'bid') {
+              moveResult = CardGameEngine.tarneebBid(gameState, ws.userId, move.bid);
+            } else if (move.type === 'setTrump') {
+              moveResult = CardGameEngine.tarneebSetTrump(gameState, ws.userId, move.suit);
+            } else if (move.type === 'playCard') {
+              moveResult = CardGameEngine.tarneebPlayCard(gameState, ws.userId, move.card);
+            }
+            
+            if (moveResult.valid && moveResult.newState) {
+              gameState = moveResult.newState;
+              if (gameState.phase === 'finished') {
+                isGameOver = true;
+                winnerId = gameState.totalScores.team0 > gameState.totalScores.team1 ? challenge.player1Id : challenge.player2Id;
+              }
+            }
+          } else if (gameType === 'baloot') {
+            if (!gameState) {
+              gameState = CardGameEngine.createBalootState([challenge.player1Id, challenge.player2Id!, '', '']);
+            }
+            
+            if (move.type === 'choose') {
+              moveResult = CardGameEngine.balootChoose(gameState, ws.userId, move.gameType, move.trumpSuit);
+            } else if (move.type === 'pass') {
+              moveResult = CardGameEngine.balootPass(gameState, ws.userId);
+            } else if (move.type === 'playCard') {
+              moveResult = CardGameEngine.balootPlayCard(gameState, ws.userId, move.card);
+            }
+            
+            if (moveResult.valid && moveResult.newState) {
+              gameState = moveResult.newState;
+              if (gameState.phase === 'finished') {
+                isGameOver = true;
+                winnerId = gameState.totalPoints.team0 > gameState.totalPoints.team1 ? challenge.player1Id : challenge.player2Id;
+              }
+            }
+          }
+
+          if (!moveResult.valid) {
+            ws.send(JSON.stringify({ type: "move_error", error: moveResult.error || 'Invalid move' }));
+            return;
+          }
+
+          // Determine next player
+          let nextTurn = opponentId;
+          if (gameType === 'domino' && gameState?.currentPlayer) {
+            nextTurn = gameState.currentPlayer;
+          } else if (gameType === 'backgammon' && gameState?.currentPlayer) {
+            nextTurn = gameState.currentPlayer === 'white' ? challenge.player1Id : challenge.player2Id!;
+          } else if ((gameType === 'tarneeb' || gameType === 'baloot') && gameState?.currentPlayer) {
+            nextTurn = gameState.currentPlayer;
+          }
 
           const [updatedSession] = await db.update(challengeGameSessions)
             .set({
               gameState: JSON.stringify(gameState),
-              currentTurn: opponentId,
+              currentTurn: isGameOver ? null : nextTurn,
               totalMoves: (session.totalMoves || 0) + 1,
               lastMoveAt: new Date(),
               updatedAt: new Date(),
+              status: isGameOver ? 'completed' : 'playing',
+              winnerId: winnerId,
+              endedAt: isGameOver ? new Date() : null,
             })
             .where(eq(challengeGameSessions.id, session.id))
             .returning();
@@ -729,6 +841,90 @@ export function setupWebSocket(server: Server) {
                 session: updatedSession,
                 move,
                 playerId: ws.userId,
+              }));
+            }
+          });
+        }
+
+        // Handle dice roll for backgammon
+        if (data.type === "roll_dice" && ws.userId) {
+          const { challengeId } = data;
+          const room = challengeGameRooms.get(challengeId);
+          
+          if (!room || !room.players.has(ws.userId)) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Not a player in this game" }));
+            return;
+          }
+
+          const [session] = await db.select().from(challengeGameSessions)
+            .where(eq(challengeGameSessions.challengeId, challengeId))
+            .orderBy(desc(challengeGameSessions.createdAt))
+            .limit(1);
+
+          if (!session || session.status !== "playing" || session.gameType !== "backgammon") {
+            ws.send(JSON.stringify({ type: "challenge_error", error: "Cannot roll dice now" }));
+            return;
+          }
+
+          let gameState = session.gameState ? JSON.parse(session.gameState) : BackgammonEngine.createInitialState();
+          
+          const dice = BackgammonEngine.rollDice();
+          gameState = BackgammonEngine.setDice(gameState, dice);
+
+          await db.update(challengeGameSessions)
+            .set({
+              gameState: JSON.stringify(gameState),
+              updatedAt: new Date(),
+            })
+            .where(eq(challengeGameSessions.id, session.id));
+
+          [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ 
+                type: "dice_rolled", 
+                dice,
+                playerId: ws.userId,
+                gameState,
+              }));
+            }
+          });
+        }
+
+        // Handle end turn for backgammon
+        if (data.type === "end_turn" && ws.userId) {
+          const { challengeId } = data;
+          const room = challengeGameRooms.get(challengeId);
+          
+          if (!room || !room.players.has(ws.userId)) return;
+
+          const [session] = await db.select().from(challengeGameSessions)
+            .where(eq(challengeGameSessions.challengeId, challengeId))
+            .limit(1);
+
+          if (!session || session.gameType !== "backgammon") return;
+
+          let gameState = session.gameState ? JSON.parse(session.gameState) : null;
+          if (!gameState) return;
+
+          gameState = BackgammonEngine.endTurn(gameState);
+
+          const [challenge] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
+          const nextTurn = gameState.currentPlayer === 'white' ? challenge.player1Id : challenge.player2Id;
+
+          await db.update(challengeGameSessions)
+            .set({
+              gameState: JSON.stringify(gameState),
+              currentTurn: nextTurn,
+              updatedAt: new Date(),
+            })
+            .where(eq(challengeGameSessions.id, session.id));
+
+          [...room.players.values(), ...room.spectators.values()].forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ 
+                type: "turn_ended", 
+                gameState,
+                nextPlayer: nextTurn,
               }));
             }
           });
