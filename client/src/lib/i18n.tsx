@@ -75,6 +75,52 @@ interface Translation {
   [key: string]: string;
 }
 
+// Track missing translations in development (per language)
+const missingTranslationsByLang: Map<string, Set<string>> = new Map();
+const loggedMissingKeys: Set<string> = new Set();
+
+// Function to report missing translations for a specific language
+export function getMissingTranslations(lang?: string): string[] {
+  if (lang) {
+    return Array.from(missingTranslationsByLang.get(lang) || []);
+  }
+  // Return all missing translations across all languages
+  const all: string[] = [];
+  missingTranslationsByLang.forEach((keys, language) => {
+    keys.forEach(key => all.push(`${language}:${key}`));
+  });
+  return all;
+}
+
+// Function to clear tracking (useful after hot reload)
+export function clearMissingTranslations(lang?: string): void {
+  if (lang) {
+    missingTranslationsByLang.delete(lang);
+  } else {
+    missingTranslationsByLang.clear();
+  }
+  loggedMissingKeys.clear();
+}
+
+// Function to check if all English keys have Arabic translations
+export function validateTranslations(): { missing: string[], extra: string[] } {
+  const enKeys = Object.keys(enTranslations);
+  const arKeys = Object.keys(arTranslations);
+  
+  const missing = enKeys.filter(key => !arTranslations[key]);
+  const extra = arKeys.filter(key => !enTranslations[key]);
+  
+  return { missing, extra };
+}
+
+// Track a missing translation
+function trackMissingTranslation(lang: string, key: string): void {
+  if (!missingTranslationsByLang.has(lang)) {
+    missingTranslationsByLang.set(lang, new Set());
+  }
+  missingTranslationsByLang.get(lang)!.add(key);
+}
+
 // Base English translations (complete)
 const enTranslations: Translation = {
   'app.name': 'VEX',
@@ -1573,6 +1619,20 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const t = (key: string): string => {
     const translations = getTranslations(language);
+    
+    // Check if translation exists for current language
+    if (language !== 'en' && !translations[key] && enTranslations[key]) {
+      // Track missing translation
+      trackMissingTranslation(language, key);
+      
+      // Log warning in development (only once per key)
+      if (import.meta.env.DEV && !loggedMissingKeys.has(`${language}:${key}`)) {
+        loggedMissingKeys.add(`${language}:${key}`);
+        console.warn(`[i18n] Missing ${language} translation for key: "${key}"`);
+      }
+    }
+    
+    // Return translation with fallback to English, then key
     return translations[key] || enTranslations[key] || key;
   };
 
@@ -1591,6 +1651,52 @@ export function useI18n() {
     throw new Error('useI18n must be used within an I18nProvider');
   }
   return context;
+}
+
+// Development helper: Shows missing translations count
+export function TranslationDebugger() {
+  const { language } = useI18n();
+  const [showDetails, setShowDetails] = useState(false);
+  
+  if (!import.meta.env.DEV) return null;
+  
+  // Get static missing (English vs Arabic) for reference
+  const { missing: staticMissing } = validateTranslations();
+  
+  // Get runtime missing for current language
+  const runtimeMissing = getMissingTranslations(language);
+  
+  // Combine: for Arabic show static, for other languages show runtime
+  const displayMissing = language === 'ar' ? staticMissing : runtimeMissing;
+  const totalCount = displayMissing.length;
+  
+  if (totalCount === 0) return null;
+  
+  return (
+    <div className="fixed bottom-4 right-4 z-50">
+      <Button
+        size="sm"
+        variant="outline"
+        className="bg-yellow-500/20 border-yellow-500 text-yellow-600 hover:bg-yellow-500/30"
+        onClick={() => setShowDetails(!showDetails)}
+      >
+        {totalCount} missing ({language})
+      </Button>
+      {showDetails && (
+        <div className="absolute bottom-full right-0 mb-2 w-80 max-h-60 overflow-auto bg-background border rounded-lg shadow-lg p-3 text-xs">
+          <p className="font-medium mb-2">Missing {language.toUpperCase()} translations:</p>
+          <div className="space-y-1">
+            {displayMissing.slice(0, 20).map(key => (
+              <div key={key} className="text-muted-foreground truncate">{key}</div>
+            ))}
+            {displayMissing.length > 20 && (
+              <div className="text-muted-foreground">...and {displayMissing.length - 20} more</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function LanguageSwitcher() {

@@ -67,6 +67,13 @@ The schema (in `shared/schema.ts`) includes:
 - **Lazy Loading**: 40+ pages use React.lazy() for improved initial load times
 - **Health Monitoring**: Detailed health endpoints with DB latency, memory usage, pool stats, and CPU metrics
 - **Trust Proxy**: Proper proxy configuration for rate limiting behind nginx/load balancers
+- **Internationalization (i18n)**: Full translation support with automatic missing translation detection
+  - English and Arabic translations with RTL support
+  - Automatic fallback to English when translation is missing
+  - Development-only warnings in console for missing translations
+  - `TranslationDebugger` component shows missing translations count in development
+  - Helper functions: `getMissingTranslations()`, `validateTranslations()`, `clearMissingTranslations()`
+  - Uses "stake" terminology instead of "bet" throughout the platform
 
 ### Build and Development
 - **Development**: `npm run dev` - runs tsx with hot reload
