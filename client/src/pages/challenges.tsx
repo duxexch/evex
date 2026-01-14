@@ -590,7 +590,7 @@ export default function ChallengesPage() {
                         </div>
                         <Button className="w-full" onClick={() => handleSpectate(challenge)} data-testid={`button-spectate-${challenge.id}`}>
                           <Eye className="h-4 w-4 me-2" />
-                          {t('challenges.watchAndBet')}
+                          {t('challenges.watchAndShare')}
                         </Button>
                       </CardContent>
                     </Card>
