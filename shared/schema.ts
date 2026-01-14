@@ -9,14 +9,14 @@ export const userRoleEnum = pgEnum("user_role", ["admin", "agent", "affiliate", 
 export const userStatusEnum = pgEnum("user_status", ["active", "inactive", "suspended", "banned"]);
 export const gameStatusEnum = pgEnum("game_status", ["active", "inactive", "maintenance"]);
 export const gameVolatilityEnum = pgEnum("game_volatility", ["low", "medium", "high"]);
-export const transactionTypeEnum = pgEnum("transaction_type", ["deposit", "withdrawal", "bet", "win", "bonus", "commission", "refund"]);
+export const transactionTypeEnum = pgEnum("transaction_type", ["deposit", "withdrawal", "stake", "win", "bonus", "commission", "refund"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "approved", "rejected", "completed", "cancelled"]);
 export const complaintStatusEnum = pgEnum("complaint_status", ["open", "assigned", "in_progress", "escalated", "resolved", "closed"]);
 export const complaintPriorityEnum = pgEnum("complaint_priority", ["low", "medium", "high", "urgent"]);
 export const complaintCategoryEnum = pgEnum("complaint_category", ["financial", "technical", "account", "game", "other"]);
 export const promoCodeTypeEnum = pgEnum("promo_code_type", ["percentage", "fixed", "free_spins"]);
 export const paymentMethodTypeEnum = pgEnum("payment_method_type", ["bank_transfer", "e_wallet", "crypto", "card"]);
-export const auditActionEnum = pgEnum("audit_action", ["login", "logout", "deposit", "withdrawal", "bet", "win", "complaint", "settings_change", "user_update", "game_update"]);
+export const auditActionEnum = pgEnum("audit_action", ["login", "logout", "deposit", "withdrawal", "stake", "win", "complaint", "settings_change", "user_update", "game_update"]);
 
 // ==================== USERS ====================
 

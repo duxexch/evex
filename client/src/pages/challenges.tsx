@@ -254,11 +254,11 @@ export default function ChallengesPage() {
     }
   });
 
-  const placeBetMutation = useMutation({
-    mutationFn: (data: { challengeId: string; backedPlayerId: string; betAmount: number }) =>
-      apiRequest(`/api/challenges/${data.challengeId}/bet`, { method: 'POST', body: JSON.stringify(data) }),
+  const placeStakeMutation = useMutation({
+    mutationFn: (data: { challengeId: string; backedPlayerId: string; stakeAmount: number }) =>
+      apiRequest(`/api/challenges/${data.challengeId}/stake`, { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
-      toast({ title: t('common.success'), description: t('challenges.betPlaced') });
+      toast({ title: t('common.success'), description: t('challenges.stakePlaced') });
       setSpectatorBetAmount("");
       setSelectedPlayer(null);
     },
@@ -324,10 +324,10 @@ export default function ChallengesPage() {
 
   const handlePlaceBet = () => {
     if (!spectatingChallenge || !selectedPlayer || !spectatorBetAmount) return;
-    placeBetMutation.mutate({
+    placeStakeMutation.mutate({
       challengeId: spectatingChallenge.id,
       backedPlayerId: selectedPlayer,
-      betAmount: parseFloat(spectatorBetAmount),
+      stakeAmount: parseFloat(spectatorBetAmount),
     });
   };
 
@@ -803,7 +803,7 @@ export default function ChallengesPage() {
             </div>
 
             <div>
-              <Label>{t('challenges.betAmount')}</Label>
+              <Label>{t('challenges.stakeAmount')}</Label>
               <div className="relative mt-2">
                 <Coins className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -812,7 +812,7 @@ export default function ChallengesPage() {
                   onChange={(e) => setBetAmount(e.target.value)}
                   placeholder="10.00"
                   className="ps-10"
-                  data-testid="input-bet-amount"
+                  data-testid="input-stake-amount"
                 />
               </div>
             </div>
@@ -950,14 +950,14 @@ export default function ChallengesPage() {
                   <Button
                     variant={selectedPlayer === spectatingChallenge.player1Id ? "default" : "outline"}
                     onClick={() => setSelectedPlayer(spectatingChallenge.player1Id)}
-                    data-testid="button-bet-player1"
+                    data-testid="button-stake-player1"
                   >
                     {spectatingChallenge.player1Name}
                   </Button>
                   <Button
                     variant={selectedPlayer === spectatingChallenge.player2Id ? "default" : "outline"}
                     onClick={() => setSelectedPlayer(spectatingChallenge.player2Id || '')}
-                    data-testid="button-bet-player2"
+                    data-testid="button-stake-player2"
                   >
                     {spectatingChallenge.player2Name}
                   </Button>

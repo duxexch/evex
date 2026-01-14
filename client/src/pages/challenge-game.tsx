@@ -436,8 +436,8 @@ export default function ChallengeGamePage() {
           </DialogHeader>
           <p className="text-muted-foreground">
             {language === "ar" 
-              ? "هل أنت متأكد من الاستسلام؟ ستخسر المباراة والرهان."
-              : "Are you sure you want to resign? You will lose the match and your bet."}
+              ? "هل أنت متأكد من الاستسلام؟ ستخسر المباراة والتحدي."
+              : "Are you sure you want to resign? You will lose the match and your stake."}
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowResignDialog(false)}>

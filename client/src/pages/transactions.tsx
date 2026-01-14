@@ -131,7 +131,7 @@ export default function TransactionsPage() {
         return <ArrowDownCircle className="w-5 h-5 text-primary" />;
       case "withdrawal":
         return <ArrowUpCircle className="w-5 h-5 text-destructive" />;
-      case "bet":
+      case "stake":
         return <Wallet className="w-5 h-5 text-muted-foreground" />;
       case "win":
         return <CheckCircle className="w-5 h-5 text-primary" />;

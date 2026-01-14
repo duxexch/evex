@@ -683,7 +683,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Create audit log
       await storage.createAuditLog({
         userId,
-        action: isWin ? "win" : "bet",
+        action: isWin ? "win" : "stake",
         entityType: "game_session",
         entityId: session.id,
         details: JSON.stringify({ betAmount: bet, winAmount, multiplier }),
@@ -2650,31 +2650,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/challenges/:id/bet", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/challenges/:id/stake", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { backedPlayerId, betAmount } = req.body;
-      const bet = {
-        id: `bet-${Date.now()}`,
+      const { backedPlayerId, stakeAmount } = req.body;
+      const stake = {
+        id: `stake-${Date.now()}`,
         challengeId: req.params.id,
         spectatorId: req.user!.id,
         spectatorName: req.user!.username,
         backedPlayerId,
-        betAmount,
-        potentialWinnings: betAmount * 1.9,
+        stakeAmount,
+        potentialWinnings: stakeAmount * 1.9,
         status: 'pending',
         createdAt: new Date().toISOString(),
       };
-      spectatorBets.push(bet);
-      res.json(bet);
+      spectatorBets.push(stake);
+      res.json(stake);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/challenges/:id/bets", authMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/challenges/:id/stakes", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const bets = spectatorBets.filter(b => b.challengeId === req.params.id);
-      res.json(bets);
+      const stakes = spectatorBets.filter(b => b.challengeId === req.params.id);
+      res.json(stakes);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

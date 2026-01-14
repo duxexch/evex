@@ -96,7 +96,7 @@ export default function WalletPage() {
     switch (type) {
       case 'deposit': return <ArrowDownToLine className="h-4 w-4 text-green-500" />;
       case 'withdrawal': return <ArrowUpFromLine className="h-4 w-4 text-red-500" />;
-      case 'bet': return <TrendingDown className="h-4 w-4 text-orange-500" />;
+      case 'stake': return <TrendingDown className="h-4 w-4 text-orange-500" />;
       case 'win': return <TrendingUp className="h-4 w-4 text-green-500" />;
       default: return <History className="h-4 w-4 text-muted-foreground" />;
     }
