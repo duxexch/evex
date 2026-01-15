@@ -1,0 +1,52 @@
+vix@srv1118737:/var/www/vixo$ pm2 logs vex --lines 30 --nostream
+[TAILING] Tailing last 30 lines for [vex] process (change the value with --lines option)
+/home/vix/.pm2/logs/vex-out.log last 30 lines:
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+0|vex      | 
+0|vex      | > rest-express@1.0.0 start
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+0|vex      | 
+0|vex      | > rest-express@1.0.0 start
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+0|vex      | 
+0|vex      | > rest-express@1.0.0 start
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+0|vex      | 
+0|vex      | > rest-express@1.0.0 start
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+0|vex      | 
+0|vex      | > rest-express@1.0.0 start
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+0|vex      | 
+0|vex      | > rest-express@1.0.0 start
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+0|vex      | 
+0|vex      | > rest-express@1.0.0 start
+0|vex      | > NODE_ENV=production node dist/index.cjs
+0|vex      | 
+
+/home/vix/.pm2/logs/vex-error.log last 30 lines:
+0|vex      | t.mock=e})(qd||(qd={}))});var uP=B(()=>{cP();s0()});var eQ,lP,tQ,ki,v,Nc=B(()=>{"use strict";uP();jd();Pn();({Pool:eQ}=Ni);if(!process.env.DATABASE_URL)throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");lP=!0,tQ={connectionString:process.env.DATABASE_URL,max:parseInt(process.env.DB_POOL_MAX||"50",10),min:parseInt(process.env.DB_POOL_MIN||"5",10),idleTimeoutMillis:3e4,connectionTimeoutMillis:5e3,allowExitOnIdle:!1,statement_timeout:3e4,query_timeout:3e4,ssl:lP?{rejectUnauthorized:process.env.DB_SSL_REJECT_UNAUTHORIZED!=="false"}:void 0},ki=new eQ(tQ);ki.on("error",t=>{console.error("[DB POOL ERROR]",t.message)});ki.on("connect",()=>{lP||console.log("[DB] New client connected to pool")});v=qd(ki,{schema:ws})});var u0=A((mme,dP)=>{var Dd=Bn().Buffer,rQ=require("stream"),nQ=require("util");function Bd(t){if(this.buffer=null,this.writable=!0,this.readable=!0,!t)return this.buffer=Dd.alloc(0),this;if(typeof t.pipe=="function")return this.buffer=Dd.alloc(0),t.pipe(this),this;if(t.length||typeof t=="object")return this.buffer=t,this.writable=!1,process.nextTick(function(){this.emit("end",t),this.readable=!1,this.emit("close")}.bind(this)),this;throw new TypeError("Unexpected data type ("+typeof t+")")}nQ.inherits(Bd,rQ);Bd.prototype.write=function(e){this.buffer=Dd.concat([this.buffer,Dd.from(e)]),this.emit("data",e)};Bd.prototype.end=function(e){e&&this.write(e),this.emit("end",e),this.emit("close"),this.writable=!1,this.readable=!1};dP.exports=Bd});var fP=A((hme,pP)=>{"use strict";function l0(t){var e=(t/8|0)+(t%8===0?0:1);return e}var iQ={ES256:l0(256),ES384:l0(384),ES512:l0(521)};function sQ(t){var e=iQ[t];if(e)return e;throw new Error('Unknown algorithm "'+t+'"')}pP.exports=sQ});var bP=A((gme,xP)=>{"use strict";var Ld=Bn().Buffer,hP=fP(),Md=128,gP=0,aQ=32,oQ=16,cQ=2,yP=oQ|aQ|gP<<6,$d=cQ|gP<<6;function uQ(t){return t.replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_")}function vP(t){if(Ld.isBuffer(t))return t;if(typeof t=="string")return Ld.from(t,"base64");throw new TypeError("ECDSA signature must be a Base64 string or a Buffer")}function lQ(t,e){t=vP(t);var r=hP(e),n=r+1,i=t.length,s=0;if(t[s++]!==yP)throw new Error('Could not find expected "seq"');var a=t[s++];if(a===(Md|1)&&(a=t[s++]),i-s<a)throw new Error('"seq" specified length of "'+a+'", only "'+(i-s)+'" remaining');if(t[s++]!==$d)throw new Error('Could not find expected "int" for "r"');var o=t[s++];if(i-s-2<o)throw new Error('"r" specified length of "'+o+'", only "'+(i-s-2)+'" available');if(n<o)throw new Error('"r" specified length of "'+o+'", max of "'+n+'" is acceptable');var u=s;if(s+=o,t[s++]!==$d)throw new Error('Could not find expected "int" for "s"');var c=t[s++];if(i-s!==c)throw new Error('"s" specified length of "'+c+'", expected "'+(i-s)+'"');if(n<c)throw new Error('"s" specified length of "'+c+'", max of "'+n+'" is acceptable');var d=s;if(s+=c,s!==i)throw new Error('Expected to consume entire buffer, but "'+(i-s)+'" bytes remain');var f=r-o,h=r-c,g=Ld.allocUnsafe(f+o+h+c);for(s=0;s<f;++s)g[s]=0;t.copy(g,s,u+Math.max(-f,0),u+o),s=r;for(var E=s;s<E+h;++s)g[s]=0;return t.copy(g,s,d+Math.max(-h,0),d+c),g=g.toString("base64"),g=uQ(g),g}function mP(t,e,r){for(var n=0;e+n<r&&t[e+n]===0;)++n;var i=t[e+n]>=Md;return i&&--n,n}function dQ(t,e){t=vP(t);var r=hP(e),n=t.length;if(n!==r*2)throw new TypeError('"'+e+'" signatures must be "'+r*2+'" bytes, saw "'+n+'"');var i=mP(t,0,r),s=mP(t,r,t.length),a=r-i,o=r-s,u=2+a+1+1+o,c=u<Md,d=Ld.allocUnsafe((c?2:3)+u),f=0;return d[f++]=yP,c?d[f++]=u:(d[f++]=Md|1,d[f++]=u&255),d[f++]=$d,d[f++]=a,i<0?(d[f++]=0,f+=t.copy(d,f,0,r)):f+=t.copy(d,f,i,r),d[f++]=$d,d[f++]=o,s<0?(d[f++]=0,t.copy(d,f,r)):t.copy(d,f,r+s),d}xP.exports={derToJose:lQ,joseToDer:dQ}});var _P=A((yme,wP)=>{"use strict";var kc=require("buffer").Buffer,d0=require("buffer").SlowBuffer;wP.exports=Ud;function Ud(t,e){if(!kc.isBuffer(t)||!kc.isBuffer(e)||t.length!==e.length)return!1;for(var r=0,n=0;n<t.length;n++)r|=t[n]^e[n];return r===0}Ud.install=function(){kc.prototype.equal=d0.prototype.equal=function(e){return Ud(this,e)}};var pQ=kc.prototype.equal,fQ=d0.prototype.equal;Ud.restore=function(){kc.prototype.equal=pQ,d0.prototype.equal=fQ}});var h0=A((vme,CP)=>{var Ba=Bn().Buffer,Ur=require("crypto"),AP=bP(),SP=require("util"),mQ=`"%s" is not a valid algorithm.
+0|vex      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+0|vex      | 
+0|vex      | Error: DATABASE_URL must be set. Did you forget to provision a database?
+0|vex      |     at /var/www/vixo/dist/index.cjs:70:31571
+0|vex      |     at /var/www/vixo/dist/index.cjs:1:225
+0|vex      |     at Object.<anonymous> (/var/www/vixo/dist/index.cjs:80:53611)
+0|vex      |     at Module._compile (node:internal/modules/cjs/loader:1521:14)
+0|vex      |     at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+0|vex      |     at Module.load (node:internal/modules/cjs/loader:1266:32)
+0|vex      |     at Module._load (node:internal/modules/cjs/loader:1091:12)
+0|vex      |     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+0|vex      |     at node:internal/main/run_main_module:28:49
+0|vex      | 
+0|vex      | Node.js v20.20.0
+
+vix@srv1118737:/var/www/vixo$ 
