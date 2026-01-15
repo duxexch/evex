@@ -1,6 +1,8 @@
-// Game Engines Index - Export all game engines
+// Game Engines Index - Export all game engines with namespaces to avoid conflicts
 
-export * from './chess-engine';
-export * from './domino-engine';
-export * from './backgammon-engine';
-export * from './card-game-engine';
+import * as ChessEngine from './chess-engine';
+import * as DominoEngine from './domino-engine';
+import * as BackgammonEngine from './backgammon-engine';
+import * as CardGameEngine from './card-game-engine';
+
+export { ChessEngine, DominoEngine, BackgammonEngine, CardGameEngine };

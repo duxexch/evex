@@ -1155,7 +1155,7 @@ function HorizontalGameScroll({ games, onSelectGame }: {
   }, []);
 
   const isHotGame = (game: Game) => {
-    return game.totalBets && game.totalBets > 100;
+    return (game as any).totalBets && (game as any).totalBets > 100;
   };
 
   const isNewGame = (game: Game) => {
@@ -1272,12 +1272,12 @@ function AnnouncementsBanner() {
   const sortedAnnouncements = [...announcements].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
-    return (b.priority || 0) - (a.priority || 0);
+    return (Number(b.priority) || 0) - (Number(a.priority) || 0);
   });
 
-  const handleMarkAsViewed = (id: number, e: React.MouseEvent) => {
+  const handleMarkAsViewed = (id: string | number, e: React.MouseEvent) => {
     e.stopPropagation();
-    markAsViewedMutation.mutate(id);
+    markAsViewedMutation.mutate(Number(id));
   };
 
   return (
@@ -1662,10 +1662,10 @@ export default function PlayPage() {
   });
 
   const playMutation = useMutation({
-    mutationFn: async ({ gameId, amount, extra }: { gameId: number; amount: string; extra?: any }) => {
+    mutationFn: async ({ gameId, amount, extra }: { gameId: string; amount: string; extra?: any }) => {
       return apiRequest('POST', '/api/games/play', { gameId, amount, ...extra });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       setLastResult(data);
       queryClient.invalidateQueries({ queryKey: ['/api/user'] });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
@@ -1691,7 +1691,7 @@ export default function PlayPage() {
 
   const handlePlay = (extra?: any) => {
     if (!selectedGame) return;
-    playMutation.mutate({ gameId: selectedGame.id, amount: betAmount, extra });
+    playMutation.mutate({ gameId: String(selectedGame.id), amount: betAmount, extra });
   };
 
   const handleMaxBet = () => {

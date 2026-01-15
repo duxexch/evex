@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind } from 'lucide-react';
-import { useTranslation } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 
 interface ReplayEvent {
   id: string;
@@ -44,7 +44,7 @@ export function ReplayPlayerComponent({
   onEventReached,
   renderGameState
 }: ReplayPlayerProps) {
-  const { t } = useTranslation();
+  const { t } = useI18n();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);

@@ -152,7 +152,7 @@ function ProfileSection() {
         <div className="flex flex-col items-center gap-4 mb-6">
           <div className="relative">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={user?.profilePicture} alt={user?.firstName || "Profile"} />
+              <AvatarImage src={user?.profilePicture || undefined} alt={user?.firstName || "Profile"} />
               <AvatarFallback className="text-2xl bg-primary/10">{getUserInitials()}</AvatarFallback>
             </Avatar>
             <input

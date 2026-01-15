@@ -1986,8 +1986,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         type: "deposit",
         amount: amount.toString(),
         status: "completed",
-        method: "p2p_buy",
-        reference: trade.id,
+        referenceId: trade.id,
+        description: "P2P buy",
+        balanceBefore: buyer.balance,
+        balanceAfter: newBuyerBalance.toFixed(2),
       });
       
       await storage.createTransaction({
@@ -1995,8 +1997,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         type: "withdrawal",
         amount: amount.toString(),
         status: "completed",
-        method: "p2p_sell",
-        reference: trade.id,
+        referenceId: trade.id,
+        description: "P2P sell",
+        balanceBefore: seller.balance,
+        balanceAfter: newSellerBalance.toFixed(2),
       });
       
       // Broadcast balance updates via WebSocket
@@ -4009,7 +4013,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         avatarUrl: users.avatarUrl,
       }).from(users).where(eq(users.id, userId));
 
-      const responseMessage = { ...newMessage, sender };
+      const responseMessage: Record<string, any> = { ...newMessage, sender };
 
       // If emoji, include emoji details
       if (isEmoji && emojiId) {
@@ -4267,7 +4271,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           isRead: false,
         });
         sendNotification(admin.id, {
-          type: 'id_verification_request',
+          type: 'system',
           title: 'New ID Verification Request',
           message: `User ${req.user!.username} has submitted ID verification documents`,
         });
@@ -4363,7 +4367,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       
       sendNotification(userId, {
-        type: 'id_verification_result',
+        type: 'system',
         title: notificationTitle,
         message: notificationMessage,
       });

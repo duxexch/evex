@@ -12,7 +12,7 @@ import {
   Play, Eye, Clock, Trophy, Star, Search, 
   ChevronRight, Film, Users, Calendar 
 } from 'lucide-react';
-import { useTranslation } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 import { BackButton } from '@/components/BackButton';
 
 interface ReplayPlayer {
@@ -43,7 +43,7 @@ interface Replay {
 }
 
 function ReplayCard({ replay }: { replay: Replay }) {
-  const { t } = useTranslation();
+  const { t } = useI18n();
   const [, navigate] = useLocation();
 
   const formatDuration = (ms: number) => {
@@ -155,7 +155,7 @@ function ReplayListSkeleton() {
 }
 
 export default function ReplaysPage() {
-  const { t } = useTranslation();
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('featured');
 

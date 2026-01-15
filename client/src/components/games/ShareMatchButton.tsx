@@ -144,7 +144,7 @@ export function ShareMatchButton({
             </DropdownMenuItem>
           ))}
 
-          {navigator.share && (
+          {typeof navigator !== 'undefined' && navigator.share !== undefined && (
             <DropdownMenuItem onClick={handleNativeShare} data-testid="share-more">
               <Send className="h-4 w-4 me-2" />
               {language === "ar" ? "المزيد..." : "More..."}

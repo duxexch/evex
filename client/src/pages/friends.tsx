@@ -41,7 +41,7 @@ function UserCard({
   t: (key: string) => string;
 }) {
   const initials = (user.username || "U").slice(0, 2).toUpperCase();
-  const level = user.level || 1;
+  const level = user.vipLevel || 1;
 
   return (
     <div
@@ -50,7 +50,7 @@ function UserCard({
     >
       <div className="flex items-center gap-3 min-w-0">
         <Avatar data-testid={`avatar-user-${user.id}`}>
-          <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
+          <AvatarImage src={user.profilePicture || undefined} alt={user.username} />
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
@@ -61,11 +61,11 @@ function UserCard({
             >
               {user.username}
             </span>
-            <Badge variant="secondary" size="sm" data-testid={`badge-level-${user.id}`}>
+            <Badge variant="secondary" data-testid={`badge-level-${user.id}`}>
               {t("friends.level")} {level}
             </Badge>
             {actionType === "friend" && (
-              <Badge variant="default" size="sm" data-testid={`badge-mutual-${user.id}`}>
+              <Badge variant="default" data-testid={`badge-mutual-${user.id}`}>
                 <CheckCircle className="w-3 h-3 me-1" />
                 {t("friends.mutualFriend")}
               </Badge>
@@ -272,7 +272,7 @@ export default function FriendsPage() {
 
   const followMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return apiRequest(`/api/users/follow/${userId}`, { method: "POST" });
+      return apiRequest("POST", `/api/users/follow/${userId}`);
     },
     onSuccess: () => {
       toast({ title: t("friends.followSuccess") });
@@ -291,7 +291,7 @@ export default function FriendsPage() {
 
   const unfollowMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return apiRequest(`/api/users/unfollow/${userId}`, { method: "DELETE" });
+      return apiRequest("DELETE", `/api/users/unfollow/${userId}`);
     },
     onSuccess: () => {
       toast({ title: t("friends.unfollowSuccess") });
@@ -310,7 +310,7 @@ export default function FriendsPage() {
 
   const unblockMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return apiRequest(`/api/users/unblock/${userId}`, { method: "DELETE" });
+      return apiRequest("DELETE", `/api/users/unblock/${userId}`);
     },
     onSuccess: () => {
       toast({ title: t("friends.unblockSuccess") });
@@ -396,7 +396,7 @@ export default function FriendsPage() {
                 <Users className="w-5 h-5" />
                 {t("friends.friends")}
                 {friends.length > 0 && (
-                  <Badge variant="secondary" size="sm">
+                  <Badge variant="secondary">
                     {friends.length}
                   </Badge>
                 )}
@@ -436,7 +436,7 @@ export default function FriendsPage() {
                 <UserPlus className="w-5 h-5" />
                 {t("friends.following")}
                 {following.length > 0 && (
-                  <Badge variant="secondary" size="sm">
+                  <Badge variant="secondary">
                     {following.length}
                   </Badge>
                 )}
@@ -476,7 +476,7 @@ export default function FriendsPage() {
                 <Users className="w-5 h-5" />
                 {t("friends.followers")}
                 {followers.length > 0 && (
-                  <Badge variant="secondary" size="sm">
+                  <Badge variant="secondary">
                     {followers.length}
                   </Badge>
                 )}
@@ -518,7 +518,7 @@ export default function FriendsPage() {
                 <Ban className="w-5 h-5" />
                 {t("friends.blocked")}
                 {blocked.length > 0 && (
-                  <Badge variant="secondary" size="sm">
+                  <Badge variant="secondary">
                     {blocked.length}
                   </Badge>
                 )}

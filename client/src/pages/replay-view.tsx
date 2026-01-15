@@ -10,7 +10,7 @@ import {
   Share2, Eye, Clock, Trophy, Star, Download, 
   Film, Calendar, Lock, Globe, Trash2, ArrowLeft 
 } from 'lucide-react';
-import { useTranslation } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 import { ReplayPlayerComponent } from '@/components/games/ReplayPlayer';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -56,7 +56,7 @@ interface ReplayData {
 }
 
 export default function ReplayViewPage() {
-  const { t } = useTranslation();
+  const { t } = useI18n();
   const { id } = useParams();
   const [, navigate] = useLocation();
   const { toast } = useToast();

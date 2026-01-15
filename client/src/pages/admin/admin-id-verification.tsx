@@ -49,10 +49,7 @@ export default function AdminIdVerificationPage() {
 
   const reviewMutation = useMutation({
     mutationFn: ({ userId, action, reason }: { userId: string; action: string; reason?: string }) =>
-      apiRequest(`/api/admin/id-verifications/${userId}/review`, {
-        method: 'POST',
-        body: JSON.stringify({ action, reason })
-      }),
+      apiRequest('POST', `/api/admin/id-verifications/${userId}/review`, { action, reason }),
     onSuccess: () => {
       toast({
         title: isArabic ? 'تم التحديث' : 'Updated',
