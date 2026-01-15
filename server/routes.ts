@@ -20,6 +20,12 @@ import crypto from "crypto";
 import { setupWebSocket, sendNotification } from "./websocket";
 import { db, pool } from "./db";
 import { eq, desc, and, or, sql } from "drizzle-orm";
+import {
+  loginSchema, loginByAccountSchema, loginByPhoneSchema, registerSchema,
+  forgotPasswordSchema, resetPasswordSchema, depositSchema, withdrawSchema,
+  p2pOfferSchema, p2pTradeInitiateSchema, p2pTradeActionSchema, p2pDisputeSchema,
+  p2pMessageSchema, p2pEvidenceSchema, p2pResolveSchema, p2pDisputeMessageSchema, validateBody
+} from "./validators";
 
 // Security: JWT_SECRET must be set in production
 const JWT_SECRET = process.env.SESSION_SECRET;
@@ -266,7 +272,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/auth/register", registrationRateLimiter, async (req: Request, res: Response) => {
     try {
-      const { username, password, email, firstName, lastName, referralCode } = req.body;
+      const validated = validateBody(registerSchema, req.body, res);
+      if (!validated) return;
+      
+      const { username, password, email, firstName, lastName, referralCode } = validated;
       
       const existing = await storage.getUserByUsername(username);
       if (existing) {
@@ -316,7 +325,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/auth/login", authRateLimiter, async (req: Request, res: Response) => {
     try {
-      const { username, password } = req.body;
+      const validated = validateBody(loginSchema, req.body, res);
+      if (!validated) return;
+      
+      const { username, password } = validated;
       
       const user = await storage.getUserByUsername(username);
       if (!user) {
@@ -380,7 +392,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Login by account ID (one-click generated users)
   app.post("/api/auth/login-by-account", authRateLimiter, async (req: Request, res: Response) => {
     try {
-      const { accountId, password } = req.body;
+      const validated = validateBody(loginByAccountSchema, req.body, res);
+      if (!validated) return;
+      
+      const { accountId, password } = validated;
       
       const user = await storage.getUserByAccountId(accountId);
       if (!user) {
@@ -418,7 +433,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Login by phone number
   app.post("/api/auth/login-by-phone", authRateLimiter, async (req: Request, res: Response) => {
     try {
-      const { phone, password } = req.body;
+      const validated = validateBody(loginByPhoneSchema, req.body, res);
+      if (!validated) return;
+      
+      const { phone, password } = validated;
       
       const user = await storage.getUserByPhone(phone);
       if (!user) {
@@ -456,7 +474,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Request password reset
   app.post("/api/auth/forgot-password", strictRateLimiter, async (req: Request, res: Response) => {
     try {
-      const { email, phone, accountId } = req.body;
+      const validated = validateBody(forgotPasswordSchema, req.body, res);
+      if (!validated) return;
+      
+      const { email, phone, accountId } = validated;
       
       let user;
       if (email) {
@@ -493,7 +514,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Reset password with token
   app.post("/api/auth/reset-password", strictRateLimiter, async (req: Request, res: Response) => {
     try {
-      const { token, newPassword } = req.body;
+      const validated = validateBody(resetPasswordSchema, req.body, res);
+      if (!validated) return;
+      
+      const { token, password: newPassword } = validated;
       
       const resetToken = await storage.getPasswordResetToken(token);
       if (!resetToken) {
@@ -819,21 +843,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/transactions/deposit", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { amount, paymentMethod, paymentReference, walletNumber } = req.body;
+      const validated = validateBody(depositSchema, req.body, res);
+      if (!validated) return;
+      
+      const { amount, paymentMethod, paymentReference, walletNumber } = validated;
       const user = await storage.getUser(req.user!.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
       
-      if (!amount || parseFloat(amount) <= 0) {
-        return res.status(400).json({ error: "Invalid amount" });
-      }
-      
-      if (!paymentReference) {
-        return res.status(400).json({ error: "Payment reference is required" });
-      }
-      
-      const totalAmount = parseFloat(amount);
+      const totalAmount = amount;
       
       const transaction = await storage.createTransaction({
         userId: user.id,
@@ -862,13 +881,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/transactions/withdraw", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
     try {
-      const { amount } = req.body;
+      const validated = validateBody(withdrawSchema, req.body, res);
+      if (!validated) return;
+      
+      const { amount } = validated;
       const user = await storage.getUser(req.user!.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
       
-      if (parseFloat(amount) > parseFloat(user.balance)) {
+      if (amount > parseFloat(user.balance)) {
         return res.status(400).json({ error: "Insufficient balance" });
       }
       
@@ -876,9 +898,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         userId: user.id,
         type: "withdrawal",
         status: "pending",
-        amount: amount,
+        amount: amount.toFixed(2),
         balanceBefore: user.balance,
-        balanceAfter: (parseFloat(user.balance) - parseFloat(amount)).toFixed(2),
+        balanceAfter: (parseFloat(user.balance) - amount).toFixed(2),
         description: "Withdrawal request",
       });
       
@@ -1779,7 +1801,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/offers - Create new offer
   app.post("/api/p2p/offers", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { type, amount, price, currency, minLimit, maxLimit, paymentMethods } = req.body;
+      const validated = validateBody(p2pOfferSchema, req.body, res);
+      if (!validated) return;
+      
+      const { type, amount, price, currency, minLimit, maxLimit, paymentMethods } = validated;
       const user = await storage.getUser(req.user!.id);
       
       const newOffer = {
@@ -1879,7 +1904,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/trades/initiate - Initiate a trade from an offer
   app.post("/api/p2p/trades/initiate", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
     try {
-      const { offerId, amount } = req.body;
+      const validated = validateBody(p2pTradeInitiateSchema, req.body, res);
+      if (!validated) return;
+      
+      const { offerId, amount } = validated;
       
       // Find the offer
       const offer = [...mockP2POffers, ...userP2POffers].find(o => o.id === offerId);
@@ -1893,7 +1921,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       const user = await storage.getUser(req.user!.id);
-      const tradeAmount = parseFloat(amount);
+      const tradeAmount = amount;
       
       // Check balance for buyers
       if (offer.type === "sell") {
@@ -1909,7 +1937,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         offerId,
         buyerId: offer.type === "sell" ? req.user!.id : offer.userId,
         sellerId: offer.type === "sell" ? offer.userId : req.user!.id,
-        amount: `${amount} ${offer.currency}`,
+        amount: `${tradeAmount} ${offer.currency}`,
         price: offer.price,
         totalPrice: (tradeAmount * parseFloat(offer.price)).toFixed(2),
         status: "pending",
@@ -1931,6 +1959,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/trades/:id/complete - Complete a trade (updates balances instantly)
   app.post("/api/p2p/trades/:id/complete", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
     try {
+      const validated = validateBody(p2pTradeActionSchema, req.body || {}, res);
+      if (!validated) return;
+      
       const trade = userP2PTrades.find(t => t.id === req.params.id);
       if (!trade) {
         return res.status(404).json({ error: "Trade not found" });
@@ -2025,6 +2056,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/trades/:id/cancel - Cancel a pending trade
   app.post("/api/p2p/trades/:id/cancel", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+      const validated = validateBody(p2pTradeActionSchema, req.body || {}, res);
+      if (!validated) return;
+      
       const trade = userP2PTrades.find(t => t.id === req.params.id);
       if (!trade) {
         return res.status(404).json({ error: "Trade not found" });
@@ -2130,7 +2164,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes - Open a new dispute
   app.post("/api/p2p/disputes", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { tradeId, reason, description } = req.body;
+      const validated = validateBody(p2pDisputeSchema, req.body, res);
+      if (!validated) return;
+      
+      const { tradeId, reason, description } = validated;
       
       const dispute = {
         id: `dispute-${Date.now()}`,
@@ -2204,7 +2241,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes/:id/messages - Send message in dispute
   app.post("/api/p2p/disputes/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { message, isPrewritten, prewrittenTemplateId } = req.body;
+      const validated = validateBody(p2pDisputeMessageSchema, req.body, res);
+      if (!validated) return;
+      
+      const { message, isPrewritten, prewrittenTemplateId } = validated;
       
       const newMessage = {
         id: `msg-${Date.now()}`,
@@ -2241,7 +2281,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes/:id/evidence - Upload evidence
   app.post("/api/p2p/disputes/:id/evidence", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { fileName, fileUrl, fileType, fileSize, description, evidenceType } = req.body;
+      const validated = validateBody(p2pEvidenceSchema, req.body, res);
+      if (!validated) return;
+      
+      const { fileName, fileUrl, fileType, fileSize, description, evidenceType } = validated;
       
       const evidence = {
         id: `evidence-${Date.now()}`,
@@ -2281,7 +2324,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes/:id/resolve - Resolve dispute (consensus)
   app.post("/api/p2p/disputes/:id/resolve", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { resolution, action } = req.body;
+      const validated = validateBody(p2pResolveSchema, req.body, res);
+      if (!validated) return;
+      
+      const { resolution, action } = validated;
       
       const dispute = p2pDisputes.find(d => d.id === req.params.id);
       if (dispute) {
