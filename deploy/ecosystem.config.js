@@ -58,9 +58,9 @@ module.exports = {
   deploy: {
     production: {
       user: "vex",
-      host: ["YOUR_HOSTINGER_VPS_IP"], // Replace with your VPS IP
+      host: ["vixo.click"], // Hostinger VPS
       ref: "origin/main",
-      repo: "git@github.com:yourusername/vex-platform.git",
+      repo: "git@github.com:vex-platform/vex.git",
       path: "/var/www/vex",
       "pre-deploy-local": "echo 'Starting deployment...'",
       "post-deploy": 
@@ -80,7 +80,7 @@ module.exports = {
       user: "vex",
       host: ["YOUR_STAGING_VPS_IP"],
       ref: "origin/develop",
-      repo: "git@github.com:yourusername/vex-platform.git",
+      repo: "git@github.com:vex-platform/vex.git",
       path: "/var/www/vex-staging",
       "post-deploy": "npm ci && npm run build && pm2 reload ecosystem.config.js --env staging",
       env: {
