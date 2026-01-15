@@ -164,7 +164,21 @@ print_success "Dependencies updated"
 print_header "Building Project / بناء المشروع"
 print_info "Compiling TypeScript and bundling assets..."
 npm run build || error_exit "Build failed"
-print_success "Build completed"
+
+# Verify build output exists
+if [ ! -f "dist/index.cjs" ]; then
+    error_exit "Build verification failed: dist/index.cjs not found"
+fi
+print_success "Build completed and verified"
+
+# Load environment variables (CRITICAL for database and PM2)
+print_info "Loading environment variables..."
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+    print_success "Environment variables loaded"
+else
+    error_exit ".env file not found"
+fi
 
 # Run database migrations
 print_header "Database Migrations / ترحيلات قاعدة البيانات"
@@ -172,9 +186,14 @@ print_info "Applying any new database changes..."
 npm run db:push 2>/dev/null || print_warning "Database migration skipped or failed"
 print_success "Database migrations applied"
 
+# Run admin seed (idempotent - won't recreate if exists)
+print_info "Checking admin user..."
+bash scripts/seed-admin.sh 2>/dev/null || print_warning "Admin check skipped"
+
 # Start application
 print_header "Starting Application / تشغيل التطبيق"
-pm2 restart vex 2>/dev/null || pm2 start npm --name "vex" -- start
+pm2 delete vex 2>/dev/null || true
+pm2 start "node dist/index.cjs" --name "vex" --update-env 2>/dev/null || pm2 restart vex 2>/dev/null || pm2 start "node dist/index.cjs" --name "vex"
 pm2 save 2>/dev/null || true
 
 # Wait for startup

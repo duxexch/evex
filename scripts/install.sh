@@ -340,13 +340,18 @@ setup_project() {
 NODE_ENV=production
 PORT=5000
 
-# Database
-DATABASE_URL=postgresql://vex_user:${DB_PASSWORD}@localhost:5432/vex_db
+# Database (sslmode=disable for local PostgreSQL)
+DATABASE_URL=postgresql://vex_user:${DB_PASSWORD}@localhost:5432/vex_db?sslmode=disable
 PGHOST=localhost
 PGPORT=5432
 PGUSER=vex_user
 PGPASSWORD=${DB_PASSWORD}
 PGDATABASE=vex_db
+
+# Admin credentials (change after first login!)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
+ADMIN_EMAIL=admin@${DOMAIN_NAME}
 
 # Security
 SESSION_SECRET=${SESSION_SECRET}
@@ -374,9 +379,20 @@ EOF
     print_info "Building project..."
     npm run build || error_exit "Failed to build project"
     
+    # Verify build output exists
+    if [ ! -f "dist/index.cjs" ]; then
+        error_exit "Build verification failed: dist/index.cjs not found"
+    fi
+    print_success "Build verified: dist/index.cjs exists"
+    
     # Run database migrations
     print_info "Running database migrations..."
     npm run db:push || error_exit "Failed to run database migrations"
+    
+    # Create admin user
+    print_info "Creating admin user..."
+    export $(cat .env | grep -v '^#' | xargs)
+    bash scripts/seed-admin.sh || print_warning "Admin user creation skipped (may already exist)"
     
     print_success "Project setup complete"
 }
@@ -522,42 +538,34 @@ start_application() {
     
     cd /var/www/vex
     
+    # Load environment variables (CRITICAL: PM2 needs these!)
+    print_info "Loading environment variables..."
+    if [ -f .env ]; then
+        export $(cat .env | grep -v '^#' | xargs)
+        print_success "Environment variables loaded"
+    else
+        error_exit ".env file not found"
+    fi
+    
+    # Verify build file exists
+    if [ ! -f "dist/index.cjs" ]; then
+        error_exit "Build file dist/index.cjs not found. Run: npm run build"
+    fi
+    
     # Stop existing if running
     pm2 delete vex 2>/dev/null || true
     pm2 delete all 2>/dev/null || true
     
-    # Create PM2 ecosystem file
-    cat > ecosystem.config.js <<EOF
-module.exports = {
-  apps: [{
-    name: 'vex',
-    script: 'dist/server/index.js',
-    instances: 'max',
-    exec_mode: 'cluster',
-    autorestart: true,
-    watch: false,
-    max_memory_restart: '1G',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 5000
-    },
-    error_file: '/var/log/vex/error.log',
-    out_file: '/var/log/vex/out.log',
-    merge_logs: true,
-    time: true
-  }]
-}
-EOF
-    
     # Create log directory
     mkdir -p /var/log/vex
     
-    # Start with PM2
-    pm2 start ecosystem.config.js || pm2 start npm --name "vex" -- start
+    # Start with PM2 (using correct file path)
+    print_info "Starting application with PM2..."
+    pm2 start "node dist/index.cjs" --name "vex" --max-memory-restart 1G || error_exit "Failed to start application"
     
     # Save and setup startup
-    pm2 save
-    pm2 startup systemd -u root --hp /root 2>/dev/null || pm2 startup
+    pm2 save || print_warning "pm2 save failed"
+    pm2 startup systemd -u root --hp /root 2>/dev/null || pm2 startup 2>/dev/null || true
     
     # Wait for application to start
     sleep 5

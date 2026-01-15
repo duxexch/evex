@@ -6,6 +6,49 @@ This file explains the order of running scripts and the function of each one.
 
 ---
 
+## ⚠️ تحذيرات مهمة / Important Warnings
+
+### 1. DATABASE_URL Configuration
+عند استخدام VPS محلي (مثل Hostinger)، تأكد من:
+When using local VPS (like Hostinger), make sure:
+
+```bash
+# ✅ صحيح / Correct (VPS/Server)
+DATABASE_URL=postgresql://vex_user:password@localhost:5432/vex_db?sslmode=disable
+
+# ❌ خطأ / Wrong (Docker format)
+DATABASE_URL=postgresql://vex_user:password@db:5432/vex_db
+```
+
+**الأخطاء الشائعة / Common Mistakes:**
+- `PGHOST=db` بدلاً من `PGHOST=localhost`
+- نسيان `?sslmode=disable` للـ PostgreSQL المحلي
+- اسم قاعدة بيانات خاطئ
+
+### 2. Build Verification
+قبل تشغيل التطبيق، تأكد من وجود ملف البناء:
+Before starting the app, verify the build file exists:
+
+```bash
+# تحقق من وجود الملف
+ls -la dist/index.cjs
+
+# إذا لم يكن موجوداً، ابني المشروع
+npm run build
+```
+
+### 3. Environment Variables for PM2
+PM2 لا يحمل ملف .env تلقائياً! يجب تحميله أولاً:
+PM2 doesn't load .env automatically! You must load it first:
+
+```bash
+# الطريقة الصحيحة / Correct way
+export $(cat .env | grep -v '^#' | xargs)
+pm2 start "node dist/index.cjs" --name "vex"
+```
+
+---
+
 ## 📋 جدول السكريبتات / Scripts Table
 
 | # | السكريبت / Script | الوظيفة / Function | متى تستخدمه / When to Use |
@@ -16,6 +59,7 @@ This file explains the order of running scripts and the function of each one.
 | 4 | `backup-db.sh` | نسخ احتياطي | قبل أي تغييرات أو يومياً |
 | 5 | `restore-db.sh` | استعادة البيانات | عند الحاجة لاستعادة |
 | 6 | `troubleshoot.sh` | تشخيص المشاكل | عند حدوث أي مشكلة |
+| 7 | `seed-admin.sh` | إنشاء مستخدم Admin | تلقائياً أثناء التثبيت |
 
 ---
 
@@ -43,9 +87,11 @@ sudo bash scripts/install.sh
 5. ✅ يثبت PM2
 6. ✅ يعد جدار الحماية
 7. ✅ ينشئ قاعدة البيانات
-8. ✅ يبني المشروع
-9. ✅ يعد شهادة SSL
-10. ✅ يشغل التطبيق
+8. ✅ يبني المشروع **ويتحقق من البناء**
+9. ✅ ينشئ مستخدم Admin تلقائياً
+10. ✅ يحمل متغيرات البيئة قبل PM2
+11. ✅ يعد شهادة SSL
+12. ✅ يشغل التطبيق
 
 ### الخيارات المتاحة:
 ```bash
@@ -60,6 +106,29 @@ sudo bash scripts/install.sh --skip-fw
 
 # عرض المساعدة
 sudo bash scripts/install.sh --help
+```
+
+---
+
+## 👤 مستخدم Admin الافتراضي / Default Admin User
+
+بعد التثبيت، يتم إنشاء مستخدم Admin تلقائياً:
+After installation, an admin user is created automatically:
+
+| الحقل | القيمة |
+|-------|--------|
+| Username | `admin` |
+| Password | `admin123` |
+| Email | `admin@yourdomain.com` |
+
+⚠️ **مهم جداً**: غيّر كلمة المرور فوراً بعد الدخول الأول!
+⚠️ **IMPORTANT**: Change the password immediately after first login!
+
+### إنشاء Admin يدوياً (إذا لزم الأمر):
+```bash
+cd /var/www/vex
+export $(cat .env | grep -v '^#' | xargs)
+bash scripts/seed-admin.sh
 ```
 
 ---
@@ -81,9 +150,11 @@ sudo bash scripts/update.sh
 1. ✅ ينشئ نسخة احتياطية
 2. ✅ يسحب آخر التغييرات من git
 3. ✅ يحدث المكتبات
-4. ✅ يعيد بناء المشروع
-5. ✅ يشغل الترحيلات
-6. ✅ يعيد تشغيل التطبيق
+4. ✅ يعيد بناء المشروع **ويتحقق من البناء**
+5. ✅ يحمل متغيرات البيئة
+6. ✅ يشغل الترحيلات
+7. ✅ يتحقق من مستخدم Admin
+8. ✅ يعيد تشغيل التطبيق مع `--update-env`
 
 ---
 
@@ -213,22 +284,55 @@ pm2 monit
 sudo bash scripts/troubleshoot.sh --fix
 
 # أو إعادة تشغيل يدوية
-pm2 restart vex
+cd /var/www/vex
+export $(cat .env | grep -v '^#' | xargs)
+pm2 delete vex
+pm2 start "node dist/index.cjs" --name "vex"
+pm2 save
 ```
 
-### 2️⃣ قاعدة البيانات لا تعمل
+### 2️⃣ خطأ في قاعدة البيانات
 ```bash
-# التحقق من PostgreSQL
-sudo systemctl status postgresql
+# التحقق من DATABASE_URL
+cat .env | grep DATABASE_URL
+
+# تأكد من وجود ?sslmode=disable للـ VPS
+# DATABASE_URL=...@localhost:5432/vex_db?sslmode=disable
 
 # إعادة تشغيل PostgreSQL
 sudo systemctl restart postgresql
 
-# التحقق من الاتصال
+# اختبار الاتصال
 bash scripts/troubleshoot.sh
 ```
 
-### 3️⃣ الموقع لا يظهر
+### 3️⃣ ملف البناء مفقود (dist/index.cjs)
+```bash
+cd /var/www/vex
+
+# إعادة البناء
+npm run build
+
+# التحقق
+ls -la dist/index.cjs
+
+# إعادة التشغيل
+export $(cat .env | grep -v '^#' | xargs)
+pm2 restart vex
+```
+
+### 4️⃣ PM2 لا يقرأ متغيرات البيئة
+```bash
+cd /var/www/vex
+
+# تحميل المتغيرات وإعادة التشغيل
+pm2 delete vex
+export $(cat .env | grep -v '^#' | xargs)
+pm2 start "node dist/index.cjs" --name "vex"
+pm2 save
+```
+
+### 5️⃣ الموقع لا يظهر
 ```bash
 # فحص Nginx
 sudo nginx -t
@@ -238,7 +342,7 @@ sudo systemctl restart nginx
 sudo certbot renew
 ```
 
-### 4️⃣ نفاد الذاكرة
+### 6️⃣ نفاد الذاكرة
 ```bash
 # فحص الذاكرة
 free -m
@@ -251,13 +355,20 @@ sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
-### 5️⃣ استعادة من كارثة
+### 7️⃣ استعادة من كارثة
 ```bash
 # 1. تثبيت جديد
 sudo bash scripts/install.sh
 
 # 2. استعادة قاعدة البيانات
 bash scripts/restore-db.sh /path/to/backup.sql.gz
+```
+
+### 8️⃣ لا يوجد مستخدم Admin
+```bash
+cd /var/www/vex
+export $(cat .env | grep -v '^#' | xargs)
+bash scripts/seed-admin.sh
 ```
 
 ---
@@ -279,6 +390,22 @@ bash scripts/restore-db.sh /path/to/backup.sql.gz
 - [ ] كلمات مرور قوية جاهزة
 - [ ] نسخة احتياطية من البيانات القديمة
 - [ ] تم اختبار الاتصال بالسيرفر
+- [ ] تأكد من استخدام `localhost` وليس `db` في DATABASE_URL
+- [ ] تأكد من وجود `?sslmode=disable` في DATABASE_URL
+
+---
+
+## 🔍 ملخص الإصلاحات / Fixes Summary
+
+تم إصلاح المشاكل التالية التي كانت تظهر أثناء النشر:
+
+| المشكلة | الإصلاح |
+|---------|---------|
+| `PGHOST=db` خطأ | تغيير الافتراضي إلى `localhost` |
+| SSL Error مع PostgreSQL | إضافة `?sslmode=disable` |
+| `dist/index.cjs` مفقود | إضافة تحقق بعد البناء |
+| PM2 لا يقرأ .env | تحميل المتغيرات قبل التشغيل |
+| لا يوجد مستخدم Admin | إضافة `seed-admin.sh` تلقائي |
 
 ---
 

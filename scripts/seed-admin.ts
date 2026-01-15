@@ -45,11 +45,7 @@ async function seedAdmin() {
       role: 'admin',
       status: 'active',
       balance: '0',
-      currency: 'USD',
       vipLevel: 10,
-      isVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     }).returning({ id: users.id, username: users.username });
 
     console.log('');
