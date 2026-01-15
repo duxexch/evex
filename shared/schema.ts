@@ -2086,3 +2086,98 @@ export const socialPlatforms = pgTable("social_platforms", {
 export const insertSocialPlatformSchema = createInsertSchema(socialPlatforms).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSocialPlatform = z.infer<typeof insertSocialPlatformSchema>;
 export type SocialPlatform = typeof socialPlatforms.$inferSelect;
+
+// ==================== GAME REPLAYS ====================
+
+export const replayStatusEnum = pgEnum("replay_status", ["recording", "completed", "archived", "deleted"]);
+
+export const gameReplays = pgTable("game_replays", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  matchId: varchar("match_id").notNull().references(() => gameMatches.id),
+  gameId: varchar("game_id").notNull().references(() => games.id),
+  title: text("title"),
+  status: replayStatusEnum("status").notNull().default("recording"),
+  duration: integer("duration").default(0),
+  totalMoves: integer("total_moves").default(0),
+  winnerId: varchar("winner_id").references(() => users.id),
+  metadata: text("metadata"),
+  viewCount: integer("view_count").notNull().default(0),
+  isPublic: boolean("is_public").notNull().default(true),
+  isFeatured: boolean("is_featured").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("idx_game_replays_match").on(table.matchId),
+  index("idx_game_replays_game").on(table.gameId),
+  index("idx_game_replays_status").on(table.status),
+  index("idx_game_replays_public").on(table.isPublic),
+  index("idx_game_replays_featured").on(table.isFeatured),
+  index("idx_game_replays_created").on(table.createdAt),
+]);
+
+export const gameReplaysRelations = relations(gameReplays, ({ one, many }) => ({
+  match: one(gameMatches, { fields: [gameReplays.matchId], references: [gameMatches.id] }),
+  game: one(games, { fields: [gameReplays.gameId], references: [games.id] }),
+  winner: one(users, { fields: [gameReplays.winnerId], references: [users.id] }),
+  events: many(replayEvents),
+  players: many(replayPlayers),
+}));
+
+export const insertGameReplaySchema = createInsertSchema(gameReplays).omit({ id: true, createdAt: true });
+export type InsertGameReplay = z.infer<typeof insertGameReplaySchema>;
+export type GameReplay = typeof gameReplays.$inferSelect;
+
+// ==================== REPLAY EVENTS (Individual moves/actions) ====================
+
+export const replayEventTypeEnum = pgEnum("replay_event_type", [
+  "game_start", "game_end", "move", "chat", "emoji", "timeout", 
+  "resign", "draw_offer", "draw_accept", "draw_reject", "pause", "resume"
+]);
+
+export const replayEvents = pgTable("replay_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  replayId: varchar("replay_id").notNull().references(() => gameReplays.id, { onDelete: "cascade" }),
+  playerId: varchar("player_id").references(() => users.id),
+  eventType: replayEventTypeEnum("event_type").notNull(),
+  eventData: text("event_data").notNull(),
+  timestamp: integer("timestamp").notNull(),
+  sequenceNumber: integer("sequence_number").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_replay_events_replay").on(table.replayId),
+  index("idx_replay_events_sequence").on(table.replayId, table.sequenceNumber),
+]);
+
+export const replayEventsRelations = relations(replayEvents, ({ one }) => ({
+  replay: one(gameReplays, { fields: [replayEvents.replayId], references: [gameReplays.id] }),
+  player: one(users, { fields: [replayEvents.playerId], references: [users.id] }),
+}));
+
+export const insertReplayEventSchema = createInsertSchema(replayEvents).omit({ id: true, createdAt: true });
+export type InsertReplayEvent = z.infer<typeof insertReplayEventSchema>;
+export type ReplayEvent = typeof replayEvents.$inferSelect;
+
+// ==================== REPLAY PLAYERS (Players in a replay) ====================
+
+export const replayPlayers = pgTable("replay_players", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  replayId: varchar("replay_id").notNull().references(() => gameReplays.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  position: integer("position").notNull(),
+  color: text("color"),
+  finalScore: integer("final_score"),
+  isWinner: boolean("is_winner").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_replay_players_replay").on(table.replayId),
+  index("idx_replay_players_user").on(table.userId),
+]);
+
+export const replayPlayersRelations = relations(replayPlayers, ({ one }) => ({
+  replay: one(gameReplays, { fields: [replayPlayers.replayId], references: [gameReplays.id] }),
+  user: one(users, { fields: [replayPlayers.userId], references: [users.id] }),
+}));
+
+export const insertReplayPlayerSchema = createInsertSchema(replayPlayers).omit({ id: true, createdAt: true });
+export type InsertReplayPlayer = z.infer<typeof insertReplayPlayerSchema>;
+export type ReplayPlayer = typeof replayPlayers.$inferSelect;

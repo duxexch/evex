@@ -108,6 +108,19 @@ const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunctio
   }
 };
 
+const optionalAuthMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SIGNING_KEY) as any;
+      req.user = decoded;
+    } catch {
+      // Invalid token, but continue without user
+    }
+  }
+  next();
+};
+
 const adminMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   if (req.user?.role !== "admin") {
     return res.status(403).json({ error: "Admin access required" });
@@ -4594,6 +4607,357 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("Failed to seed social platforms:", error);
     }
   })();
+
+  // ==================== GAME REPLAYS ====================
+
+  // Get list of public replays (paginated)
+  app.get("/api/replays", async (req: Request, res: Response) => {
+    try {
+      const { gameId, featured, limit } = req.query;
+      
+      const replays = await storage.listGameReplays({
+        gameId: gameId as string,
+        isPublic: true,
+        isFeatured: featured === 'true' ? true : undefined,
+        limit: parseInt(limit as string) || 50
+      });
+      
+      // Get players for each replay
+      const replaysWithPlayers = await Promise.all(
+        replays.map(async (replay) => {
+          const players = await storage.getReplayPlayers(replay.id);
+          const game = await storage.getGame(replay.gameId);
+          return {
+            ...replay,
+            players,
+            gameName: game?.name
+          };
+        })
+      );
+      
+      res.json(replaysWithPlayers);
+    } catch (error) {
+      console.error("Error fetching replays:", error);
+      res.status(500).json({ error: "Failed to fetch replays" });
+    }
+  });
+
+  // Get user's replays
+  app.get("/api/replays/my", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const replays = await storage.getUserReplays(userId, limit);
+      
+      // Get players for each replay
+      const replaysWithPlayers = await Promise.all(
+        replays.map(async (replay) => {
+          const players = await storage.getReplayPlayers(replay.id);
+          const game = await storage.getGame(replay.gameId);
+          return {
+            ...replay,
+            players,
+            gameName: game?.name
+          };
+        })
+      );
+      
+      res.json(replaysWithPlayers);
+    } catch (error) {
+      console.error("Error fetching user replays:", error);
+      res.status(500).json({ error: "Failed to fetch replays" });
+    }
+  });
+
+  // Get single replay with all data
+  app.get("/api/replays/:id", optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const replay = await storage.getGameReplay(id);
+      if (!replay) {
+        return res.status(404).json({ error: "Replay not found" });
+      }
+      
+      // Check access for private replays
+      if (!replay.isPublic) {
+        if (!req.user) {
+          return res.status(401).json({ error: "Authentication required for private replays" });
+        }
+        
+        // Check if user is a player in this replay or admin
+        const players = await storage.getReplayPlayers(id);
+        const isPlayer = players.some(p => p.userId === req.user!.id);
+        const isAdmin = req.user.role === 'admin';
+        
+        if (!isPlayer && !isAdmin) {
+          return res.status(403).json({ error: "Not authorized to view this private replay" });
+        }
+      }
+      
+      // Increment view count
+      await storage.incrementReplayViewCount(id);
+      
+      // Get all related data
+      const [events, players, game] = await Promise.all([
+        storage.getReplayEvents(id),
+        storage.getReplayPlayers(id),
+        storage.getGame(replay.gameId)
+      ]);
+      
+      // Get player usernames
+      const playersWithUsernames = await Promise.all(
+        players.map(async (player) => {
+          const user = await storage.getUser(player.userId);
+          return {
+            ...player,
+            username: user?.username,
+            nickname: user?.nickname,
+            profilePicture: user?.profilePicture
+          };
+        })
+      );
+      
+      res.json({
+        ...replay,
+        events,
+        players: playersWithUsernames,
+        gameName: game?.name,
+        gameCategory: game?.category
+      });
+    } catch (error) {
+      console.error("Error fetching replay:", error);
+      res.status(500).json({ error: "Failed to fetch replay" });
+    }
+  });
+
+  // Create new replay (usually called when a match starts)
+  app.post("/api/replays", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { matchId, gameId, title, players } = req.body;
+      
+      if (!matchId || !gameId) {
+        return res.status(400).json({ error: "matchId and gameId are required" });
+      }
+      
+      // Check if replay already exists for this match
+      const existing = await storage.getGameReplayByMatch(matchId);
+      if (existing) {
+        return res.json(existing);
+      }
+      
+      // Create replay
+      const replay = await storage.createGameReplay({
+        matchId,
+        gameId,
+        title,
+        status: 'recording',
+        isPublic: true
+      });
+      
+      // Add players if provided
+      if (players && Array.isArray(players)) {
+        for (const player of players) {
+          await storage.createReplayPlayer({
+            replayId: replay.id,
+            userId: player.userId,
+            position: player.position || 0,
+            color: player.color
+          });
+        }
+      }
+      
+      res.status(201).json(replay);
+    } catch (error) {
+      console.error("Error creating replay:", error);
+      res.status(500).json({ error: "Failed to create replay" });
+    }
+  });
+
+  // Add event to replay (for recording moves)
+  app.post("/api/replays/:id/events", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { eventType, eventData, timestamp, sequenceNumber, playerId } = req.body;
+      
+      const replay = await storage.getGameReplay(id);
+      if (!replay) {
+        return res.status(404).json({ error: "Replay not found" });
+      }
+      
+      if (replay.status !== 'recording') {
+        return res.status(400).json({ error: "Replay is not in recording state" });
+      }
+      
+      const event = await storage.createReplayEvent({
+        replayId: id,
+        playerId: playerId || req.user!.id,
+        eventType,
+        eventData: typeof eventData === 'string' ? eventData : JSON.stringify(eventData),
+        timestamp,
+        sequenceNumber
+      });
+      
+      // Update total moves count
+      await storage.updateGameReplay(id, {
+        totalMoves: (replay.totalMoves || 0) + 1,
+        duration: timestamp
+      });
+      
+      res.status(201).json(event);
+    } catch (error) {
+      console.error("Error adding replay event:", error);
+      res.status(500).json({ error: "Failed to add event" });
+    }
+  });
+
+  // Bulk add events (for efficiency)
+  app.post("/api/replays/:id/events/bulk", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { events } = req.body;
+      
+      const replay = await storage.getGameReplay(id);
+      if (!replay) {
+        return res.status(404).json({ error: "Replay not found" });
+      }
+      
+      if (!Array.isArray(events) || events.length === 0) {
+        return res.status(400).json({ error: "events array is required" });
+      }
+      
+      const eventsToInsert = events.map(e => ({
+        replayId: id,
+        playerId: e.playerId,
+        eventType: e.eventType,
+        eventData: typeof e.eventData === 'string' ? e.eventData : JSON.stringify(e.eventData),
+        timestamp: e.timestamp,
+        sequenceNumber: e.sequenceNumber
+      }));
+      
+      const created = await storage.bulkCreateReplayEvents(eventsToInsert as any);
+      
+      // Update replay stats
+      const lastEvent = events[events.length - 1];
+      await storage.updateGameReplay(id, {
+        totalMoves: (replay.totalMoves || 0) + events.length,
+        duration: lastEvent?.timestamp || replay.duration
+      });
+      
+      res.status(201).json({ count: created.length });
+    } catch (error) {
+      console.error("Error bulk adding replay events:", error);
+      res.status(500).json({ error: "Failed to add events" });
+    }
+  });
+
+  // Complete a replay (when match ends)
+  app.post("/api/replays/:id/complete", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { winnerId, duration } = req.body;
+      
+      const replay = await storage.getGameReplay(id);
+      if (!replay) {
+        return res.status(404).json({ error: "Replay not found" });
+      }
+      
+      // Update replay to completed
+      const updated = await storage.updateGameReplay(id, {
+        status: 'completed',
+        winnerId,
+        duration: duration || replay.duration,
+        completedAt: new Date()
+      });
+      
+      // Mark winner in players
+      if (winnerId) {
+        const players = await storage.getReplayPlayers(id);
+        for (const player of players) {
+          // This would need an update method - for now we just note the winner is in the replay
+        }
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error completing replay:", error);
+      res.status(500).json({ error: "Failed to complete replay" });
+    }
+  });
+
+  // Toggle replay visibility
+  app.patch("/api/replays/:id/visibility", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { isPublic } = req.body;
+      
+      const replay = await storage.getGameReplay(id);
+      if (!replay) {
+        return res.status(404).json({ error: "Replay not found" });
+      }
+      
+      // Check if user is a player in this replay
+      const players = await storage.getReplayPlayers(id);
+      const isPlayer = players.some(p => p.userId === req.user!.id);
+      const isAdmin = req.user!.role === 'admin';
+      
+      if (!isPlayer && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized to modify this replay" });
+      }
+      
+      const updated = await storage.updateGameReplay(id, { isPublic });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating replay visibility:", error);
+      res.status(500).json({ error: "Failed to update replay" });
+    }
+  });
+
+  // Admin: Feature/unfeature a replay
+  app.patch("/api/replays/:id/feature", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { isFeatured } = req.body;
+      
+      const updated = await storage.updateGameReplay(id, { isFeatured });
+      if (!updated) {
+        return res.status(404).json({ error: "Replay not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error featuring replay:", error);
+      res.status(500).json({ error: "Failed to update replay" });
+    }
+  });
+
+  // Delete replay (admin or player)
+  app.delete("/api/replays/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const replay = await storage.getGameReplay(id);
+      if (!replay) {
+        return res.status(404).json({ error: "Replay not found" });
+      }
+      
+      // Check authorization
+      const players = await storage.getReplayPlayers(id);
+      const isPlayer = players.some(p => p.userId === req.user!.id);
+      const isAdmin = req.user!.role === 'admin';
+      
+      if (!isPlayer && !isAdmin) {
+        return res.status(403).json({ error: "Not authorized to delete this replay" });
+      }
+      
+      await storage.deleteGameReplay(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting replay:", error);
+      res.status(500).json({ error: "Failed to delete replay" });
+    }
+  });
 
   // ==================== WEBSOCKET SETUP ====================
 
