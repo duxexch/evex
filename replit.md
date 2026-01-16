@@ -112,15 +112,22 @@ The schema (in `shared/schema.ts`) includes:
   - Unauthenticated users cannot make moves
   - Spectators cannot make moves (separate flag check)
   - Non-players receive NOT_AUTHORIZED errors
-- **Financial Safety (Move Processing)**:
-  1. Validate move with game engine
-  2. Apply move to create new state
-  3. Persist to database (session + move history)
-  4. Only broadcast if persistence succeeds
-  5. Return error and abort if save fails
-- **Idempotency**: Turn number incremented atomically with move
-  - Duplicate moves rejected by turn validation
-  - Race conditions handled by database constraints
+- **Financial Safety (Move Processing - PRODUCTION GRADE)**:
+  1. SELECT ... FOR UPDATE locks session row for exclusive access
+  2. Validate move against DB state (not in-memory) inside transaction
+  3. Apply move to create new state
+  4. Update session + insert move history atomically in transaction
+  5. Room state updated only AFTER transaction commits
+  6. Broadcast only after successful commit
+  7. On any failure, sync room state from DB and notify client
+- **Concurrency Control**:
+  - Row-level locking prevents concurrent move conflicts
+  - Optional expectedTurn validation for client-side turn tracking
+  - TURN_MISMATCH errors trigger automatic state_sync
+  - Race conditions fully handled by database transactions
+- **Error Handling**: Typed error codes with appropriate recovery
+  - SESSION_NOT_FOUND, TURN_MISMATCH, INVALID_MOVE, MOVE_APPLY_FAILED
+  - All failures trigger room state resync from database
 - **Error Logging**: All move errors logged with session/user context
 - **Graceful Degradation**: Connection errors don't corrupt state
 
