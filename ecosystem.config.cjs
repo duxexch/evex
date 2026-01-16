@@ -5,7 +5,7 @@ module.exports = {
   apps: [
     {
       name: "vex",
-      script: "dist/server/index.js",
+      script: "dist/index.cjs",
       instances: "max",
       exec_mode: "cluster",
       env: {
