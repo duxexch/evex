@@ -85,6 +85,7 @@ const TarneebGamePage = lazy(() => import("@/pages/games/TarneebGame"));
 const BalootGamePage = lazy(() => import("@/pages/games/BalootGame"));
 const PlayerProfilePage = lazy(() => import("@/pages/player-profile"));
 const LeaderboardPage = lazy(() => import("@/pages/leaderboard"));
+const SeasonalLeaderboardPage = lazy(() => import("@/pages/seasonal-leaderboard"));
 
 const AdminLoginPage = lazy(() => import("@/pages/admin/admin-login"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/admin-dashboard"));
@@ -611,6 +612,7 @@ function Router() {
           <Route path="/profile" component={PlayerProfilePage} />
           <Route path="/player/:userId" component={PlayerProfilePage} />
           <Route path="/leaderboard" component={LeaderboardPage} />
+          <Route path="/seasons" component={SeasonalLeaderboardPage} />
           <Route path="/challenge/:id/play" component={ChallengeGamePage} />
           <Route path="/challenge/:id/watch" component={ChallengeWatchPage} />
           <Route path="/game/chess/:sessionId" component={ChessGamePage} />
