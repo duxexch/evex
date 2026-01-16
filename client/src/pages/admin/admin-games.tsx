@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -185,6 +185,31 @@ function GameForm({
     },
   });
 
+  // Watch sections and auto-adjust gameType based on section selection
+  const watchedSections = form.watch("sections");
+  
+  useEffect(() => {
+    const hasChallenges = watchedSections?.includes("challenges");
+    const hasMultiplayer = watchedSections?.includes("multiplayer");
+    
+    if (hasChallenges || hasMultiplayer) {
+      // Force multiplayer for challenges/multiplayer sections
+      form.setValue("gameType", "multiplayer");
+      // Set default player counts if they're at single player values
+      if (form.getValues("minPlayers") <= 1) {
+        form.setValue("minPlayers", 2);
+      }
+      if (form.getValues("maxPlayers") <= 1) {
+        form.setValue("maxPlayers", 4);
+      }
+    } else {
+      // Revert to single player if no multiplayer sections selected
+      form.setValue("gameType", "single");
+      form.setValue("minPlayers", 1);
+      form.setValue("maxPlayers", 1);
+    }
+  }, [watchedSections, form]);
+
   const onSubmit = (data: GameFormData) => {
     if (game) {
       updateMutation.mutate(data);
@@ -327,27 +352,12 @@ function GameForm({
                             checked={field.value?.includes(section.id)}
                             onCheckedChange={(checked) => {
                               const current = field.value || [];
-                              let newSections: string[];
                               if (checked) {
-                                newSections = [...current, section.id];
+                                field.onChange([...current, section.id]);
                               } else {
-                                newSections = current.filter((v) => v !== section.id);
+                                field.onChange(current.filter((v) => v !== section.id));
                               }
-                              field.onChange(newSections);
-                              
-                              // Auto-set gameType based on sections
-                              const hasChallenges = newSections.includes("challenges");
-                              const hasMultiplayer = newSections.includes("multiplayer");
-                              if (hasChallenges || hasMultiplayer) {
-                                form.setValue("gameType", "multiplayer");
-                                // Set default min/max players for multiplayer games
-                                if (form.getValues("minPlayers") === 1) {
-                                  form.setValue("minPlayers", 2);
-                                }
-                                if (form.getValues("maxPlayers") === 1) {
-                                  form.setValue("maxPlayers", 4);
-                                }
-                              }
+                              // Note: gameType and players auto-adjust via useEffect
                             }}
                             data-testid={`checkbox-section-${section.id}`}
                           />
