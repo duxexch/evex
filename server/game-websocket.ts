@@ -3,11 +3,13 @@ import { Server } from 'http';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { db } from './db';
-import { liveGameSessions, gameMoves, challenges } from '@shared/schema';
+import { liveGameSessions, gameMoves, challenges, users } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { getGameEngine } from './game-engines';
 import type { MoveData, WebSocketMessage } from './game-engines/types';
 import { chessEngine, ChessEngine } from './game-engines/chess';
+import { chatRateLimiter, giftRateLimiter } from './lib/rate-limiter';
+import { filterMessage } from './lib/word-filter';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -553,38 +555,73 @@ async function handleChat(ws: AuthenticatedWebSocket, payload: { message: string
     return;
   }
 
+  if (!ws.userId) {
+    sendError(ws, 'Not authenticated');
+    return;
+  }
+
+  const rateLimitResult = chatRateLimiter.check(ws.userId);
+  if (!rateLimitResult.allowed) {
+    send(ws, {
+      type: 'chat_error',
+      payload: { code: 'rate_limit', retryAfterMs: rateLimitResult.retryAfterMs }
+    });
+    return;
+  }
+
+  const filterResult = filterMessage(payload.message);
+  const messageToSend = filterResult.filteredMessage;
+
   const room = rooms.get(ws.sessionId);
   if (!room) return;
 
-  if (ws.userId) {
-    try {
-      await storage.addGameChatMessage({
-        sessionId: ws.sessionId,
-        userId: ws.userId,
-        message: payload.message,
-        messageType: 'text',
-        isFromSpectator: ws.isSpectator || false
-      });
-    } catch (error) {
-      console.error('Error saving chat message:', error);
-    }
+  const sender = await storage.getUser(ws.userId);
+  const blockedUsers = sender?.blockedUsers || [];
+  const mutedUsers = sender?.mutedUsers || [];
+
+  try {
+    await storage.addGameChatMessage({
+      sessionId: ws.sessionId,
+      userId: ws.userId,
+      message: messageToSend,
+      messageType: 'text',
+      isFromSpectator: ws.isSpectator || false
+    });
+  } catch (error) {
+    console.error('Error saving chat message:', error);
   }
 
-  broadcastToRoom(room, {
+  broadcastToRoomFiltered(room, {
     type: 'chat_message',
     payload: {
       userId: ws.userId,
       username: ws.username,
-      message: payload.message,
+      message: messageToSend,
       isSpectator: ws.isSpectator,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      wasFiltered: !filterResult.isClean
     }
-  });
+  }, ws.userId, blockedUsers);
 }
 
 async function handleSendGift(ws: AuthenticatedWebSocket, payload: { recipientId: string; giftItemId: string; quantity: number; message?: string }) {
   if (!ws.userId || !ws.sessionId) {
     sendError(ws, 'Not authenticated or not in a game');
+    return;
+  }
+
+  const rateLimitResult = giftRateLimiter.check(ws.userId);
+  if (!rateLimitResult.allowed) {
+    send(ws, {
+      type: 'gift_error',
+      payload: { code: 'rate_limit', retryAfterMs: rateLimitResult.retryAfterMs }
+    });
+    return;
+  }
+
+  const recipient = await storage.getUser(payload.recipientId);
+  if (recipient?.blockedUsers?.includes(ws.userId)) {
+    sendError(ws, 'Cannot send gift to this user');
     return;
   }
 
@@ -857,6 +894,35 @@ function broadcastToRoom(room: GameRoom, message: WebSocketMessage, excludeUserI
     if (userId !== excludeUserId) {
       send(ws, message);
     }
+  }
+}
+
+async function broadcastToRoomFiltered(
+  room: GameRoom, 
+  message: WebSocketMessage, 
+  senderId: string, 
+  senderBlockedUsers: string[]
+) {
+  for (const [recipientId, ws] of room.players) {
+    if (recipientId === senderId) continue;
+    if (senderBlockedUsers.includes(recipientId)) continue;
+    
+    const recipient = await storage.getUser(recipientId);
+    if (recipient?.blockedUsers?.includes(senderId)) continue;
+    if (recipient?.mutedUsers?.includes(senderId)) continue;
+    
+    send(ws, message);
+  }
+  
+  for (const [recipientId, ws] of room.spectators) {
+    if (recipientId === senderId) continue;
+    if (senderBlockedUsers.includes(recipientId)) continue;
+    
+    const recipient = await storage.getUser(recipientId);
+    if (recipient?.blockedUsers?.includes(senderId)) continue;
+    if (recipient?.mutedUsers?.includes(senderId)) continue;
+    
+    send(ws, message);
   }
 }
 
