@@ -671,6 +671,12 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/settings/public", async (req: Request, res: Response) => {
     try {
+      res.set({
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+      });
+      
       const [flagsList, activeTheme] = await Promise.all([
         db.select().from(featureFlags),
         db.select().from(themes).where(eq(themes.isDefault, true)).limit(1)

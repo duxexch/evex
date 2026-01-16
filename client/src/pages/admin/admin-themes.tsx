@@ -76,12 +76,12 @@ export default function AdminThemesPage() {
         method: "PATCH",
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/themes"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/public"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/themes"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/settings/public"] });
       toast({
         title: "Theme Updated",
-        description: "Default theme has been changed",
+        description: "Default theme has been changed and applied",
       });
     },
     onError: () => {
