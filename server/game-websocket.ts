@@ -117,8 +117,20 @@ async function handleMessage(ws: AuthenticatedWebSocket, message: WebSocketMessa
 
 async function handleAuthenticate(ws: AuthenticatedWebSocket, payload: { token: string }) {
   try {
-    const secret = process.env.JWT_SECRET || 'development-secret-key';
-    const decoded = jwt.verify(payload.token, secret) as { id: string; username: string };
+    const isProduction = process.env.NODE_ENV === 'production';
+    const secret = process.env.JWT_SECRET;
+    
+    if (!secret) {
+      if (isProduction) {
+        console.error('[WebSocket] JWT_SECRET is not set in production');
+        sendError(ws, 'Server configuration error');
+        return;
+      }
+      console.warn('[WebSocket] Using development JWT secret - DO NOT use in production');
+    }
+    
+    const jwtSecret = secret || 'development-secret-key';
+    const decoded = jwt.verify(payload.token, jwtSecret) as { id: string; username: string };
     
     ws.userId = decoded.id;
     ws.username = decoded.username;
