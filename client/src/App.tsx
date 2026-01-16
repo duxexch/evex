@@ -45,6 +45,8 @@ import {
   Users,
   MessageCircle,
   Loader2,
+  Trophy,
+  User,
 } from "lucide-react";
 import { apiRequest } from "./lib/queryClient";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -81,6 +83,8 @@ const BackgammonGamePage = lazy(() => import("@/pages/games/BackgammonGame"));
 const DominoGamePage = lazy(() => import("@/pages/games/DominoGame"));
 const TarneebGamePage = lazy(() => import("@/pages/games/TarneebGame"));
 const BalootGamePage = lazy(() => import("@/pages/games/BalootGame"));
+const PlayerProfilePage = lazy(() => import("@/pages/player-profile"));
+const LeaderboardPage = lazy(() => import("@/pages/leaderboard"));
 
 const AdminLoginPage = lazy(() => import("@/pages/admin/admin-login"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/admin-dashboard"));
@@ -182,6 +186,8 @@ function AppSidebar({ side }: { side: "left" | "right" }) {
     { title: t('nav.multiplayer'), url: "/multiplayer", icon: Gamepad2, key: "multiplayer" },
     { title: t('nav.challenges'), url: "/challenges", icon: Swords, key: "challenges" },
     { title: t('nav.lobby'), url: "/lobby", icon: Users, key: "lobby" },
+    { title: t('nav.leaderboard'), url: "/leaderboard", icon: Trophy, key: "leaderboard" },
+    { title: t('nav.profile'), url: "/profile", icon: User, key: "profile" },
     { title: t('nav.playGames'), url: "/play", icon: Play, key: "play" },
     { title: t('nav.friends'), url: "/friends", icon: Users, key: "friends" },
     { title: t('nav.chat'), url: "/chat", icon: MessageCircle, key: "chat" },
@@ -201,6 +207,8 @@ function AppSidebar({ side }: { side: "left" | "right" }) {
     { title: t('nav.announcements'), url: "/admin/announcements", icon: Megaphone, key: "announcements" },
     { title: t('nav.challenges'), url: "/challenges", icon: Swords, key: "challenges" },
     { title: t('nav.lobby'), url: "/lobby", icon: Users, key: "lobby" },
+    { title: t('nav.leaderboard'), url: "/leaderboard", icon: Trophy, key: "leaderboard" },
+    { title: t('nav.profile'), url: "/profile", icon: User, key: "profile" },
     { title: t('nav.playGames'), url: "/play", icon: Play, key: "play" },
     { title: t('nav.friends'), url: "/friends", icon: Users, key: "friends" },
     { title: t('nav.chat'), url: "/chat", icon: MessageCircle, key: "chat" },
@@ -600,6 +608,9 @@ function Router() {
           <Route path="/play" component={PlayPage} />
           <Route path="/challenges" component={ChallengesPage} />
           <Route path="/lobby" component={GameLobbyPage} />
+          <Route path="/profile" component={PlayerProfilePage} />
+          <Route path="/player/:userId" component={PlayerProfilePage} />
+          <Route path="/leaderboard" component={LeaderboardPage} />
           <Route path="/challenge/:id/play" component={ChallengeGamePage} />
           <Route path="/challenge/:id/watch" component={ChallengeWatchPage} />
           <Route path="/game/chess/:sessionId" component={ChessGamePage} />
