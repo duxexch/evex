@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { I18nProvider, LanguageSwitcher, useI18n } from "@/lib/i18n";
+import { I18nProvider, LanguageSwitcher, useI18n, TranslationDebugger } from "@/lib/i18n";
 import { SettingsProvider, useSettings } from "@/lib/settings";
 import {
   Sidebar,
@@ -624,6 +624,7 @@ function App() {
             <SettingsProvider>
               <AuthProvider>
                 <Toaster />
+                <TranslationDebugger />
                 <Router />
               </AuthProvider>
             </SettingsProvider>
