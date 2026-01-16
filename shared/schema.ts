@@ -79,6 +79,8 @@ export const users = pgTable("users", {
   stealthMode: boolean("stealth_mode").notNull().default(false),
   lastActiveAt: timestamp("last_active_at"),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
+  blockedUsers: text("blocked_users").array().notNull().default(sql`'{}'::text[]`),
+  mutedUsers: text("muted_users").array().notNull().default(sql`'{}'::text[]`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   lastLoginAt: timestamp("last_login_at"),

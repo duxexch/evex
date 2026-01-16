@@ -1,0 +1,150 @@
+1️⃣ Objective
+
+Improve the chat system and P2P interactions to enhance user safety, engagement, and platform reliability by implementing Phase 1 features:
+
+Chat rate limiting
+
+Content moderation (word filters)
+
+User blocking/muting
+
+These improvements target high-impact issues with low to medium implementation effort.
+
+2️⃣ Scope
+
+Chat System:
+
+Rate limit user messages to prevent spam
+
+Filter inappropriate language
+
+Enable users to block or mute disruptive participants
+
+P2P System:
+
+Apply chat-level blocking/muting to private 1:1 messages
+
+Ensure spectator and in-game gifting respects blocked/muted lists
+
+Games Covered:
+
+Chess, Backgammon, Domino, Tarneeb, Baloot
+
+Infrastructure Used:
+
+WebSocket /ws/game for in-game messages
+
+WebSocket /ws/private for direct messages
+
+Relational database tables: game_chat_messages, chat_messages, users
+
+JWT authentication for all connections
+
+3️⃣ Technical Requirements
+3.1 Chat Rate Limiting
+
+Limit messages per user per time window (e.g., 5 messages per 3 seconds)
+
+Implement server-side enforcement in game-websocket.ts and private-websocket.ts
+
+Reject excess messages with { type: 'chat_error', code: 'rate_limit' }
+
+Optional: client-side visual feedback for rate-limited users
+
+3.2 Content Moderation
+
+Maintain a configurable list of banned words/phrases per language
+
+Validate messages in WebSocket handlers before broadcast
+
+Replace banned words with *** or reject message entirely
+
+Future-proof: support AI moderation integration
+
+3.3 User Blocking/Muting
+
+Add blockedUsers and mutedUsers lists to user profiles in the database
+
+Prevent blocked users from sending messages to the blocker (both in-game and direct messages)
+
+Prevent muted users from sending messages in the relevant room (in-game or private chat)
+
+Broadcast system events only to allowed participants (exclude blocked/muted users)
+
+4️⃣ Implementation Plan
+Step	Task	Owner	Status
+1	Add rateLimiter middleware for WebSocket messages	Dev	Pending
+2	Integrate wordFilter in chat message handlers	Dev	Pending
+3	Extend users table with blockedUsers and mutedUsers	Dev	Pending
+4	Update WebSocket broadcast logic to respect block/mute	Dev	Pending
+5	Client-side handling for blocked/muted notifications	Dev	Pending
+6	Update i18n translations for chat errors and moderation messages	Dev	Pending
+7	Add unit and integration tests for all 3 features	Dev	Pending
+8	QA verification across all game pages and private chats	QA	Pending
+5️⃣ Expected Outcomes
+
+Chat System:
+
+Users cannot spam messages → rate limiting enforced
+
+Offensive or inappropriate language filtered → safer environment
+
+Disruptive users can be muted/blocked → improved UX for players and spectators
+
+P2P System:
+
+Direct messages respect block/mute lists
+
+In-game gifts and spectator chat respect block/mute restrictions
+
+Overall system remains stable and consistent across reconnections
+
+6️⃣ Testing & Validation
+
+Unit tests for:
+
+Rate limiting enforcement per user
+
+Word filter replacement/rejection
+
+Blocked/muted user message rejection
+
+Integration tests:
+
+In-game chat with multiple players + spectators
+
+Direct messages between users
+
+Gift animations with blocked/muted users
+
+Stress tests:
+
+100+ concurrent messages to verify rate limiter and moderation
+
+Reconnection scenarios to ensure blocked/muted logic persists
+
+7️⃣ Timeline & Priority
+
+Phase 1 (High Impact / Low Effort)
+
+Duration: 3–5 days for full implementation and testing
+
+Priority: Immediate → prevents spam, improves content safety, and allows user control
+
+Phase 2 (Critical Backend Work) will follow:
+
+P2P database migration
+
+Reputation/trust system for traders
+
+Message encryption
+
+8️⃣ Summary
+
+The platform’s core chat and P2P systems are solid, with WebSocket reliability, persistent message storage, and spectator integration.
+
+Phase 1 improvements will directly enhance user safety and experience.
+
+Implementation will follow production-grade standards: atomic operations, transaction safety, and comprehensive testing.
+
+This plan ensures incremental, measurable improvements before advancing to Phase 2.
