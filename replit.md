@@ -166,6 +166,50 @@ The schema (in `shared/schema.ts`) includes:
 - Server: `server/game-websocket.ts` (handleMakeMove with transaction + FOR UPDATE)
 - Client: `client/src/hooks/useGameWebSocket.ts` (turnNumber state + isMovePending)
 
+### Production Readiness Test Suite (January 2026)
+
+**Test Files**:
+- `server/tests/chess-websocket-test.ts` - Unit tests for game logic and concurrency
+- `server/tests/chess-integration-test.ts` - End-to-end integration tests
+
+**Unit Test Categories (18 tests, all passing)**:
+1. **Turn Integrity (4 tests)**:
+   - Duplicate move with same expectedTurn is rejected
+   - Turn number increments correctly after each move
+   - Invalid move on wrong turn is rejected
+   - State remains consistent after rapid move sequence
+
+2. **Network Reliability (3 tests)**:
+   - Game state can be reconstructed from FEN
+   - Multiple reconnects maintain correct state
+   - State sync restores correct turn information
+
+3. **Financial Safety (4 tests)**:
+   - Move cannot be applied twice to same state
+   - Game outcome is deterministic from move history
+   - Server state override simulation
+   - No state corruption from invalid move attempts
+
+4. **Stress & Concurrency (4 tests)**:
+   - Multiple independent games can run simultaneously
+   - Rapid sequential moves do not corrupt state
+   - Concurrent move validation is consistent
+   - High-volume move sequence maintains integrity
+
+5. **Database Transaction Logic (3 tests)**:
+   - SELECT FOR UPDATE simulation: only one writer succeeds
+   - Turn mismatch detection prevents stale updates
+   - Atomic commit: all-or-nothing update
+
+**Run Tests**: 
+- Unit tests: `npx tsx server/tests/chess-websocket-test.ts` (18 tests, all passing)
+- Integration tests: `npx tsx server/tests/chess-integration-test.ts` (requires direct WebSocket access)
+
+**Integration Test Environment Notes**:
+- Integration tests require `TEST_WS_URL` environment variable in Replit due to proxy WebSocket routing
+- In production/staging, tests connect directly to `ws://localhost:5000/ws/game`
+- Unit tests cover all critical paths and don't require WebSocket connectivity
+
 ### Build and Development
 - **Development**: `npm run dev` - runs tsx with hot reload
 - **Production Build**: Custom build script using esbuild for server and Vite for client

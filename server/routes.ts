@@ -3704,6 +3704,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Development-only: Create live game session for testing
+  if (process.env.NODE_ENV !== 'production') {
+    app.post("/api/dev/live-sessions", authMiddleware, async (req: AuthRequest, res: Response) => {
+      try {
+        const { gameType, player1Id, player2Id, gameId: providedGameId, settings } = req.body;
+        
+        if (!gameType || !player1Id || !player2Id) {
+          return res.status(400).json({ error: "gameType, player1Id, and player2Id are required" });
+        }
+        
+        // Find or use provided gameId
+        let gameId = providedGameId;
+        if (!gameId) {
+          // Look up game by type/name
+          const [existingGame] = await db.select().from(games)
+            .where(eq(games.name, gameType === 'chess' ? 'Chess' : gameType))
+            .limit(1);
+          
+          if (existingGame) {
+            gameId = existingGame.id;
+          } else {
+            // Create a test game if none exists
+            const [newGame] = await db.insert(games).values({
+              name: gameType === 'chess' ? 'Chess' : gameType,
+              description: `Test ${gameType} game`,
+              type: gameType,
+              status: 'active',
+              minPlayers: 2,
+              maxPlayers: 2,
+              imageUrl: null,
+            }).returning();
+            gameId = newGame.id;
+          }
+        }
+        
+        const session = await storage.createLiveGameSession({
+          gameId,
+          gameType,
+          player1Id,
+          player2Id,
+          player3Id: null,
+          player4Id: null,
+          status: 'in_progress',
+          settings: settings || {},
+          gameState: null,
+          currentTurn: player1Id,
+          turnNumber: 0,
+          winnerId: null,
+          endedAt: null,
+          endReason: null,
+        });
+        
+        res.json(session);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+  }
+
   // Get all games for matchmaking
   app.get("/api/games/available", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {

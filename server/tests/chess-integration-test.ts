@@ -1,8 +1,8 @@
 import WebSocket from 'ws';
 import http from 'http';
 
-const HTTP_BASE = process.env.TEST_URL || 'http://localhost:5000';
-const WS_BASE = HTTP_BASE.replace('http', 'ws');
+const HTTP_BASE = process.env.TEST_URL || 'http://127.0.0.1:5000';
+const WS_BASE = process.env.TEST_WS_URL || HTTP_BASE.replace('http', 'ws');
 
 interface TestResult {
   name: string;
@@ -107,7 +107,7 @@ class IntegrationTestClient {
         player2Id: player2Id || null,
         settings: { timeControl: 600 }
       });
-      const url = new URL('/api/games/sessions', HTTP_BASE);
+      const url = new URL('/api/dev/live-sessions', HTTP_BASE);
       
       const req = http.request(url, {
         method: 'POST',
@@ -144,13 +144,19 @@ class IntegrationTestClient {
     this.sessionId = sessionId;
     
     return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(`${WS_BASE}/ws/game`);
+      // Disable compression to avoid RSV1 errors with proxies
+      this.ws = new WebSocket(`${WS_BASE}/ws/game`, {
+        perMessageDeflate: false,
+        headers: { 'Sec-WebSocket-Extensions': '' }
+      });
+      let authenticated = false;
       
       this.ws.on('open', () => {
-        console.log(`    [${this.userId?.slice(-6)}] WS connected, joining session ${sessionId.slice(-8)}`);
+        console.log(`    [${this.userId?.slice(-6)}] WS connected, authenticating...`);
+        // Send authenticate first, then join_game after authentication succeeds
         this.ws!.send(JSON.stringify({
-          type: 'join_game',
-          payload: { sessionId, token: this.authToken }
+          type: 'authenticate',
+          payload: { token: this.authToken }
         }));
       });
 
@@ -158,6 +164,16 @@ class IntegrationTestClient {
         try {
           const msg = JSON.parse(data.toString()) as WSMessage;
           this.messages.push(msg);
+          
+          // After authentication, send join_game
+          if (msg.type === 'authenticated' && !authenticated) {
+            authenticated = true;
+            console.log(`    [${this.userId?.slice(-6)}] Authenticated, joining session ${sessionId.slice(-8)}`);
+            this.ws!.send(JSON.stringify({
+              type: 'join_game',
+              payload: { sessionId }
+            }));
+          }
           
           if (msg.type === 'game_joined') {
             console.log(`    [${this.userId?.slice(-6)}] Joined as ${msg.payload.playerColor || 'spectator'}`);
