@@ -103,6 +103,27 @@ The schema (in `shared/schema.ts`) includes:
   - Shape validation: verifies fen, currentTurn, validMoves fields
   - Error UI with retry option for invalid states
 
+### WebSocket Security Verification (January 2026)
+- **Server-Authoritative State**: All game logic executed on server
+  - Chess moves validated via chess.js library
+  - Turn order enforced server-side
+  - Player identity verified against session
+- **Authentication Guards**:
+  - Unauthenticated users cannot make moves
+  - Spectators cannot make moves (separate flag check)
+  - Non-players receive NOT_AUTHORIZED errors
+- **Financial Safety (Move Processing)**:
+  1. Validate move with game engine
+  2. Apply move to create new state
+  3. Persist to database (session + move history)
+  4. Only broadcast if persistence succeeds
+  5. Return error and abort if save fails
+- **Idempotency**: Turn number incremented atomically with move
+  - Duplicate moves rejected by turn validation
+  - Race conditions handled by database constraints
+- **Error Logging**: All move errors logged with session/user context
+- **Graceful Degradation**: Connection errors don't corrupt state
+
 ### Build and Development
 - **Development**: `npm run dev` - runs tsx with hot reload
 - **Production Build**: Custom build script using esbuild for server and Vite for client

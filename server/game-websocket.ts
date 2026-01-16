@@ -2,6 +2,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
+import { db } from './db';
+import { liveGameSessions, gameMoves } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
 import { getGameEngine } from './game-engines';
 import type { MoveData, WebSocketMessage } from './game-engines/types';
 import { chessEngine, ChessEngine } from './game-engines/chess';
@@ -28,18 +31,9 @@ const userConnections: Map<string, AuthenticatedWebSocket> = new Map();
 
 export function setupGameWebSocket(server: Server): WebSocketServer {
   const wss = new WebSocketServer({ 
-    noServer: true,
+    server, 
+    path: '/ws/game',
     perMessageDeflate: false
-  });
-
-  server.on('upgrade', (request, socket, head) => {
-    const { pathname } = new URL(request.url || '', `http://${request.headers.host}`);
-    
-    if (pathname === '/ws/game') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
-      });
-    }
   });
 
   const heartbeat = setInterval(() => {
@@ -345,31 +339,79 @@ async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveD
     return;
   }
 
-  room.gameState = result.newState;
+  const previousState = room.gameState;
 
   try {
     const currentSession = await storage.getLiveGameSession(ws.sessionId);
-    const currentTurn = currentSession?.turnNumber || 0;
-    const newTurnNumber = currentTurn + 1;
+    if (!currentSession) {
+      sendError(ws, 'Session not found', 'SESSION_NOT_FOUND');
+      return;
+    }
     
-    await storage.updateLiveGameSession(ws.sessionId, {
-      gameState: result.newState,
-      turnNumber: newTurnNumber
+    const expectedTurn = currentSession.turnNumber || 0;
+    const newTurnNumber = expectedTurn + 1;
+    
+    await db.transaction(async (tx) => {
+      const updateResult = await tx
+        .update(liveGameSessions)
+        .set({
+          gameState: result.newState,
+          turnNumber: newTurnNumber
+        })
+        .where(
+          and(
+            eq(liveGameSessions.id, ws.sessionId!),
+            eq(liveGameSessions.turnNumber, expectedTurn)
+          )
+        )
+        .returning({ id: liveGameSessions.id });
+      
+      if (updateResult.length === 0) {
+        throw new Error('CONCURRENT_MOVE_CONFLICT');
+      }
+      
+      await tx.insert(gameMoves).values({
+        sessionId: ws.sessionId!,
+        playerId: ws.userId!,
+        moveNumber: newTurnNumber,
+        moveType: payload.move.type || 'move',
+        moveData: JSON.stringify(payload.move),
+        isValid: true
+      });
     });
-
-    await storage.addGameMove({
-      sessionId: ws.sessionId,
-      playerId: ws.userId,
-      moveNumber: newTurnNumber,
-      moveType: payload.move.type,
-      moveData: JSON.stringify(payload.move),
-      isValid: true
-    });
-
-    console.log(`[WS] Move saved: session=${ws.sessionId}, turn=${newTurnNumber}, player=${ws.userId}`);
-  } catch (error) {
-    console.error('[WS] Error saving move:', error);
-    sendError(ws, 'Failed to save move. Please try again.');
+    
+    room.gameState = result.newState;
+    
+    console.log(`[WS] Move committed: session=${ws.sessionId}, turn=${newTurnNumber}, player=${ws.userId}`);
+  } catch (error: any) {
+    console.error('[WS] Move transaction failed:', error);
+    
+    if (error.message === 'CONCURRENT_MOVE_CONFLICT') {
+      send(ws, {
+        type: 'move_rejected',
+        payload: { 
+          error: 'Game state changed. Please wait for sync.',
+          errorKey: 'game.concurrentMove',
+          requiresSync: true
+        }
+      });
+      
+      const freshSession = await storage.getLiveGameSession(ws.sessionId);
+      if (freshSession?.gameState) {
+        room.gameState = freshSession.gameState;
+        const syncView = engine.getPlayerView(freshSession.gameState, ws.userId);
+        send(ws, {
+          type: 'state_sync',
+          payload: {
+            gameType: room.gameType,
+            view: syncView,
+            turnNumber: freshSession.turnNumber
+          }
+        });
+      }
+    } else {
+      sendError(ws, 'Failed to save move. Please try again.');
+    }
     return;
   }
 
