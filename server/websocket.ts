@@ -9,7 +9,7 @@ import {
 import { eq, desc, and, or, sql } from "drizzle-orm";
 import * as ChessEngine from "./game-engines/chess-engine";
 import * as DominoEngine from "./game-engines/domino-engine";
-import * as BackgammonEngine from "./game-engines/backgammon-engine";
+import { backgammonEngine } from "./game-engines/backgammon";
 import * as CardGameEngine from "./game-engines/card-game-engine";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "pwm-secret-key-change-in-production";
@@ -749,15 +749,19 @@ export function setupWebSocket(server: Server) {
               }
             }
           } else if (gameType === 'backgammon') {
+            let stateJson: string;
             if (!gameState) {
-              gameState = BackgammonEngine.createInitialState();
+              stateJson = backgammonEngine.initializeWithPlayers(challenge.player1Id, challenge.player2Id!);
+            } else {
+              stateJson = typeof gameState === 'string' ? gameState : JSON.stringify(gameState);
             }
-            moveResult = BackgammonEngine.makeMove(gameState, move);
+            const bgResult = backgammonEngine.applyMove(stateJson, ws.userId, move);
+            moveResult = { valid: bgResult.success, error: bgResult.error };
             
-            if (moveResult.valid && moveResult.newState) {
-              gameState = moveResult.newState;
-              const status = BackgammonEngine.getGameStatus(gameState);
-              if (status.isGameOver) {
+            if (bgResult.success) {
+              gameState = JSON.parse(bgResult.newState);
+              const status = backgammonEngine.getGameStatus(bgResult.newState);
+              if (status.isOver) {
                 isGameOver = true;
                 winnerId = status.winner === 'white' ? challenge.player1Id : challenge.player2Id;
               }
@@ -813,8 +817,8 @@ export function setupWebSocket(server: Server) {
           let nextTurn = opponentId;
           if (gameType === 'domino' && gameState?.currentPlayer) {
             nextTurn = gameState.currentPlayer;
-          } else if (gameType === 'backgammon' && gameState?.currentPlayer) {
-            nextTurn = gameState.currentPlayer === 'white' ? challenge.player1Id : challenge.player2Id!;
+          } else if (gameType === 'backgammon' && gameState?.currentTurn) {
+            nextTurn = gameState.currentTurn === 'white' ? challenge.player1Id : challenge.player2Id!;
           } else if ((gameType === 'tarneeb' || gameType === 'baloot') && gameState?.currentPlayer) {
             nextTurn = gameState.currentPlayer;
           }
@@ -846,7 +850,7 @@ export function setupWebSocket(server: Server) {
           });
         }
 
-        // Handle dice roll for backgammon
+        // Handle dice roll for backgammon (using consolidated engine)
         if (data.type === "roll_dice" && ws.userId) {
           const { challengeId } = data;
           const room = challengeGameRooms.get(challengeId);
@@ -866,14 +870,20 @@ export function setupWebSocket(server: Server) {
             return;
           }
 
-          let gameState = session.gameState ? JSON.parse(session.gameState) : BackgammonEngine.createInitialState();
+          const [challenge] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
+          let stateJson = session.gameState || backgammonEngine.initializeWithPlayers(challenge.player1Id, challenge.player2Id!);
           
-          const dice = BackgammonEngine.rollDice();
-          gameState = BackgammonEngine.setDice(gameState, dice);
+          const rollResult = backgammonEngine.applyMove(stateJson, ws.userId, { type: 'roll' });
+          if (!rollResult.success) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: rollResult.error || "Cannot roll now" }));
+            return;
+          }
+
+          const gameState = JSON.parse(rollResult.newState);
 
           await db.update(challengeGameSessions)
             .set({
-              gameState: JSON.stringify(gameState),
+              gameState: rollResult.newState,
               updatedAt: new Date(),
             })
             .where(eq(challengeGameSessions.id, session.id));
@@ -882,7 +892,7 @@ export function setupWebSocket(server: Server) {
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({ 
                 type: "dice_rolled", 
-                dice,
+                dice: gameState.dice,
                 playerId: ws.userId,
                 gameState,
               }));
@@ -890,7 +900,7 @@ export function setupWebSocket(server: Server) {
           });
         }
 
-        // Handle end turn for backgammon
+        // Handle end turn for backgammon (using consolidated engine)
         if (data.type === "end_turn" && ws.userId) {
           const { challengeId } = data;
           const room = challengeGameRooms.get(challengeId);
@@ -901,19 +911,21 @@ export function setupWebSocket(server: Server) {
             .where(eq(challengeGameSessions.challengeId, challengeId))
             .limit(1);
 
-          if (!session || session.gameType !== "backgammon") return;
+          if (!session || session.gameType !== "backgammon" || !session.gameState) return;
 
-          let gameState = session.gameState ? JSON.parse(session.gameState) : null;
-          if (!gameState) return;
+          const endTurnResult = backgammonEngine.applyMove(session.gameState, ws.userId, { type: 'end_turn' });
+          if (!endTurnResult.success) {
+            ws.send(JSON.stringify({ type: "challenge_error", error: endTurnResult.error || "Cannot end turn" }));
+            return;
+          }
 
-          gameState = BackgammonEngine.endTurn(gameState);
-
+          const gameState = JSON.parse(endTurnResult.newState);
           const [challenge] = await db.select().from(challenges).where(eq(challenges.id, challengeId));
-          const nextTurn = gameState.currentPlayer === 'white' ? challenge.player1Id : challenge.player2Id;
+          const nextTurn = gameState.currentTurn === 'white' ? challenge.player1Id : challenge.player2Id;
 
           await db.update(challengeGameSessions)
             .set({
-              gameState: JSON.stringify(gameState),
+              gameState: endTurnResult.newState,
               currentTurn: nextTurn,
               updatedAt: new Date(),
             })
