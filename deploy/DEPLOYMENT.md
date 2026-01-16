@@ -97,7 +97,7 @@ sudo su - vex
 cd /var/www/vex
 
 # Clone repository
-git clone https://github.com/yourusername/vex-platform.git .
+git clone https://github.com/vex-platform/vex.git .
 
 # Install dependencies
 npm ci --production=false
@@ -172,7 +172,7 @@ sudo cp /var/www/vex/deploy/nginx.conf /etc/nginx/sites-available/vex
 
 # Edit domain name
 sudo nano /etc/nginx/sites-available/vex
-# Replace 'yourdomain.com' with your actual domain
+# Domain is already set to vixo.click
 
 # Enable site
 sudo ln -s /etc/nginx/sites-available/vex /etc/nginx/sites-enabled/
@@ -192,7 +192,7 @@ sudo systemctl reload nginx
 sudo apt install -y certbot python3-certbot-nginx
 
 # Get certificate
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+sudo certbot --nginx -d vixo.click -d www.vixo.click
 
 # Auto-renewal test
 sudo certbot renew --dry-run
