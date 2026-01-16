@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { TarneebBoard } from '@/components/games/TarneebBoard';
+import { GiftAnimation } from '@/components/games/GiftAnimation';
 import { useGameWebSocket } from '@/hooks/useGameWebSocket';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
@@ -24,7 +25,9 @@ export default function TarneebGame() {
     gameResult,
     error,
     makeMove,
-    forceReconnect
+    forceReconnect,
+    lastGift,
+    clearLastGift
   } = useGameWebSocket(sessionId || null);
 
   const tarneebState = gameState as any;
@@ -223,6 +226,11 @@ export default function TarneebGame() {
           onPass={handlePass}
         />
       </div>
+
+      <GiftAnimation
+        gift={lastGift ? { id: Date.now().toString(), ...lastGift } : null}
+        onComplete={clearLastGift}
+      />
     </div>
   );
 }

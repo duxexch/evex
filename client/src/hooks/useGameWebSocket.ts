@@ -86,6 +86,14 @@ export function useGameWebSocket(sessionId: string | null) {
   const [drawOfferReceived, setDrawOfferReceived] = useState(false);
   const [gameResult, setGameResult] = useState<{ winner: string | null; reason: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastGift, setLastGift] = useState<{
+    senderId: string;
+    senderUsername: string;
+    recipientId: string;
+    giftItem: { id: string; name: string; nameAr?: string; icon: string; price: string };
+    quantity: number;
+    message?: string;
+  } | null>(null);
   const [turnNumber, setTurnNumber] = useState<number>(0);
   const [isMovePending, setIsMovePending] = useState(false);
 
@@ -219,6 +227,22 @@ export function useGameWebSocket(sessionId: string | null) {
         if (message.payload.spectatorCount !== undefined) {
           setSpectatorCount(message.payload.spectatorCount);
         }
+        break;
+
+      case 'gift_received':
+        console.log('[WS] Gift received:', message.payload);
+        setLastGift({
+          senderId: message.payload.senderId,
+          senderUsername: message.payload.senderUsername,
+          recipientId: message.payload.recipientId,
+          giftItem: message.payload.giftItem,
+          quantity: message.payload.quantity,
+          message: message.payload.message
+        });
+        break;
+
+      case 'gift_sent':
+        console.log('[WS] Gift sent successfully:', message.payload);
         break;
 
       case 'draw_offered':
@@ -504,6 +528,21 @@ export function useGameWebSocket(sessionId: string | null) {
     }, 100);
   }, [connect]);
 
+  const sendGift = useCallback((recipientId: string, giftItemId: string, quantity: number = 1, message?: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false;
+    
+    console.log('[WS] Sending gift to', recipientId);
+    wsRef.current.send(JSON.stringify({
+      type: 'send_gift',
+      payload: { recipientId, giftItemId, quantity, message }
+    }));
+    return true;
+  }, []);
+
+  const clearLastGift = useCallback(() => {
+    setLastGift(null);
+  }, []);
+
   return {
     connectionStatus,
     gameType,
@@ -524,6 +563,9 @@ export function useGameWebSocket(sessionId: string | null) {
     offerDraw,
     respondDraw,
     forceReconnect,
-    requestStateSync
+    requestStateSync,
+    lastGift,
+    sendGift,
+    clearLastGift
   };
 }

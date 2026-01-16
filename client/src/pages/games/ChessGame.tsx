@@ -5,13 +5,14 @@ import { ChessTimer } from '@/components/games/chess/ChessTimer';
 import { ChessMoveList } from '@/components/games/chess/ChessMoveList';
 import { ChessControls, DrawOfferDialog } from '@/components/games/chess/ChessControls';
 import { ChessChat } from '@/components/games/chess/ChessChat';
+import { GiftAnimation } from '@/components/games/GiftAnimation';
 import { useGameWebSocket } from '@/hooks/useGameWebSocket';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Wifi, WifiOff, Users, ArrowLeft, Share2, AlertCircle } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, Users, ArrowLeft, Share2, AlertCircle, Gift } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ChessPiece {
@@ -78,7 +79,9 @@ export default function ChessGame() {
     resign,
     offerDraw,
     respondDraw,
-    forceReconnect
+    forceReconnect,
+    lastGift,
+    clearLastGift
   } = useGameWebSocket(sessionId || null);
 
   const isValidChessState = useMemo(() => {
@@ -304,6 +307,11 @@ export default function ChessGame() {
         onAccept={() => respondDraw(true)}
         onDecline={() => respondDraw(false)}
         opponentName={opponent?.username || 'Opponent'}
+      />
+
+      <GiftAnimation
+        gift={lastGift ? { id: Date.now().toString(), ...lastGift } : null}
+        onComplete={clearLastGift}
       />
     </div>
   );
