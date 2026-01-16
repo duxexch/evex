@@ -41,6 +41,9 @@ export interface IStorage {
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   listUsers(role?: string): Promise<User[]>;
   updateUserBalance(id: string, amount: string, operation: 'add' | 'subtract'): Promise<User | undefined>;
+  updateUserBalanceWithCheck(id: string, amount: string, operation: 'add' | 'subtract'): Promise<{ success: boolean; user?: User; error?: string }>;
+  transferBalance(fromUserId: string, toUserId: string, amount: string, options?: { createTransactionRecords?: boolean; transactionType?: 'game_payout' | 'gift' | 'p2p_transfer'; description?: string; sessionId?: string }): Promise<{ success: boolean; fromUser?: User; toUser?: User; error?: string }>;
+  settleGamePayout(sessionId: string, winnerId: string, loserId: string, stakeAmount: string, platformFeePercent?: number): Promise<{ success: boolean; error?: string }>;
 
   // Agents
   getAgent(id: string): Promise<Agent | undefined>;
@@ -202,16 +205,220 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserBalance(id: string, amount: string, operation: 'add' | 'subtract'): Promise<User | undefined> {
-    const user = await this.getUser(id);
-    if (!user) return undefined;
-    
-    const currentBalance = parseFloat(user.balance);
+    // ATOMIC balance update using SQL to prevent race conditions
     const changeAmount = parseFloat(amount);
-    const newBalance = operation === 'add' 
-      ? (currentBalance + changeAmount).toFixed(2)
-      : (currentBalance - changeAmount).toFixed(2);
-    
-    return this.updateUser(id, { balance: newBalance });
+    if (isNaN(changeAmount) || changeAmount < 0) {
+      throw new Error('Invalid amount');
+    }
+
+    const sqlOp = operation === 'add'
+      ? sql`CAST(${users.balance} AS DECIMAL) + ${changeAmount}`
+      : sql`CAST(${users.balance} AS DECIMAL) - ${changeAmount}`;
+
+    const [updated] = await db.update(users)
+      .set({ 
+        balance: sql`CAST(${sqlOp} AS TEXT)`,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, id))
+      .returning();
+
+    return updated || undefined;
+  }
+
+  // Atomic balance update with minimum balance check (prevents negative balance)
+  async updateUserBalanceWithCheck(id: string, amount: string, operation: 'add' | 'subtract'): Promise<{ success: boolean; user?: User; error?: string }> {
+    const changeAmount = parseFloat(amount);
+    if (isNaN(changeAmount) || changeAmount < 0) {
+      return { success: false, error: 'Invalid amount' };
+    }
+
+    return await db.transaction(async (tx) => {
+      // Lock the row for update
+      const [user] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, id))
+        .for('update');
+
+      if (!user) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const currentBalance = parseFloat(user.balance);
+      
+      if (operation === 'subtract' && currentBalance < changeAmount) {
+        return { success: false, error: 'Insufficient balance' };
+      }
+
+      const newBalance = operation === 'add'
+        ? (currentBalance + changeAmount).toFixed(2)
+        : (currentBalance - changeAmount).toFixed(2);
+
+      const [updated] = await tx.update(users)
+        .set({ balance: newBalance, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+
+      return { success: true, user: updated as User };
+    });
+  }
+
+  // Transactional transfer between two users (for game payouts, gifts, P2P)
+  async transferBalance(
+    fromUserId: string, 
+    toUserId: string, 
+    amount: string,
+    options?: { 
+      createTransactionRecords?: boolean;
+      transactionType?: 'game_payout' | 'gift' | 'p2p_transfer';
+      description?: string;
+      sessionId?: string;
+    }
+  ): Promise<{ success: boolean; fromUser?: User; toUser?: User; error?: string }> {
+    const transferAmount = parseFloat(amount);
+    if (isNaN(transferAmount) || transferAmount <= 0) {
+      return { success: false, error: 'Invalid amount' };
+    }
+
+    return await db.transaction(async (tx) => {
+      // Lock both rows in consistent order to prevent deadlocks
+      const [fromId, toId] = [fromUserId, toUserId].sort();
+      
+      const [user1] = await tx.select().from(users).where(eq(users.id, fromId)).for('update');
+      const [user2] = await tx.select().from(users).where(eq(users.id, toId)).for('update');
+
+      const fromUser = fromId === fromUserId ? user1 : user2;
+      const toUser = fromId === fromUserId ? user2 : user1;
+
+      if (!fromUser || !toUser) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const fromBalance = parseFloat(fromUser.balance);
+      const toBalance = parseFloat(toUser.balance);
+      
+      if (fromBalance < transferAmount) {
+        return { success: false, error: 'Insufficient balance' };
+      }
+
+      const fromNewBalance = (fromBalance - transferAmount).toFixed(2);
+      const toNewBalance = (toBalance + transferAmount).toFixed(2);
+
+      // Update balances atomically
+      const [updatedFrom] = await tx.update(users)
+        .set({ balance: fromNewBalance, updatedAt: new Date() })
+        .where(eq(users.id, fromUserId))
+        .returning();
+
+      const [updatedTo] = await tx.update(users)
+        .set({ balance: toNewBalance, updatedAt: new Date() })
+        .where(eq(users.id, toUserId))
+        .returning();
+
+      // Optionally create transaction records for audit trail
+      if (options?.createTransactionRecords) {
+        await tx.insert(transactions).values({
+          userId: fromUserId,
+          type: 'withdrawal',
+          amount: amount,
+          balanceBefore: fromBalance.toFixed(2),
+          balanceAfter: fromNewBalance,
+          status: 'completed',
+          description: options.description || `Transfer to user ${toUserId}`,
+          processedAt: new Date()
+        });
+
+        await tx.insert(transactions).values({
+          userId: toUserId,
+          type: 'deposit',
+          amount: amount,
+          balanceBefore: toBalance.toFixed(2),
+          balanceAfter: toNewBalance,
+          status: 'completed',
+          description: options.description || `Transfer from user ${fromUserId}`,
+          processedAt: new Date()
+        });
+      }
+
+      return { success: true, fromUser: updatedFrom as User, toUser: updatedTo as User };
+    });
+  }
+
+  // Settle game payout with full transactional integrity
+  async settleGamePayout(
+    sessionId: string,
+    winnerId: string,
+    loserId: string,
+    stakeAmount: string,
+    platformFeePercent: number = 0
+  ): Promise<{ success: boolean; error?: string }> {
+    const stake = parseFloat(stakeAmount);
+    if (isNaN(stake) || stake <= 0) {
+      return { success: false, error: 'Invalid stake amount' };
+    }
+
+    const platformFee = stake * (platformFeePercent / 100);
+    const winnerPayout = stake - platformFee; // Winner gets opponent's stake minus fee
+
+    return await db.transaction(async (tx) => {
+      // Lock both users in consistent order
+      const [id1, id2] = [winnerId, loserId].sort();
+      const [user1] = await tx.select().from(users).where(eq(users.id, id1)).for('update');
+      const [user2] = await tx.select().from(users).where(eq(users.id, id2)).for('update');
+
+      const winner = id1 === winnerId ? user1 : user2;
+      const loser = id1 === winnerId ? user2 : user1;
+
+      if (!winner || !loser) {
+        return { success: false, error: 'User not found' };
+      }
+
+      // Winner gets opponent's stake minus fee (their own stake stays with them)
+      const winnerBalance = parseFloat(winner.balance);
+      const winnerNewBalance = (winnerBalance + winnerPayout).toFixed(2);
+
+      await tx.update(users)
+        .set({ balance: winnerNewBalance, updatedAt: new Date() })
+        .where(eq(users.id, winnerId));
+
+      // Create transaction records with proper balance tracking
+      await tx.insert(transactions).values({
+        userId: winnerId,
+        type: 'win',
+        amount: winnerPayout.toFixed(2),
+        balanceBefore: winnerBalance.toFixed(2),
+        balanceAfter: winnerNewBalance,
+        status: 'completed',
+        description: `Game winnings from session ${sessionId}`,
+        referenceId: sessionId,
+        processedAt: new Date()
+      });
+
+      const loserBalance = parseFloat(loser.balance);
+      await tx.insert(transactions).values({
+        userId: loserId,
+        type: 'stake',
+        amount: stakeAmount,
+        balanceBefore: (loserBalance + stake).toFixed(2), // Balance before stake was deducted
+        balanceAfter: loserBalance.toFixed(2),
+        status: 'completed',
+        description: `Game stake loss in session ${sessionId}`,
+        referenceId: sessionId,
+        processedAt: new Date()
+      });
+
+      // Update game session with settlement info
+      await tx.update(liveGameSessions)
+        .set({
+          status: 'completed',
+          winnerId: winnerId,
+          endedAt: new Date()
+        })
+        .where(eq(liveGameSessions.id, sessionId));
+
+      return { success: true };
+    });
   }
 
   // ==================== AGENTS ====================

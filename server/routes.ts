@@ -20,6 +20,9 @@ import crypto from "crypto";
 import { setupWebSocket, sendNotification } from "./websocket";
 import { db, pool } from "./db";
 import { eq, desc, and, or, sql } from "drizzle-orm";
+import { getHealthReport, trackError, errorTracker } from "./lib/health";
+import { getAllCircuitBreakerStats } from "./lib/circuit-breaker";
+import { logger, requestLogger } from "./lib/logger";
 
 // Security: JWT_SECRET must be set in production
 const JWT_SECRET = process.env.SESSION_SECRET;
@@ -124,6 +127,9 @@ const agentMiddleware = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   
+  // Apply request logging middleware
+  app.use(requestLogger());
+  
   // Apply DDoS protection first (absolute limit)
   app.use("/api", attackProtectionLimiter);
   
@@ -207,6 +213,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         error: error.message,
       });
     }
+  });
+  
+  // Full health report with circuit breakers and alerts
+  app.get("/api/health/full", async (req: Request, res: Response) => {
+    try {
+      const report = await getHealthReport();
+      const statusCode = report.status.status === 'unhealthy' ? 503 : 
+                         report.status.status === 'degraded' ? 200 : 200;
+      res.status(statusCode).json(report);
+    } catch (error: any) {
+      trackError(error.message);
+      res.status(503).json({
+        status: { status: 'unhealthy', timestamp: new Date().toISOString() },
+        error: error.message
+      });
+    }
+  });
+  
+  // Circuit breaker status endpoint
+  app.get("/api/health/circuits", async (req: Request, res: Response) => {
+    res.json(getAllCircuitBreakerStats());
   });
   
   // ==================== AUTH ROUTES ====================
@@ -4553,6 +4580,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("Failed during admin bootstrap:", error);
     }
   })();
+
+  // Global error handler with error tracking
+  app.use((err: any, req: any, res: any, next: any) => {
+    trackError(err.message || 'Unknown error');
+    logger.error(`Unhandled error: ${err.message}`, err, {
+      path: req.path,
+      method: req.method,
+      requestId: req.requestId
+    });
+    
+    if (res.headersSent) {
+      return next(err);
+    }
+    
+    res.status(err.status || 500).json({
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Internal server error' 
+        : err.message
+    });
+  });
 
   return httpServer;
 }

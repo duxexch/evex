@@ -3,7 +3,7 @@ import { Server } from 'http';
 import jwt from 'jsonwebtoken';
 import { storage } from './storage';
 import { db } from './db';
-import { liveGameSessions, gameMoves } from '@shared/schema';
+import { liveGameSessions, gameMoves, challenges } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { getGameEngine } from './game-engines';
 import type { MoveData, WebSocketMessage } from './game-engines/types';
@@ -471,6 +471,42 @@ async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveD
 
 async function handleGameOver(room: GameRoom, status: any) {
   try {
+    // Get session to check for stake amount
+    const session = await storage.getLiveGameSession(room.sessionId);
+    if (!session) {
+      console.error('[WS] Session not found for game over:', room.sessionId);
+      return;
+    }
+
+    // Determine winner and loser for payout
+    const winnerId = status.winner;
+    const loserId = session.player1Id === winnerId ? session.player2Id : session.player1Id;
+
+    // Check if this is a paid game via challenge
+    if (session.challengeId && winnerId && loserId) {
+      // Get challenge to get stake amount
+      const [challenge] = await db.select().from(challenges).where(eq(challenges.id, session.challengeId));
+      
+      if (challenge && parseFloat(challenge.betAmount) > 0) {
+        // Settle payout with transactional integrity
+        const payoutResult = await storage.settleGamePayout(
+          room.sessionId,
+          winnerId,
+          loserId,
+          challenge.betAmount,
+          0 // Platform fee percent - can be configured
+        );
+
+        if (!payoutResult.success) {
+          console.error('[WS] Payout failed:', payoutResult.error);
+          // Still update session status but log the error
+        } else {
+          console.log(`[WS] Game payout settled: winner=${winnerId}, stake=${challenge.betAmount}`);
+        }
+      }
+    }
+
+    // Update session status (if not already done by settleGamePayout)
     await storage.updateLiveGameSession(room.sessionId, {
       status: 'completed',
       winnerId: status.winner,
@@ -483,7 +519,7 @@ async function handleGameOver(room: GameRoom, status: any) {
       payload: status
     });
   } catch (error) {
-    console.error('Error handling game over:', error);
+    console.error('[WS] Error handling game over:', error);
   }
 }
 
@@ -539,17 +575,31 @@ async function handleSendGift(ws: AuthenticatedWebSocket, payload: { recipientId
     }
 
     const totalPrice = parseFloat(giftItem.price) * payload.quantity;
-    const sender = await storage.getUser(ws.userId);
-    
-    if (!sender || parseFloat(sender.balance) < totalPrice) {
-      sendError(ws, 'Insufficient balance');
+    const recipientEarnings = totalPrice * (parseFloat(giftItem.creatorShare) / 100);
+
+    // Use transactional transfer for atomic balance update
+    const transferResult = await storage.transferBalance(
+      ws.userId,
+      payload.recipientId,
+      recipientEarnings.toString(),
+      {
+        createTransactionRecords: true,
+        transactionType: 'gift',
+        description: `Gift: ${giftItem.name} x${payload.quantity}`
+      }
+    );
+
+    if (!transferResult.success) {
+      sendError(ws, transferResult.error || 'Failed to send gift');
       return;
     }
 
-    const recipientEarnings = totalPrice * (parseFloat(giftItem.creatorShare) / 100);
-
-    await storage.updateUserBalance(ws.userId, totalPrice.toString(), 'subtract');
-    await storage.updateUserBalance(payload.recipientId, recipientEarnings.toString(), 'add');
+    // Platform keeps the difference (totalPrice - recipientEarnings)
+    // Deduct the platform fee from sender separately if needed
+    const platformFee = totalPrice - recipientEarnings;
+    if (platformFee > 0) {
+      await storage.updateUserBalanceWithCheck(ws.userId, platformFee.toString(), 'subtract');
+    }
 
     await storage.addSpectatorGift({
       sessionId: ws.sessionId,
@@ -574,13 +624,14 @@ async function handleSendGift(ws: AuthenticatedWebSocket, payload: { recipientId
       }
     });
 
+    const newBalance = transferResult.fromUser ? parseFloat(transferResult.fromUser.balance) - platformFee : 0;
     send(ws, {
       type: 'gift_sent',
-      payload: { success: true, newBalance: parseFloat(sender.balance) - totalPrice }
+      payload: { success: true, newBalance }
     });
 
   } catch (error) {
-    console.error('Error sending gift:', error);
+    console.error('[WS] Error sending gift:', error);
     sendError(ws, 'Failed to send gift');
   }
 }
