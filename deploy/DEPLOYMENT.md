@@ -403,6 +403,132 @@ sudo nano /etc/nginx/sites-available/vex
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+## Rollback Strategy
+
+### Pre-Deployment Backup
+Always backup before deploying:
+```bash
+# Ensure backup directory exists
+cd /var/www/vex
+mkdir -p backups
+
+# Backup database before any deployment
+pg_dump $DATABASE_URL > backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql
+
+# Keep track of current git commit
+git rev-parse HEAD > backups/pre-deploy-commit.txt
+```
+
+### Quick Rollback (Code Only)
+If deployment fails and database wasn't affected:
+```bash
+# Get previous commit hash
+PREV_COMMIT=$(cat backups/pre-deploy-commit.txt)
+
+# Checkout previous version
+git checkout $PREV_COMMIT
+
+# Reinstall dependencies and rebuild
+npm ci --production=false
+npm run build
+npm prune --production
+
+# Reload PM2 (zero-downtime)
+pm2 reload vex-platform
+
+# Verify health
+curl http://localhost:5000/api/health
+```
+
+### Full Rollback (Code + Database)
+If database changes need to be reverted:
+```bash
+# Stop application
+pm2 stop vex-platform
+
+# Restore database from backup
+BACKUP_FILE=$(ls -t backups/pre-deploy-*.sql | head -1)
+psql $DATABASE_URL < $BACKUP_FILE
+
+# Rollback code
+PREV_COMMIT=$(cat backups/pre-deploy-commit.txt)
+git checkout $PREV_COMMIT
+npm ci --production=false
+npm run build
+npm prune --production
+
+# Restart application
+pm2 start vex-platform
+
+# Verify health
+curl http://localhost:5000/api/health
+```
+
+### Automated Rollback Script
+Create `/var/www/vex/scripts/rollback.sh`:
+```bash
+#!/bin/bash
+set -e
+cd /var/www/vex
+
+echo "Starting rollback..."
+
+# Check for backup
+if [ ! -f backups/pre-deploy-commit.txt ]; then
+    echo "Error: No backup commit found"
+    exit 1
+fi
+
+PREV_COMMIT=$(cat backups/pre-deploy-commit.txt)
+LATEST_BACKUP=$(ls -t backups/pre-deploy-*.sql 2>/dev/null | head -1)
+
+# Rollback code
+git checkout $PREV_COMMIT
+npm ci --production=false
+npm run build
+npm prune --production
+
+# Ask about database rollback
+read -p "Rollback database too? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    pm2 stop vex-platform
+    psql $DATABASE_URL < $LATEST_BACKUP
+fi
+
+pm2 reload vex-platform
+echo "Rollback complete!"
+```
+
+## PM2 Scaling Guide
+
+Configure PM2 instances based on your VPS resources:
+
+| VPS RAM | CPU Cores | PM2 Instances | DB_POOL_MAX | Concurrent Users |
+|---------|-----------|---------------|-------------|------------------|
+| 2GB     | 2         | 2             | 25          | ~1,000           |
+| 4GB     | 2-4       | 2-4           | 50          | ~4,000           |
+| 8GB     | 4+        | 4-8           | 75          | ~10,000          |
+| 16GB    | 8+        | 8-16          | 100         | ~20,000          |
+
+### Update ecosystem.config.js for your VPS:
+```javascript
+// For 4GB RAM, 4 CPU VPS:
+instances: 4,
+max_memory_restart: '900M',
+
+// For 8GB RAM, 4 CPU VPS:
+instances: 4,
+max_memory_restart: '1500M',
+```
+
+### Apply changes:
+```bash
+pm2 delete vex-platform
+pm2 start deploy/ecosystem.config.js
+pm2 save
+```
+
 ## Hostinger-Specific Notes
 
 1. **Database**: Use Hostinger's managed PostgreSQL if available
