@@ -66,6 +66,7 @@ const P2PPage = lazy(() => import("@/pages/p2p"));
 const AdminAnnouncementsPage = lazy(() => import("@/pages/admin/announcements"));
 const FreePage = lazy(() => import("@/pages/free"));
 const ChallengesPage = lazy(() => import("@/pages/challenges"));
+const GameLobbyPage = lazy(() => import("@/pages/game-lobby"));
 const P2PProfilePage = lazy(() => import("@/pages/p2p-profile"));
 const P2PSettingsPage = lazy(() => import("@/pages/p2p-settings"));
 const WalletPage = lazy(() => import("@/pages/wallet"));
@@ -180,6 +181,7 @@ function AppSidebar({ side }: { side: "left" | "right" }) {
     { title: t('nav.wallet'), url: "/wallet", icon: Wallet, key: "wallet" },
     { title: t('nav.multiplayer'), url: "/multiplayer", icon: Gamepad2, key: "multiplayer" },
     { title: t('nav.challenges'), url: "/challenges", icon: Swords, key: "challenges" },
+    { title: t('nav.lobby'), url: "/lobby", icon: Users, key: "lobby" },
     { title: t('nav.playGames'), url: "/play", icon: Play, key: "play" },
     { title: t('nav.friends'), url: "/friends", icon: Users, key: "friends" },
     { title: t('nav.chat'), url: "/chat", icon: MessageCircle, key: "chat" },
@@ -198,6 +200,7 @@ function AppSidebar({ side }: { side: "left" | "right" }) {
     { title: t('nav.gameManagement'), url: "/games", icon: Gamepad2, key: "game-management" },
     { title: t('nav.announcements'), url: "/admin/announcements", icon: Megaphone, key: "announcements" },
     { title: t('nav.challenges'), url: "/challenges", icon: Swords, key: "challenges" },
+    { title: t('nav.lobby'), url: "/lobby", icon: Users, key: "lobby" },
     { title: t('nav.playGames'), url: "/play", icon: Play, key: "play" },
     { title: t('nav.friends'), url: "/friends", icon: Users, key: "friends" },
     { title: t('nav.chat'), url: "/chat", icon: MessageCircle, key: "chat" },
@@ -596,6 +599,7 @@ function Router() {
           <Route path="/games" component={GamesPage} />
           <Route path="/play" component={PlayPage} />
           <Route path="/challenges" component={ChallengesPage} />
+          <Route path="/lobby" component={GameLobbyPage} />
           <Route path="/challenge/:id/play" component={ChallengeGamePage} />
           <Route path="/challenge/:id/watch" component={ChallengeWatchPage} />
           <Route path="/game/chess/:sessionId" component={ChessGamePage} />
