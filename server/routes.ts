@@ -2620,6 +2620,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!challenge) {
         return res.status(404).json({ error: "Challenge not found" });
       }
+      if (challenge.player1Id === req.user!.id) {
+        return res.status(400).json({ error: "Cannot join your own challenge" });
+      }
+      if (challenge.status !== 'waiting') {
+        return res.status(400).json({ error: "Challenge is no longer available" });
+      }
       challenge.player2Id = req.user!.id;
       challenge.player2Name = req.user!.username;
       challenge.player2Rating = { wins: 0, losses: 0, winRate: 0, rank: "bronze" };
@@ -2637,9 +2643,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!challenge) {
         return res.status(404).json({ error: "Challenge not found" });
       }
+      if (challenge.status !== 'waiting') {
+        return res.status(400).json({ error: "Can only withdraw waiting challenges" });
+      }
       challenge.status = 'cancelled';
-      const penalty = challenge.betAmount * 0.7;
-      res.json({ success: true, penalty });
+      const penalty = challenge.betAmount * 0.3;
+      res.json({ ...challenge, penalty });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
