@@ -276,6 +276,11 @@ export class DatabaseStorage implements IStorage {
       sessionId?: string;
     }
   ): Promise<{ success: boolean; fromUser?: User; toUser?: User; error?: string }> {
+    // SECURITY: Prevent self-transfers which could corrupt balance
+    if (fromUserId === toUserId) {
+      return { success: false, error: 'Cannot transfer to self' };
+    }
+    
     const transferAmount = parseFloat(amount);
     if (isNaN(transferAmount) || transferAmount <= 0) {
       return { success: false, error: 'Invalid amount' };

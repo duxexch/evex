@@ -119,3 +119,57 @@ Run: `npx tsx server/tests/platform-financial-test.ts`
   - Memory: 80% warning, 95% critical
   - DB latency: 100ms warning, 500ms critical
   - Error rate: 10/min warning, 50/min critical
+
+### Staging Verification Test Suite
+Run: `npx tsx server/tests/staging-verification-test.ts`
+
+Exercises monitoring infrastructure with 13 tests covering:
+- Logging output at all levels (DEBUG, INFO, WARN, ERROR)
+- Specialized loggers (financial, game, security)
+- Circuit breaker state transitions (CLOSED → OPEN → HALF_OPEN → CLOSED)
+- Health report generation with alerts
+- Error tracking and counting
+
+### Financial Concurrency Test Suite
+Run: `npx tsx server/tests/financial-concurrency-test.ts`
+
+Tests real storage transaction paths with 12 tests covering:
+- Atomic balance operations with negative balance prevention
+- Concurrent balance updates (serialization verified)
+- Multi-user transfer integrity (total balance preserved)
+- Full game stake/payout flow
+- Large concurrent operation stress test (50+ parallel operations)
+
+## Recovery Playbooks
+
+### Circuit Breaker Recovery
+**Symptoms**: `/api/health/full` shows circuit breaker in OPEN state
+**Cause**: Failure threshold exceeded (database: 3 failures, payment: 2 failures)
+**Recovery Steps**:
+1. Check underlying service health (database connection, external API)
+2. Wait for automatic reset timeout (database: 10s, payment: 60s)
+3. Circuit will transition to HALF_OPEN and test recovery
+4. Upon success, circuit returns to CLOSED
+**Manual Override**: Call `circuitBreaker.reset()` from admin endpoint if needed
+
+### Transaction Rollback Behavior
+**Behavior**: All financial operations use database transactions with row-level locking
+**On Failure**: Automatic rollback - no partial state changes
+**Logging**: Failed transactions logged with requestId for correlation
+**Verification**: Balance totals are preserved across all concurrent operations
+
+### Error Rate Alerts
+**Warning**: 10 errors/minute → Investigate error logs
+**Critical**: 50 errors/minute → Potential service degradation
+**Actions**:
+1. Check `/api/health/full` for alert details
+2. Review structured logs for error patterns (filter by ERROR/FATAL)
+3. Check circuit breaker states for failing dependencies
+
+### Database Latency Alerts
+**Warning**: >100ms latency → Monitor for degradation
+**Critical**: >500ms latency → Immediate investigation required
+**Actions**:
+1. Check database connection pool stats via `/api/health/detailed`
+2. Review slow queries in database logs
+3. Consider connection pool scaling if many waiting clients
