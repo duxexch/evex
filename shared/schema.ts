@@ -2298,3 +2298,152 @@ export const gameChatMessagesRelations = relations(gameChatMessages, ({ one }) =
 export const insertGameChatMessageSchema = createInsertSchema(gameChatMessages).omit({ id: true, createdAt: true });
 export type InsertGameChatMessage = z.infer<typeof insertGameChatMessageSchema>;
 export type GameChatMessage = typeof gameChatMessages.$inferSelect;
+
+// ==================== ACHIEVEMENTS ====================
+
+export const achievementCategoryEnum = pgEnum("achievement_category", ["games", "wins", "earnings", "streaks", "social", "special"]);
+export const achievementRarityEnum = pgEnum("achievement_rarity", ["common", "uncommon", "rare", "epic", "legendary"]);
+
+export const achievements = pgTable("achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  nameEn: text("name_en").notNull(),
+  nameAr: text("name_ar").notNull(),
+  descriptionEn: text("description_en").notNull(),
+  descriptionAr: text("description_ar").notNull(),
+  category: achievementCategoryEnum("category").notNull(),
+  rarity: achievementRarityEnum("rarity").notNull().default("common"),
+  gameType: text("game_type"),
+  requirement: integer("requirement").notNull().default(1),
+  rewardAmount: decimal("reward_amount", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  iconName: text("icon_name").notNull().default("trophy"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_achievements_category").on(table.category),
+  index("idx_achievements_game_type").on(table.gameType),
+  index("idx_achievements_rarity").on(table.rarity),
+]);
+
+export const insertAchievementSchema = createInsertSchema(achievements).omit({ id: true, createdAt: true });
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+export type Achievement = typeof achievements.$inferSelect;
+
+// ==================== USER ACHIEVEMENTS ====================
+
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  achievementId: varchar("achievement_id").notNull().references(() => achievements.id),
+  progress: integer("progress").notNull().default(0),
+  unlockedAt: timestamp("unlocked_at"),
+  rewardClaimed: boolean("reward_claimed").notNull().default(false),
+  rewardClaimedAt: timestamp("reward_claimed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_user_achievement_unique").on(table.userId, table.achievementId),
+  index("idx_user_achievements_user").on(table.userId),
+  index("idx_user_achievements_unlocked").on(table.unlockedAt),
+]);
+
+export const userAchievementsRelations = relations(userAchievements, ({ one }) => ({
+  user: one(users, { fields: [userAchievements.userId], references: [users.id] }),
+  achievement: one(achievements, { fields: [userAchievements.achievementId], references: [achievements.id] }),
+}));
+
+export const insertUserAchievementSchema = createInsertSchema(userAchievements).omit({ id: true, createdAt: true });
+export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+
+// ==================== SEASONS ====================
+
+export const seasonStatusEnum = pgEnum("season_status", ["upcoming", "active", "ended", "archived"]);
+
+export const seasons = pgTable("seasons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  number: integer("number").notNull().unique(),
+  nameEn: text("name_en").notNull(),
+  nameAr: text("name_ar").notNull(),
+  descriptionEn: text("description_en"),
+  descriptionAr: text("description_ar"),
+  status: seasonStatusEnum("status").notNull().default("upcoming"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  prizePool: decimal("prize_pool", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_seasons_status").on(table.status),
+  index("idx_seasons_dates").on(table.startDate, table.endDate),
+]);
+
+export const insertSeasonSchema = createInsertSchema(seasons).omit({ id: true, createdAt: true });
+export type InsertSeason = z.infer<typeof insertSeasonSchema>;
+export type Season = typeof seasons.$inferSelect;
+
+// ==================== SEASONAL STATS ====================
+
+export const seasonalStats = pgTable("seasonal_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  seasonId: varchar("season_id").notNull().references(() => seasons.id),
+  gamesPlayed: integer("games_played").notNull().default(0),
+  gamesWon: integer("games_won").notNull().default(0),
+  gamesLost: integer("games_lost").notNull().default(0),
+  gamesDraw: integer("games_draw").notNull().default(0),
+  chessPlayed: integer("chess_played").notNull().default(0),
+  chessWon: integer("chess_won").notNull().default(0),
+  backgammonPlayed: integer("backgammon_played").notNull().default(0),
+  backgammonWon: integer("backgammon_won").notNull().default(0),
+  dominoPlayed: integer("domino_played").notNull().default(0),
+  dominoWon: integer("domino_won").notNull().default(0),
+  tarneebPlayed: integer("tarneeb_played").notNull().default(0),
+  tarneebWon: integer("tarneeb_won").notNull().default(0),
+  balootPlayed: integer("baloot_played").notNull().default(0),
+  balootWon: integer("baloot_won").notNull().default(0),
+  totalEarnings: decimal("total_earnings", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  currentWinStreak: integer("current_win_streak").notNull().default(0),
+  longestWinStreak: integer("longest_win_streak").notNull().default(0),
+  rank: integer("rank"),
+  rankUpdatedAt: timestamp("rank_updated_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_seasonal_stats_user_season").on(table.userId, table.seasonId),
+  index("idx_seasonal_stats_season").on(table.seasonId),
+  index("idx_seasonal_stats_games_won").on(table.seasonId, table.gamesWon),
+  index("idx_seasonal_stats_earnings").on(table.seasonId, table.totalEarnings),
+  index("idx_seasonal_stats_streak").on(table.seasonId, table.longestWinStreak),
+]);
+
+export const seasonalStatsRelations = relations(seasonalStats, ({ one }) => ({
+  user: one(users, { fields: [seasonalStats.userId], references: [users.id] }),
+  season: one(seasons, { fields: [seasonalStats.seasonId], references: [seasons.id] }),
+}));
+
+export const insertSeasonalStatsSchema = createInsertSchema(seasonalStats).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSeasonalStats = z.infer<typeof insertSeasonalStatsSchema>;
+export type SeasonalStats = typeof seasonalStats.$inferSelect;
+
+// ==================== SEASON REWARDS ====================
+
+export const seasonRewards = pgTable("season_rewards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  seasonId: varchar("season_id").notNull().references(() => seasons.id),
+  rankFrom: integer("rank_from").notNull(),
+  rankTo: integer("rank_to").notNull(),
+  rewardAmount: decimal("reward_amount", { precision: 15, scale: 2 }).notNull(),
+  rewardDescriptionEn: text("reward_description_en"),
+  rewardDescriptionAr: text("reward_description_ar"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_season_rewards_season").on(table.seasonId),
+]);
+
+export const seasonRewardsRelations = relations(seasonRewards, ({ one }) => ({
+  season: one(seasons, { fields: [seasonRewards.seasonId], references: [seasons.id] }),
+}));
+
+export const insertSeasonRewardSchema = createInsertSchema(seasonRewards).omit({ id: true, createdAt: true });
+export type InsertSeasonReward = z.infer<typeof insertSeasonRewardSchema>;
+export type SeasonReward = typeof seasonRewards.$inferSelect;

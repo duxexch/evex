@@ -6,6 +6,7 @@ import {
   notifications, userSessions, loginHistory, announcements, announcementViews, userPreferences,
   userRelationships, socialPlatforms,
   liveGameSessions, gameMoves, gameSpectators, giftItems, spectatorGifts, gameChatMessages,
+  achievements, userAchievements, seasons, seasonalStats, seasonRewards,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -29,6 +30,11 @@ import {
   type GiftItem, type InsertGiftItem,
   type SpectatorGift, type InsertSpectatorGift,
   type GameChatMessage, type InsertGameChatMessage,
+  type Achievement, type InsertAchievement,
+  type UserAchievement, type InsertUserAchievement,
+  type Season, type InsertSeason,
+  type SeasonalStats, type InsertSeasonalStats,
+  type SeasonReward, type InsertSeasonReward,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, asc, or, like, ne } from "drizzle-orm";
@@ -1310,6 +1316,264 @@ export class DatabaseStorage implements IStorage {
       .where(eq(gameChatMessages.sessionId, sessionId))
       .orderBy(desc(gameChatMessages.createdAt))
       .limit(limit);
+  }
+
+  // ==================== ACHIEVEMENTS ====================
+
+  async getAchievements(category?: string): Promise<Achievement[]> {
+    if (category) {
+      return db.select().from(achievements)
+        .where(and(eq(achievements.isActive, true), eq(achievements.category, category as any)))
+        .orderBy(asc(achievements.sortOrder));
+    }
+    return db.select().from(achievements)
+      .where(eq(achievements.isActive, true))
+      .orderBy(asc(achievements.sortOrder));
+  }
+
+  async getAchievement(id: string): Promise<Achievement | undefined> {
+    const [achievement] = await db.select().from(achievements).where(eq(achievements.id, id));
+    return achievement || undefined;
+  }
+
+  async getAchievementByKey(key: string): Promise<Achievement | undefined> {
+    const [achievement] = await db.select().from(achievements).where(eq(achievements.key, key));
+    return achievement || undefined;
+  }
+
+  async createAchievement(achievement: InsertAchievement): Promise<Achievement> {
+    const [created] = await db.insert(achievements).values(achievement).returning();
+    return created;
+  }
+
+  async getUserAchievements(userId: string): Promise<(UserAchievement & { achievement: Achievement })[]> {
+    const results = await db.select({
+      userAchievement: userAchievements,
+      achievement: achievements,
+    }).from(userAchievements)
+      .innerJoin(achievements, eq(userAchievements.achievementId, achievements.id))
+      .where(eq(userAchievements.userId, userId))
+      .orderBy(desc(userAchievements.unlockedAt));
+    
+    return results.map(r => ({
+      ...r.userAchievement,
+      achievement: r.achievement,
+    }));
+  }
+
+  async getUserAchievement(userId: string, achievementId: string): Promise<UserAchievement | undefined> {
+    const [ua] = await db.select().from(userAchievements)
+      .where(and(eq(userAchievements.userId, userId), eq(userAchievements.achievementId, achievementId)));
+    return ua || undefined;
+  }
+
+  async updateAchievementProgress(userId: string, achievementKey: string, progress: number): Promise<{ unlocked: boolean; achievement?: Achievement }> {
+    const achievement = await this.getAchievementByKey(achievementKey);
+    if (!achievement) return { unlocked: false };
+
+    let userAchievement = await this.getUserAchievement(userId, achievement.id);
+    
+    if (!userAchievement) {
+      const [created] = await db.insert(userAchievements).values({
+        userId,
+        achievementId: achievement.id,
+        progress: 0,
+      }).returning();
+      userAchievement = created;
+    }
+
+    if (userAchievement.unlockedAt) {
+      return { unlocked: false };
+    }
+
+    const newProgress = Math.max(userAchievement.progress, progress);
+    const unlocked = newProgress >= achievement.requirement;
+
+    await db.update(userAchievements)
+      .set({
+        progress: newProgress,
+        unlockedAt: unlocked ? new Date() : null,
+      })
+      .where(eq(userAchievements.id, userAchievement.id));
+
+    return { unlocked, achievement: unlocked ? achievement : undefined };
+  }
+
+  async claimAchievementReward(userId: string, achievementId: string): Promise<{ success: boolean; amount?: string; error?: string }> {
+    return db.transaction(async (tx) => {
+      const [ua] = await tx.select().from(userAchievements)
+        .where(and(eq(userAchievements.userId, userId), eq(userAchievements.achievementId, achievementId)))
+        .for('update');
+
+      if (!ua || !ua.unlockedAt) {
+        return { success: false, error: 'Achievement not unlocked' };
+      }
+
+      if (ua.rewardClaimed) {
+        return { success: false, error: 'Reward already claimed' };
+      }
+
+      const [achievement] = await tx.select().from(achievements).where(eq(achievements.id, achievementId));
+      if (!achievement || parseFloat(achievement.rewardAmount) <= 0) {
+        return { success: false, error: 'No reward for this achievement' };
+      }
+
+      await tx.update(users)
+        .set({ balance: sql`${users.balance} + ${achievement.rewardAmount}` })
+        .where(eq(users.id, userId));
+
+      await tx.update(userAchievements)
+        .set({ rewardClaimed: true, rewardClaimedAt: new Date() })
+        .where(eq(userAchievements.id, ua.id));
+
+      return { success: true, amount: achievement.rewardAmount };
+    });
+  }
+
+  // ==================== SEASONS ====================
+
+  async getSeasons(): Promise<Season[]> {
+    return db.select().from(seasons).orderBy(desc(seasons.number));
+  }
+
+  async getActiveSeason(): Promise<Season | undefined> {
+    const [season] = await db.select().from(seasons).where(eq(seasons.status, 'active'));
+    return season || undefined;
+  }
+
+  async getSeason(id: string): Promise<Season | undefined> {
+    const [season] = await db.select().from(seasons).where(eq(seasons.id, id));
+    return season || undefined;
+  }
+
+  async getSeasonByNumber(number: number): Promise<Season | undefined> {
+    const [season] = await db.select().from(seasons).where(eq(seasons.number, number));
+    return season || undefined;
+  }
+
+  async createSeason(season: InsertSeason): Promise<Season> {
+    const [created] = await db.insert(seasons).values(season).returning();
+    return created;
+  }
+
+  async updateSeason(id: string, data: Partial<InsertSeason>): Promise<Season | undefined> {
+    const [updated] = await db.update(seasons).set(data).where(eq(seasons.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async getSeasonalStats(seasonId: string, limit: number = 100, gameType?: string): Promise<(SeasonalStats & { user: Pick<User, 'id' | 'username' | 'nickname' | 'profilePicture'> })[]> {
+    let orderColumn = seasonalStats.gamesWon;
+    
+    const results = await db.select({
+      stats: seasonalStats,
+      user: {
+        id: users.id,
+        username: users.username,
+        nickname: users.nickname,
+        profilePicture: users.profilePicture,
+      },
+    }).from(seasonalStats)
+      .innerJoin(users, eq(seasonalStats.userId, users.id))
+      .where(eq(seasonalStats.seasonId, seasonId))
+      .orderBy(desc(orderColumn))
+      .limit(limit);
+
+    return results.map(r => ({
+      ...r.stats,
+      user: r.user,
+    }));
+  }
+
+  async getUserSeasonalStats(userId: string, seasonId: string): Promise<SeasonalStats | undefined> {
+    const [stats] = await db.select().from(seasonalStats)
+      .where(and(eq(seasonalStats.userId, userId), eq(seasonalStats.seasonId, seasonId)));
+    return stats || undefined;
+  }
+
+  async getOrCreateSeasonalStats(userId: string, seasonId: string): Promise<SeasonalStats> {
+    let stats = await this.getUserSeasonalStats(userId, seasonId);
+    if (!stats) {
+      const [created] = await db.insert(seasonalStats).values({
+        userId,
+        seasonId,
+      }).returning();
+      stats = created;
+    }
+    return stats;
+  }
+
+  async updateSeasonalStatsForGame(
+    userId: string, 
+    seasonId: string, 
+    gameType: string, 
+    won: boolean, 
+    isDraw: boolean,
+    earnings: string = '0'
+  ): Promise<void> {
+    const validGameTypes = ['chess', 'backgammon', 'domino', 'tarneeb', 'baloot'];
+    const isValidGameType = validGameTypes.includes(gameType);
+
+    await db.transaction(async (tx) => {
+      const [stats] = await tx.select().from(seasonalStats)
+        .where(and(eq(seasonalStats.userId, userId), eq(seasonalStats.seasonId, seasonId)))
+        .for('update');
+
+      if (!stats) {
+        const insertData: any = {
+          userId,
+          seasonId,
+          gamesPlayed: 1,
+          gamesWon: won ? 1 : 0,
+          gamesLost: !won && !isDraw ? 1 : 0,
+          gamesDraw: isDraw ? 1 : 0,
+          totalEarnings: earnings,
+          currentWinStreak: won ? 1 : 0,
+          longestWinStreak: won ? 1 : 0,
+        };
+
+        if (isValidGameType) {
+          insertData[`${gameType}Played`] = 1;
+          insertData[`${gameType}Won`] = won ? 1 : 0;
+        }
+
+        await tx.insert(seasonalStats).values(insertData);
+        return;
+      }
+
+      const newStreak = won ? stats.currentWinStreak + 1 : 0;
+      const updateData: any = {
+        gamesPlayed: stats.gamesPlayed + 1,
+        gamesWon: stats.gamesWon + (won ? 1 : 0),
+        gamesLost: stats.gamesLost + (!won && !isDraw ? 1 : 0),
+        gamesDraw: stats.gamesDraw + (isDraw ? 1 : 0),
+        totalEarnings: sql`${seasonalStats.totalEarnings} + ${earnings}`,
+        currentWinStreak: newStreak,
+        longestWinStreak: Math.max(stats.longestWinStreak, newStreak),
+        updatedAt: new Date(),
+      };
+
+      if (isValidGameType) {
+        const playedField = `${gameType}Played` as keyof typeof stats;
+        const wonField = `${gameType}Won` as keyof typeof stats;
+        updateData[playedField] = (stats[playedField] as number) + 1;
+        if (won) {
+          updateData[wonField] = (stats[wonField] as number) + 1;
+        }
+      }
+
+      await tx.update(seasonalStats).set(updateData).where(eq(seasonalStats.id, stats.id));
+    });
+  }
+
+  async getSeasonRewards(seasonId: string): Promise<SeasonReward[]> {
+    return db.select().from(seasonRewards)
+      .where(eq(seasonRewards.seasonId, seasonId))
+      .orderBy(asc(seasonRewards.rankFrom));
+  }
+
+  async createSeasonReward(reward: InsertSeasonReward): Promise<SeasonReward> {
+    const [created] = await db.insert(seasonRewards).values(reward).returning();
+    return created;
   }
 }
 

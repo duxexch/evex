@@ -1839,6 +1839,197 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ==================== ACHIEVEMENTS ====================
+
+  // Get all achievements
+  app.get("/api/achievements", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const achievements = await storage.getAchievements(category);
+      res.json(achievements);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get user's achievements with progress
+  app.get("/api/me/achievements", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const userAchievements = await storage.getUserAchievements(userId);
+      const allAchievements = await storage.getAchievements();
+      
+      const achievementsWithProgress = allAchievements.map(achievement => {
+        const userProgress = userAchievements.find(ua => ua.achievementId === achievement.id);
+        return {
+          ...achievement,
+          progress: userProgress?.progress || 0,
+          unlocked: !!userProgress?.unlockedAt,
+          unlockedAt: userProgress?.unlockedAt,
+          rewardClaimed: userProgress?.rewardClaimed || false,
+        };
+      });
+      
+      res.json(achievementsWithProgress);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Claim achievement reward
+  app.post("/api/achievements/:id/claim", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const achievementId = req.params.id;
+      const userId = req.user!.id;
+      
+      const result = await storage.claimAchievementReward(userId, achievementId);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({ success: true, amount: result.amount });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== SEASONS ====================
+
+  // Get all seasons
+  app.get("/api/seasons", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const seasons = await storage.getSeasons();
+      res.json(seasons);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get active season
+  app.get("/api/seasons/active", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const season = await storage.getActiveSeason();
+      if (!season) {
+        return res.status(404).json({ error: "No active season" });
+      }
+      res.json(season);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get season by ID
+  app.get("/api/seasons/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const season = await storage.getSeason(req.params.id);
+      if (!season) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+      res.json(season);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get seasonal leaderboard
+  app.get("/api/seasons/:id/leaderboard", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const seasonId = req.params.id;
+      const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+      const gameType = req.query.gameType as string | undefined;
+      
+      const season = await storage.getSeason(seasonId);
+      if (!season) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+      
+      const stats = await storage.getSeasonalStats(seasonId, limit, gameType);
+      
+      const rankedStats = stats.map((stat, index) => ({
+        rank: index + 1,
+        ...stat,
+        winRate: stat.gamesPlayed > 0 ? Math.round((stat.gamesWon / stat.gamesPlayed) * 100) : 0,
+      }));
+      
+      res.json({
+        season,
+        leaderboard: rankedStats,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get user's seasonal stats
+  app.get("/api/me/seasons/:seasonId/stats", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const seasonId = req.params.seasonId;
+      
+      const stats = await storage.getUserSeasonalStats(userId, seasonId);
+      if (!stats) {
+        return res.json({
+          seasonId,
+          gamesPlayed: 0,
+          gamesWon: 0,
+          gamesLost: 0,
+          gamesDraw: 0,
+          totalEarnings: "0.00",
+          currentWinStreak: 0,
+          longestWinStreak: 0,
+        });
+      }
+      
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get season rewards
+  app.get("/api/seasons/:id/rewards", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const rewards = await storage.getSeasonRewards(req.params.id);
+      res.json(rewards);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Create season
+  app.post("/api/admin/seasons", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const season = await storage.createSeason(req.body);
+      res.status(201).json(season);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Update season
+  app.patch("/api/admin/seasons/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const season = await storage.updateSeason(req.params.id, req.body);
+      if (!season) {
+        return res.status(404).json({ error: "Season not found" });
+      }
+      res.json(season);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Create achievement
+  app.post("/api/admin/achievements", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const achievement = await storage.createAchievement(req.body);
+      res.status(201).json(achievement);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const userStatusSchema = z.object({
     stealthMode: z.boolean().optional(),
     isOnline: z.boolean().optional(),
