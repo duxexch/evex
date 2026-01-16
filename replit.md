@@ -75,6 +75,34 @@ The schema (in `shared/schema.ts`) includes:
   - Helper functions: `getMissingTranslations()`, `validateTranslations()`, `clearMissingTranslations()`
   - Uses "stake" terminology instead of "bet" throughout the platform
 
+### WebSocket Game System (January 2026)
+- **Robust Reconnection**: Exponential backoff with jitter, max 5 attempts
+  - Automatic reconnect on network recovery (online event)
+  - Automatic state sync on visibility change (tab focus)
+  - State sync triggered after successful reconnect/game_joined
+- **State Persistence**: Game state synced from database on reconnect, not just memory
+  - Database is source of truth for game state
+  - Turn number properly incremented with atomic operations
+  - Move history persisted for audit trail
+- **Error Handling**: Typed error codes for specific recovery actions
+  - SESSION_NOT_FOUND, NOT_AUTHORIZED error codes
+  - Graceful UI states: connecting, reconnecting, syncing, error
+  - Console logging for debugging with [WS] prefix
+- **Multi-player Support**: Player seat detection for 2-4 player games
+  - Chess uses player1 = white, player2 = black
+  - Extensible for team games (Tarneeb, Baloot)
+  - spectatorId tracking for proper cleanup
+- **Financial Safety**: Move persistence before broadcasting updates
+  - Failed saves return error to client, don't corrupt state
+- **Protocol Normalization**: Consistent WebSocket message schema
+  - All message types use `view` field for player-specific state
+  - All payloads include `gameType` discriminant
+  - Consistent payload formats: make_move, chat, spectator events
+- **Client-side Validation**: Chess-specific guards
+  - GameType guard: rejects non-chess payloads
+  - Shape validation: verifies fen, currentTurn, validMoves fields
+  - Error UI with retry option for invalid states
+
 ### Build and Development
 - **Development**: `npm run dev` - runs tsx with hot reload
 - **Production Build**: Custom build script using esbuild for server and Vite for client

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
 
-interface GameState {
+interface ChessGameState {
   fen: string;
   currentTurn: 'w' | 'b';
   isCheck: boolean;
@@ -16,12 +16,36 @@ interface GameState {
   blackTime: number;
 }
 
+interface DominoGameState {
+  tiles: any[];
+  currentTurn: string;
+  playerTiles: any[];
+  board: any[];
+}
+
+interface BackgammonGameState {
+  board: any[];
+  currentTurn: string;
+  dice: number[];
+  validMoves: any[];
+}
+
+interface CardGameState {
+  hand: any[];
+  currentTurn: string;
+  playedCards: any[];
+  scores: Record<string, number>;
+}
+
+type GameState = ChessGameState | DominoGameState | BackgammonGameState | CardGameState | Record<string, any>;
+
 interface ChatMessage {
-  id: string;
-  userId: string;
+  id?: string;
+  userId?: string;
   username: string;
-  content: string;
-  timestamp: string;
+  message: string;
+  isSpectator?: boolean;
+  timestamp: number | string;
 }
 
 interface WebSocketMessage {
@@ -29,30 +53,48 @@ interface WebSocketMessage {
   payload: any;
 }
 
-type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'syncing' | 'error';
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
+
+function getReconnectDelay(attempt: number): number {
+  const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt), MAX_RECONNECT_DELAY);
+  const jitter = delay * 0.2 * Math.random();
+  return delay + jitter;
+}
 
 export function useGameWebSocket(sessionId: string | null) {
   const { user, token } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [gameType, setGameType] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
   const [opponent, setOpponent] = useState<{ id: string; username: string } | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [spectators, setSpectators] = useState<{ id: string; username: string }[]>([]);
+  const [spectatorCount, setSpectatorCount] = useState<number>(0);
   const [drawOffered, setDrawOffered] = useState(false);
   const [drawOfferReceived, setDrawOfferReceived] = useState(false);
   const [gameResult, setGameResult] = useState<{ winner: string | null; reason: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 5;
   const sessionIdRef = useRef(sessionId);
+  const tokenRef = useRef(token);
+  const isIntentionalCloseRef = useRef(false);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastPongRef = useRef<number>(Date.now());
+
   sessionIdRef.current = sessionId;
+  tokenRef.current = token;
 
   const handleMessage = useCallback((message: WebSocketMessage) => {
     switch (message.type) {
       case 'authenticated':
+        console.log('[WS] Authenticated, joining game...');
         if (sessionIdRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({
             type: 'join_game',
@@ -62,9 +104,41 @@ export function useGameWebSocket(sessionId: string | null) {
         break;
 
       case 'game_joined':
-        setPlayerColor(message.payload.playerColor);
-        setOpponent(message.payload.opponent);
-        setGameState(message.payload.gameState);
+        console.log('[WS] Game joined successfully');
+        setConnectionStatus('connected');
+        if (message.payload.gameType) setGameType(message.payload.gameType);
+        if (message.payload.playerColor) setPlayerColor(message.payload.playerColor);
+        if (message.payload.opponent) setOpponent(message.payload.opponent);
+        if (message.payload.view) setGameState(message.payload.view);
+        setError(null);
+        
+        if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
+          console.log('[WS] Requesting state sync after join');
+          wsRef.current.send(JSON.stringify({
+            type: 'get_state',
+            payload: { sessionId: sessionIdRef.current }
+          }));
+        }
+        break;
+
+      case 'state_sync':
+        console.log('[WS] State synced from server');
+        setConnectionStatus('connected');
+        if (message.payload.gameType) {
+          setGameType(message.payload.gameType);
+        }
+        if (message.payload.view) {
+          setGameState(message.payload.view);
+        }
+        if (message.payload.playerColor) {
+          setPlayerColor(message.payload.playerColor);
+        }
+        if (message.payload.opponent) {
+          setOpponent(message.payload.opponent);
+        }
+        if (message.payload.chatMessages) {
+          setChatMessages(message.payload.chatMessages);
+        }
         break;
 
       case 'game_state':
@@ -72,9 +146,30 @@ export function useGameWebSocket(sessionId: string | null) {
         break;
 
       case 'move_made':
-        setGameState(message.payload.gameState);
+        if (message.payload.view) {
+          setGameState(message.payload.view);
+        } else if (message.payload.gameState) {
+          setGameState(message.payload.gameState);
+        }
         setDrawOffered(false);
         setDrawOfferReceived(false);
+        break;
+
+      case 'game_update':
+        if (message.payload.gameType) {
+          setGameType(message.payload.gameType);
+        }
+        if (message.payload.view) {
+          setGameState(message.payload.view);
+        }
+        break;
+
+      case 'spectating':
+        console.log('[WS] Spectating game');
+        setConnectionStatus('connected');
+        if (message.payload.gameType) setGameType(message.payload.gameType);
+        if (message.payload.view) setGameState(message.payload.view);
+        setError(null);
         break;
 
       case 'chat_message':
@@ -82,11 +177,15 @@ export function useGameWebSocket(sessionId: string | null) {
         break;
 
       case 'spectator_joined':
-        setSpectators(prev => [...prev, message.payload]);
+        if (message.payload.spectatorCount !== undefined) {
+          setSpectatorCount(message.payload.spectatorCount);
+        }
         break;
 
       case 'spectator_left':
-        setSpectators(prev => prev.filter(s => s.id !== message.payload.id));
+        if (message.payload.spectatorCount !== undefined) {
+          setSpectatorCount(message.payload.spectatorCount);
+        }
         break;
 
       case 'draw_offered':
@@ -98,6 +197,7 @@ export function useGameWebSocket(sessionId: string | null) {
         break;
 
       case 'game_over':
+        console.log('[WS] Game over:', message.payload.reason);
         setGameResult({
           winner: message.payload.winner,
           reason: message.payload.reason
@@ -105,33 +205,51 @@ export function useGameWebSocket(sessionId: string | null) {
         break;
 
       case 'error':
+        console.error('[WS] Server error:', message.payload.message);
         setError(message.payload.message);
+        if (message.payload.code === 'SESSION_NOT_FOUND' || message.payload.code === 'NOT_AUTHORIZED') {
+          isIntentionalCloseRef.current = true;
+          wsRef.current?.close();
+        }
         break;
 
       case 'pong':
+        lastPongRef.current = Date.now();
         break;
 
       default:
-        console.log('Unknown message type:', message.type);
+        console.log('[WS] Unknown message type:', message.type);
     }
   }, []);
 
-  useEffect(() => {
-    if (!token || !sessionId) return;
+  const connect = useCallback(() => {
+    if (!tokenRef.current || !sessionIdRef.current) {
+      console.log('[WS] Cannot connect: missing token or sessionId');
+      return;
+    }
+
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
+      console.log('[WS] Already connected or connecting');
+      return;
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/game`;
     
-    setConnectionStatus('connecting');
+    console.log('[WS] Connecting to', wsUrl);
+    setConnectionStatus(reconnectAttemptsRef.current > 0 ? 'reconnecting' : 'connecting');
+    
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setConnectionStatus('connected');
+      console.log('[WS] Connection opened, authenticating...');
       reconnectAttemptsRef.current = 0;
+      lastPongRef.current = Date.now();
+      
       ws.send(JSON.stringify({
         type: 'authenticate',
-        payload: { token }
+        payload: { token: tokenRef.current }
       }));
     };
 
@@ -140,100 +258,205 @@ export function useGameWebSocket(sessionId: string | null) {
         const message: WebSocketMessage = JSON.parse(event.data);
         handleMessage(message);
       } catch (e) {
-        console.error('Failed to parse WebSocket message:', e);
+        console.error('[WS] Failed to parse message:', e);
       }
     };
 
-    ws.onclose = () => {
-      setConnectionStatus('disconnected');
+    ws.onclose = (event) => {
+      console.log('[WS] Connection closed:', event.code, event.reason);
       wsRef.current = null;
       
-      if (reconnectAttemptsRef.current < maxReconnectAttempts && sessionIdRef.current) {
-        reconnectAttemptsRef.current++;
-        setTimeout(() => {
-          if (token && sessionIdRef.current) {
-            const newWs = new WebSocket(wsUrl);
-            wsRef.current = newWs;
-          }
-        }, 2000 * reconnectAttemptsRef.current);
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+      }
+      
+      if (isIntentionalCloseRef.current) {
+        setConnectionStatus('disconnected');
+        isIntentionalCloseRef.current = false;
+        return;
+      }
+      
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS && sessionIdRef.current) {
+        const delay = getReconnectDelay(reconnectAttemptsRef.current);
+        console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+        setConnectionStatus('reconnecting');
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectAttemptsRef.current++;
+          connect();
+        }, delay);
+      } else {
+        console.log('[WS] Max reconnect attempts reached');
+        setConnectionStatus('error');
+        setError('Connection lost. Please refresh the page to reconnect.');
       }
     };
 
-    ws.onerror = () => {
-      setConnectionStatus('error');
-      setError('Connection error');
+    ws.onerror = (event) => {
+      console.error('[WS] Connection error:', event);
     };
 
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
-  }, [token, sessionId, handleMessage]);
-
-  useEffect(() => {
-    const pingInterval = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
+    pingIntervalRef.current = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        const timeSinceLastPong = Date.now() - lastPongRef.current;
+        if (timeSinceLastPong > 60000) {
+          console.log('[WS] Pong timeout, closing connection');
+          ws.close();
+          return;
+        }
+        ws.send(JSON.stringify({ type: 'ping' }));
       }
-    }, 30000);
+    }, 25000);
+  }, [handleMessage]);
 
-    return () => clearInterval(pingInterval);
-  }, []);
-
-  const makeMove = useCallback((from: string, to: string, promotion?: string) => {
+  const requestStateSync = useCallback(() => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     
+    console.log('[WS] Requesting state sync...');
+    setConnectionStatus('syncing');
     wsRef.current.send(JSON.stringify({
-      type: 'make_move',
-      payload: { sessionId: sessionIdRef.current, from, to, promotion }
-    }));
-  }, []);
-
-  const sendChat = useCallback((content: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    
-    wsRef.current.send(JSON.stringify({
-      type: 'chat',
-      payload: { sessionId: sessionIdRef.current, content }
-    }));
-  }, []);
-
-  const resign = useCallback(() => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    
-    wsRef.current.send(JSON.stringify({
-      type: 'resign',
+      type: 'get_state',
       payload: { sessionId: sessionIdRef.current }
     }));
   }, []);
 
-  const offerDraw = useCallback(() => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+  useEffect(() => {
+    if (!token || !sessionId) {
+      if (wsRef.current) {
+        isIntentionalCloseRef.current = true;
+        wsRef.current.close();
+      }
+      return;
+    }
+
+    connect();
+
+    return () => {
+      isIntentionalCloseRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [token, sessionId, connect]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && sessionIdRef.current) {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          requestStateSync();
+        } else if (wsRef.current?.readyState !== WebSocket.CONNECTING) {
+          reconnectAttemptsRef.current = 0;
+          connect();
+        }
+      }
+    };
+
+    const handleOnline = () => {
+      if (sessionIdRef.current && wsRef.current?.readyState !== WebSocket.OPEN) {
+        console.log('[WS] Network online, reconnecting...');
+        reconnectAttemptsRef.current = 0;
+        connect();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [connect, requestStateSync]);
+
+  const makeMove = useCallback((from: string, to: string, promotion?: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn('[WS] Cannot make move: not connected');
+      return false;
+    }
     
+    console.log('[WS] Making move:', from, '->', to);
+    wsRef.current.send(JSON.stringify({
+      type: 'make_move',
+      payload: { sessionId: sessionIdRef.current, move: { from, to, promotion } }
+    }));
+    return true;
+  }, []);
+
+  const sendChat = useCallback((content: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false;
+    
+    wsRef.current.send(JSON.stringify({
+      type: 'chat',
+      payload: { sessionId: sessionIdRef.current, message: content }
+    }));
+    return true;
+  }, []);
+
+  const resign = useCallback(() => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false;
+    
+    console.log('[WS] Resigning game');
+    wsRef.current.send(JSON.stringify({
+      type: 'resign',
+      payload: { sessionId: sessionIdRef.current }
+    }));
+    return true;
+  }, []);
+
+  const offerDraw = useCallback(() => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false;
+    
+    console.log('[WS] Offering draw');
     wsRef.current.send(JSON.stringify({
       type: 'offer_draw',
       payload: { sessionId: sessionIdRef.current }
     }));
     setDrawOffered(true);
+    return true;
   }, []);
 
   const respondDraw = useCallback((accept: boolean) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false;
     
+    console.log('[WS] Responding to draw:', accept ? 'accept' : 'decline');
     wsRef.current.send(JSON.stringify({
       type: 'respond_draw',
       payload: { sessionId: sessionIdRef.current, accept }
     }));
     setDrawOfferReceived(false);
+    return true;
   }, []);
+
+  const forceReconnect = useCallback(() => {
+    console.log('[WS] Force reconnecting...');
+    reconnectAttemptsRef.current = 0;
+    setError(null);
+    if (wsRef.current) {
+      isIntentionalCloseRef.current = true;
+      wsRef.current.close();
+    }
+    setTimeout(() => {
+      isIntentionalCloseRef.current = false;
+      connect();
+    }, 100);
+  }, [connect]);
 
   return {
     connectionStatus,
+    gameType,
     gameState,
     playerColor,
     opponent,
     chatMessages,
-    spectators,
+    spectatorCount,
     drawOffered,
     drawOfferReceived,
     gameResult,
@@ -242,6 +465,8 @@ export function useGameWebSocket(sessionId: string | null) {
     sendChat,
     resign,
     offerDraw,
-    respondDraw
+    respondDraw,
+    forceReconnect,
+    requestStateSync
   };
 }

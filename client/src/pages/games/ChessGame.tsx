@@ -11,7 +11,7 @@ import { useI18n } from '@/lib/i18n';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Wifi, WifiOff, Users, ArrowLeft, Share2 } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, Users, ArrowLeft, Share2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ChessPiece {
@@ -63,11 +63,12 @@ export default function ChessGame() {
 
   const {
     connectionStatus,
+    gameType,
     gameState,
     playerColor,
     opponent,
     chatMessages,
-    spectators,
+    spectatorCount,
     drawOffered,
     drawOfferReceived,
     gameResult,
@@ -76,15 +77,23 @@ export default function ChessGame() {
     sendChat,
     resign,
     offerDraw,
-    respondDraw
+    respondDraw,
+    forceReconnect
   } = useGameWebSocket(sessionId || null);
 
-  const position = useMemo(() => {
-    if (!gameState?.fen) return {};
-    return fenToPosition(gameState.fen);
-  }, [gameState?.fen]);
+  const isValidChessState = useMemo(() => {
+    if (!gameState) return false;
+    return typeof gameState.fen === 'string' && 
+           typeof gameState.currentTurn === 'string' &&
+           Array.isArray(gameState.validMoves);
+  }, [gameState]);
 
-  const isGameActive = !gameResult && gameState && 
+  const position = useMemo(() => {
+    if (!gameState?.fen || !isValidChessState) return {};
+    return fenToPosition(gameState.fen);
+  }, [gameState?.fen, isValidChessState]);
+
+  const isGameActive = !gameResult && gameState && isValidChessState &&
     !gameState.isCheckmate && !gameState.isStalemate && !gameState.isDraw;
 
   const handleShare = async () => {
@@ -116,21 +125,47 @@ export default function ChessGame() {
     );
   }
 
-  if (connectionStatus === 'connecting') {
+  if (gameType && gameType !== 'chess') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">{t('chess.connecting')}</p>
+        <AlertCircle className="w-12 h-12 text-destructive" />
+        <p className="text-destructive font-medium">{t('chess.wrongGameType')}</p>
+        <Button onClick={() => setLocation('/games')} data-testid="button-back-games">
+          {t('common.back')}
+        </Button>
       </div>
     );
   }
 
-  if (connectionStatus === 'error' || error) {
+  if (gameState && !isValidChessState) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <AlertCircle className="w-12 h-12 text-destructive" />
+        <p className="text-destructive font-medium">{t('chess.invalidGameState')}</p>
+        <Button onClick={forceReconnect} data-testid="button-retry">
+          {t('common.retry')}
+        </Button>
+      </div>
+    );
+  }
+
+  if (connectionStatus === 'connecting' || connectionStatus === 'reconnecting') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">
+          {connectionStatus === 'reconnecting' ? t('chess.reconnecting') : t('chess.connecting')}
+        </p>
+      </div>
+    );
+  }
+
+  if (connectionStatus === 'error') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <WifiOff className="w-12 h-12 text-destructive" />
         <p className="text-destructive font-medium">{error || t('chess.connectionError')}</p>
-        <Button onClick={() => window.location.reload()} data-testid="button-retry">
+        <Button onClick={forceReconnect} data-testid="button-retry">
           {t('common.retry')}
         </Button>
       </div>
@@ -172,10 +207,10 @@ export default function ChessGame() {
             {connectionStatus === 'connected' ? t('common.live') : t('common.offline')}
           </Badge>
 
-          {spectators.length > 0 && (
+          {spectatorCount > 0 && (
             <Badge variant="outline" className="gap-1.5">
               <Users className="w-3 h-3" />
-              {spectators.length}
+              {spectatorCount}
             </Badge>
           )}
 

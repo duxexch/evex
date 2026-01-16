@@ -12,6 +12,7 @@ interface AuthenticatedWebSocket extends WebSocket {
   sessionId?: string;
   isSpectator?: boolean;
   isAlive?: boolean;
+  spectatorId?: string;
 }
 
 interface GameRoom {
@@ -186,14 +187,36 @@ async function handleJoinGame(ws: AuthenticatedWebSocket, payload: { sessionId: 
     const engine = getGameEngine(session.gameType);
     const playerView = engine?.getPlayerView(room.gameState, ws.userId);
 
+    const playerIds = [session.player1Id, session.player2Id, session.player3Id, session.player4Id];
+    const seatIndex = playerIds.indexOf(ws.userId);
+    const playerSeat = seatIndex !== -1 ? seatIndex + 1 : null;
+    const playerColor = session.gameType === 'chess' 
+      ? (playerSeat === 1 ? 'w' : (playerSeat === 2 ? 'b' : null))
+      : null;
+
+    let opponent = null;
+    const opponentIds = playerIds.filter((id) => id && id !== ws.userId);
+    if (opponentIds.length > 0) {
+      const opponentUser = await storage.getUser(opponentIds[0]!);
+      if (opponentUser) {
+        opponent = { id: opponentIds[0], username: opponentUser.username };
+      }
+    }
+
     send(ws, {
       type: 'game_joined',
       payload: {
         sessionId,
         gameType: session.gameType,
-        playerView,
+        view: playerView,
+        playerColor,
+        playerSeat,
+        isSpectator: false,
+        opponent,
         players: getPlayerList(room),
-        spectatorCount: room.spectators.size
+        spectatorCount: room.spectators.size,
+        status: session.status,
+        turnNumber: session.turnNumber
       }
     });
 
@@ -230,10 +253,11 @@ async function handleSpectate(ws: AuthenticatedWebSocket, payload: { sessionId: 
       rooms.set(sessionId, room);
     }
 
-    const odValue = ws.userId || `anon_${Date.now()}`;
-    room.spectators.set(odValue, ws);
+    const spectatorId = ws.userId || `anon_${Date.now()}`;
+    room.spectators.set(spectatorId, ws);
     ws.sessionId = sessionId;
     ws.isSpectator = true;
+    ws.spectatorId = spectatorId;
 
     if (ws.userId) {
       await storage.addGameSpectator({
@@ -250,9 +274,12 @@ async function handleSpectate(ws: AuthenticatedWebSocket, payload: { sessionId: 
       payload: {
         sessionId,
         gameType: session.gameType,
-        gameView: spectatorView,
+        view: spectatorView,
+        playerSeat: null,
+        isSpectator: true,
         players: getPlayerList(room),
-        spectatorCount: room.spectators.size
+        spectatorCount: room.spectators.size,
+        status: session.status
       }
     });
 
@@ -311,21 +338,29 @@ async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveD
   room.gameState = result.newState;
 
   try {
+    const currentSession = await storage.getLiveGameSession(ws.sessionId);
+    const currentTurn = currentSession?.turnNumber || 0;
+    const newTurnNumber = currentTurn + 1;
+    
     await storage.updateLiveGameSession(ws.sessionId, {
       gameState: result.newState,
-      turnNumber: (await storage.getLiveGameSession(ws.sessionId))?.turnNumber || 0 + 1
+      turnNumber: newTurnNumber
     });
 
     await storage.addGameMove({
       sessionId: ws.sessionId,
       playerId: ws.userId,
-      moveNumber: (await storage.getLiveGameSession(ws.sessionId))?.turnNumber || 1,
+      moveNumber: newTurnNumber,
       moveType: payload.move.type,
       moveData: JSON.stringify(payload.move),
       isValid: true
     });
+
+    console.log(`[WS] Move saved: session=${ws.sessionId}, turn=${newTurnNumber}, player=${ws.userId}`);
   } catch (error) {
-    console.error('Error saving move:', error);
+    console.error('[WS] Error saving move:', error);
+    sendError(ws, 'Failed to save move. Please try again.');
+    return;
   }
 
   for (const [playerId, playerWs] of room.players) {
@@ -333,8 +368,9 @@ async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveD
     send(playerWs, {
       type: 'game_update',
       payload: {
+        gameType: room.gameType,
         events: result.events,
-        playerView
+        view: playerView
       }
     });
   }
@@ -344,8 +380,9 @@ async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveD
     send(spectatorWs, {
       type: 'game_update',
       payload: {
+        gameType: room.gameType,
         events: result.events,
-        gameView: spectatorView
+        view: spectatorView
       }
     });
   }
@@ -473,23 +510,83 @@ async function handleSendGift(ws: AuthenticatedWebSocket, payload: { recipientId
 }
 
 async function handleGetState(ws: AuthenticatedWebSocket, payload: { sessionId: string }) {
-  const room = rooms.get(payload.sessionId);
-  if (!room) {
-    sendError(ws, 'Game not found');
-    return;
-  }
-
-  const engine = getGameEngine(room.gameType);
-  const view = engine?.getPlayerView(room.gameState, ws.userId || 'spectator');
-
-  send(ws, {
-    type: 'game_state',
-    payload: {
-      gameView: view,
-      players: getPlayerList(room),
-      spectatorCount: room.spectators.size
+  try {
+    const session = await storage.getLiveGameSession(payload.sessionId);
+    if (!session) {
+      sendError(ws, 'Game not found', 'SESSION_NOT_FOUND');
+      return;
     }
-  });
+
+    let room = rooms.get(payload.sessionId);
+    
+    if (room && session.gameState) {
+      room.gameState = session.gameState;
+    } else if (!room) {
+      room = {
+        sessionId: payload.sessionId,
+        players: new Map(),
+        spectators: new Map(),
+        gameType: session.gameType,
+        gameState: session.gameState || getGameEngine(session.gameType)?.createInitialState() || '{}'
+      };
+      rooms.set(payload.sessionId, room);
+    }
+
+    const engine = getGameEngine(room.gameType);
+    const playerView = engine?.getPlayerView(room.gameState, ws.userId || 'spectator');
+
+    let opponent = null;
+    let playerSeat: number | null = null;
+    let playerColor: 'w' | 'b' | null = null;
+    
+    if (ws.userId) {
+      const playerIds = [session.player1Id, session.player2Id, session.player3Id, session.player4Id];
+      playerSeat = playerIds.indexOf(ws.userId);
+      
+      if (playerSeat === -1) {
+        playerSeat = null;
+      } else {
+        playerSeat = playerSeat + 1;
+        
+        if (room.gameType === 'chess') {
+          playerColor = playerSeat === 1 ? 'w' : 'b';
+        }
+        
+        const opponentIds = playerIds.filter((id, idx) => id && id !== ws.userId);
+        if (opponentIds.length > 0) {
+          const opponentUser = await storage.getUser(opponentIds[0]!);
+          if (opponentUser) {
+            opponent = { id: opponentIds[0], username: opponentUser.username };
+          }
+        }
+      }
+    }
+
+    const chatMessages = await storage.getGameChatMessages(payload.sessionId);
+
+    console.log(`[WS] State sync for session ${payload.sessionId}, player ${ws.userId}`);
+
+    send(ws, {
+      type: 'state_sync',
+      payload: {
+        sessionId: payload.sessionId,
+        gameType: room.gameType,
+        view: playerView,
+        playerColor,
+        playerSeat,
+        isSpectator: playerSeat === null,
+        opponent,
+        players: getPlayerList(room),
+        spectatorCount: room.spectators.size,
+        chatMessages: chatMessages?.slice(-50) || [],
+        status: session.status,
+        turnNumber: session.turnNumber
+      }
+    });
+  } catch (error) {
+    console.error('[WS] Error getting state:', error);
+    sendError(ws, 'Failed to get game state');
+  }
 }
 
 async function handleResign(ws: AuthenticatedWebSocket, payload: { sessionId: string }) {
@@ -561,8 +658,8 @@ function handleDisconnect(ws: AuthenticatedWebSocket) {
   if (ws.sessionId) {
     const room = rooms.get(ws.sessionId);
     if (room) {
-      if (ws.isSpectator && ws.userId) {
-        room.spectators.delete(ws.userId);
+      if (ws.isSpectator && ws.spectatorId) {
+        room.spectators.delete(ws.spectatorId);
         broadcastToRoom(room, {
           type: 'spectator_left',
           payload: { spectatorCount: room.spectators.size }
@@ -595,8 +692,8 @@ function send(ws: WebSocket, message: WebSocketMessage) {
   }
 }
 
-function sendError(ws: WebSocket, error: string) {
-  send(ws, { type: 'error', payload: { error } });
+function sendError(ws: WebSocket, message: string, code?: string) {
+  send(ws, { type: 'error', payload: { message, code } });
 }
 
 function broadcastToRoom(room: GameRoom, message: WebSocketMessage, excludeUserId?: string) {

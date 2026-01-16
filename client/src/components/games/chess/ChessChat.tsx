@@ -7,11 +7,12 @@ import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
 
 interface ChatMessage {
-  id: string;
-  userId: string;
+  id?: string;
+  userId?: string;
   username: string;
-  content: string;
-  timestamp: string;
+  content?: string;
+  message?: string;
+  timestamp: string | number;
 }
 
 interface ChessChatProps {
@@ -78,7 +79,7 @@ export function ChessChat({ messages, onSendMessage, currentUserId }: ChessChatP
                       ? "bg-primary text-primary-foreground" 
                       : "bg-muted"
                   )}>
-                    {msg.content}
+                    {msg.message || msg.content}
                   </div>
                 </div>
               );
