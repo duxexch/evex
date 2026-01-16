@@ -183,8 +183,10 @@ export function useGameWebSocket(sessionId: string | null) {
       case 'move_rejected':
         console.warn('[WS] Move rejected:', message.payload.error);
         setIsMovePending(false);
+        // Server sends requiresSync: true for TURN_MISMATCH and automatically syncs
+        // We just need to reset turnNumber when state_sync arrives (handled above)
         if (message.payload.requiresSync) {
-          console.log('[WS] Server requested sync after move rejection');
+          console.log('[WS] Move rejected due to state mismatch, awaiting server sync...');
         }
         break;
 
