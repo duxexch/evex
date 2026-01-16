@@ -31,7 +31,7 @@ const challengeGameRooms = new Map<string, {
 }>();
 
 export function setupWebSocket(server: Server) {
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({ server, path: "/ws", perMessageDeflate: false });
 
   wss.on("connection", (ws: AuthenticatedSocket, req) => {
     ws.isAlive = true;

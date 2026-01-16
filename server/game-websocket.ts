@@ -28,8 +28,18 @@ const userConnections: Map<string, AuthenticatedWebSocket> = new Map();
 
 export function setupGameWebSocket(server: Server): WebSocketServer {
   const wss = new WebSocketServer({ 
-    server, 
-    path: '/ws/game'
+    noServer: true,
+    perMessageDeflate: false
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    const { pathname } = new URL(request.url || '', `http://${request.headers.host}`);
+    
+    if (pathname === '/ws/game') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    }
   });
 
   const heartbeat = setInterval(() => {
