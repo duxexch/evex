@@ -3,9 +3,12 @@ import { registerRoutes } from "./routes";
 import { registerAdminRoutes } from "./admin-routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { setupGameWebSocket } from "./game-websocket";
 
 const app = express();
 const httpServer = createServer(app);
+
+const gameWss = setupGameWebSocket(httpServer);
 
 const isProduction = process.env.NODE_ENV === "production";
 

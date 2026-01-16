@@ -5,6 +5,7 @@ import {
   passwordResetTokens, countryPaymentMethods,
   notifications, userSessions, loginHistory, announcements, announcementViews, userPreferences,
   userRelationships, socialPlatforms,
+  liveGameSessions, gameMoves, gameSpectators, giftItems, spectatorGifts, gameChatMessages,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -22,6 +23,12 @@ import {
   type UserPreferences, type InsertUserPreferences,
   type UserRelationship, type InsertUserRelationship,
   type SocialPlatform, type InsertSocialPlatform,
+  type LiveGameSession, type InsertLiveGameSession,
+  type GameMove, type InsertGameMove,
+  type GameSpectator, type InsertGameSpectator,
+  type GiftItem, type InsertGiftItem,
+  type SpectatorGift, type InsertSpectatorGift,
+  type GameChatMessage, type InsertGameChatMessage,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, asc, or, like, ne } from "drizzle-orm";
@@ -851,6 +858,147 @@ export class DatabaseStorage implements IStorage {
   async deleteSocialPlatform(id: string): Promise<boolean> {
     const result = await db.delete(socialPlatforms).where(eq(socialPlatforms.id, id));
     return true;
+  }
+
+  // Live Game Sessions
+  async createLiveGameSession(session: InsertLiveGameSession): Promise<LiveGameSession> {
+    const [created] = await db.insert(liveGameSessions).values(session).returning();
+    return created;
+  }
+
+  async getLiveGameSession(id: string): Promise<LiveGameSession | undefined> {
+    const [session] = await db.select().from(liveGameSessions).where(eq(liveGameSessions.id, id));
+    return session || undefined;
+  }
+
+  async updateLiveGameSession(id: string, data: Partial<InsertLiveGameSession>): Promise<LiveGameSession | undefined> {
+    const [updated] = await db.update(liveGameSessions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(liveGameSessions.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async listLiveGameSessions(status?: string, gameType?: string): Promise<LiveGameSession[]> {
+    let query = db.select().from(liveGameSessions);
+    const conditions = [];
+    if (status) conditions.push(eq(liveGameSessions.status, status as any));
+    if (gameType) conditions.push(eq(liveGameSessions.gameType, gameType));
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    return query.orderBy(desc(liveGameSessions.createdAt));
+  }
+
+  async getActiveLiveGamesByPlayer(playerId: string): Promise<LiveGameSession[]> {
+    return db.select().from(liveGameSessions)
+      .where(and(
+        or(
+          eq(liveGameSessions.player1Id, playerId),
+          eq(liveGameSessions.player2Id, playerId),
+          eq(liveGameSessions.player3Id, playerId),
+          eq(liveGameSessions.player4Id, playerId)
+        ),
+        or(
+          eq(liveGameSessions.status, 'waiting'),
+          eq(liveGameSessions.status, 'starting'),
+          eq(liveGameSessions.status, 'in_progress')
+        )
+      ))
+      .orderBy(desc(liveGameSessions.createdAt));
+  }
+
+  // Game Moves
+  async addGameMove(move: InsertGameMove): Promise<GameMove> {
+    const [created] = await db.insert(gameMoves).values(move).returning();
+    return created;
+  }
+
+  async getGameMoves(sessionId: string): Promise<GameMove[]> {
+    return db.select().from(gameMoves)
+      .where(eq(gameMoves.sessionId, sessionId))
+      .orderBy(asc(gameMoves.moveNumber));
+  }
+
+  // Game Spectators
+  async addGameSpectator(spectator: InsertGameSpectator): Promise<GameSpectator> {
+    const [created] = await db.insert(gameSpectators).values(spectator).returning();
+    return created;
+  }
+
+  async removeGameSpectator(sessionId: string, userId: string): Promise<void> {
+    await db.update(gameSpectators)
+      .set({ leftAt: new Date() })
+      .where(and(
+        eq(gameSpectators.sessionId, sessionId),
+        eq(gameSpectators.userId, userId)
+      ));
+  }
+
+  async getSessionSpectators(sessionId: string): Promise<GameSpectator[]> {
+    return db.select().from(gameSpectators)
+      .where(and(
+        eq(gameSpectators.sessionId, sessionId),
+        sql`${gameSpectators.leftAt} IS NULL`
+      ));
+  }
+
+  // Gift Items
+  async createGiftItem(item: InsertGiftItem): Promise<GiftItem> {
+    const [created] = await db.insert(giftItems).values(item).returning();
+    return created;
+  }
+
+  async getGiftItem(id: string): Promise<GiftItem | undefined> {
+    const [item] = await db.select().from(giftItems).where(eq(giftItems.id, id));
+    return item || undefined;
+  }
+
+  async listGiftItems(activeOnly: boolean = true): Promise<GiftItem[]> {
+    let query = db.select().from(giftItems);
+    if (activeOnly) {
+      query = query.where(eq(giftItems.isActive, true)) as any;
+    }
+    return query.orderBy(asc(giftItems.sortOrder));
+  }
+
+  async updateGiftItem(id: string, data: Partial<InsertGiftItem>): Promise<GiftItem | undefined> {
+    const [updated] = await db.update(giftItems)
+      .set(data)
+      .where(eq(giftItems.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  // Spectator Gifts
+  async addSpectatorGift(gift: InsertSpectatorGift): Promise<SpectatorGift> {
+    const [created] = await db.insert(spectatorGifts).values(gift).returning();
+    return created;
+  }
+
+  async getSessionGifts(sessionId: string): Promise<SpectatorGift[]> {
+    return db.select().from(spectatorGifts)
+      .where(eq(spectatorGifts.sessionId, sessionId))
+      .orderBy(desc(spectatorGifts.createdAt));
+  }
+
+  async getPlayerReceivedGifts(playerId: string): Promise<SpectatorGift[]> {
+    return db.select().from(spectatorGifts)
+      .where(eq(spectatorGifts.recipientId, playerId))
+      .orderBy(desc(spectatorGifts.createdAt));
+  }
+
+  // Game Chat Messages
+  async addGameChatMessage(message: InsertGameChatMessage): Promise<GameChatMessage> {
+    const [created] = await db.insert(gameChatMessages).values(message).returning();
+    return created;
+  }
+
+  async getGameChatMessages(sessionId: string, limit: number = 100): Promise<GameChatMessage[]> {
+    return db.select().from(gameChatMessages)
+      .where(eq(gameChatMessages.sessionId, sessionId))
+      .orderBy(desc(gameChatMessages.createdAt))
+      .limit(limit);
   }
 }
 

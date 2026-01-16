@@ -1,6 +1,21 @@
-// Game Engines Index - Export all game engines
+import type { GameEngine } from './types';
+import { chessEngine } from './chess';
 
-export * from './chess-engine';
-export * from './domino-engine';
-export * from './backgammon-engine';
-export * from './card-game-engine';
+const engines: Map<string, GameEngine> = new Map();
+
+engines.set('chess', chessEngine);
+
+export function getGameEngine(gameType: string): GameEngine | undefined {
+  return engines.get(gameType);
+}
+
+export function getSupportedGameTypes(): string[] {
+  return Array.from(engines.keys());
+}
+
+export function registerGameEngine(engine: GameEngine): void {
+  engines.set(engine.gameType, engine);
+}
+
+export * from './types';
+export { chessEngine } from './chess';

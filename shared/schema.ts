@@ -2086,3 +2086,190 @@ export const socialPlatforms = pgTable("social_platforms", {
 export const insertSocialPlatformSchema = createInsertSchema(socialPlatforms).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSocialPlatform = z.infer<typeof insertSocialPlatformSchema>;
 export type SocialPlatform = typeof socialPlatforms.$inferSelect;
+
+// ==================== LIVE GAME SESSIONS (Multiplayer) ====================
+
+export const liveGameStatusEnum = pgEnum("live_game_status", ["waiting", "starting", "in_progress", "paused", "completed", "cancelled"]);
+
+export const liveGameSessions = pgTable("live_game_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  challengeId: varchar("challenge_id").references(() => challenges.id),
+  gameId: varchar("game_id").notNull().references(() => games.id),
+  gameType: text("game_type").notNull(),
+  status: liveGameStatusEnum("status").notNull().default("waiting"),
+  gameState: text("game_state"),
+  currentTurn: varchar("current_turn").references(() => users.id),
+  turnNumber: integer("turn_number").notNull().default(0),
+  turnStartedAt: timestamp("turn_started_at"),
+  turnTimeLimit: integer("turn_time_limit").notNull().default(60),
+  player1Id: varchar("player1_id").notNull().references(() => users.id),
+  player2Id: varchar("player2_id").references(() => users.id),
+  player3Id: varchar("player3_id").references(() => users.id),
+  player4Id: varchar("player4_id").references(() => users.id),
+  player1Score: integer("player1_score").notNull().default(0),
+  player2Score: integer("player2_score").notNull().default(0),
+  player3Score: integer("player3_score").notNull().default(0),
+  player4Score: integer("player4_score").notNull().default(0),
+  team1Score: integer("team1_score").notNull().default(0),
+  team2Score: integer("team2_score").notNull().default(0),
+  winnerId: varchar("winner_id").references(() => users.id),
+  winningTeam: integer("winning_team"),
+  spectatorCount: integer("spectator_count").notNull().default(0),
+  totalGiftsValue: decimal("total_gifts_value", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  startedAt: timestamp("started_at"),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_live_sessions_challenge").on(table.challengeId),
+  index("idx_live_sessions_game").on(table.gameId),
+  index("idx_live_sessions_status").on(table.status),
+  index("idx_live_sessions_player1").on(table.player1Id),
+]);
+
+export const liveGameSessionsRelations = relations(liveGameSessions, ({ one, many }) => ({
+  challenge: one(challenges, { fields: [liveGameSessions.challengeId], references: [challenges.id] }),
+  game: one(games, { fields: [liveGameSessions.gameId], references: [games.id] }),
+  player1: one(users, { fields: [liveGameSessions.player1Id], references: [users.id] }),
+  player2: one(users, { fields: [liveGameSessions.player2Id], references: [users.id] }),
+  player3: one(users, { fields: [liveGameSessions.player3Id], references: [users.id] }),
+  player4: one(users, { fields: [liveGameSessions.player4Id], references: [users.id] }),
+  winner: one(users, { fields: [liveGameSessions.winnerId], references: [users.id] }),
+  currentTurnPlayer: one(users, { fields: [liveGameSessions.currentTurn], references: [users.id] }),
+  moves: many(gameMoves),
+  spectators: many(gameSpectators),
+  gifts: many(spectatorGifts),
+}));
+
+export const insertLiveGameSessionSchema = createInsertSchema(liveGameSessions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertLiveGameSession = z.infer<typeof insertLiveGameSessionSchema>;
+export type LiveGameSession = typeof liveGameSessions.$inferSelect;
+
+// ==================== GAME MOVES (Move History) ====================
+
+export const gameMoves = pgTable("game_moves", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => liveGameSessions.id),
+  playerId: varchar("player_id").notNull().references(() => users.id),
+  moveNumber: integer("move_number").notNull(),
+  moveType: text("move_type").notNull(),
+  moveData: text("move_data").notNull(),
+  previousState: text("previous_state"),
+  newState: text("new_state"),
+  isValid: boolean("is_valid").notNull().default(true),
+  timeTaken: integer("time_taken"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_moves_session").on(table.sessionId),
+  index("idx_moves_player").on(table.playerId),
+  index("idx_moves_number").on(table.sessionId, table.moveNumber),
+]);
+
+export const gameMovesRelations = relations(gameMoves, ({ one }) => ({
+  session: one(liveGameSessions, { fields: [gameMoves.sessionId], references: [liveGameSessions.id] }),
+  player: one(users, { fields: [gameMoves.playerId], references: [users.id] }),
+}));
+
+export const insertGameMoveSchema = createInsertSchema(gameMoves).omit({ id: true, createdAt: true });
+export type InsertGameMove = z.infer<typeof insertGameMoveSchema>;
+export type GameMove = typeof gameMoves.$inferSelect;
+
+// ==================== GAME SPECTATORS ====================
+
+export const gameSpectators = pgTable("game_spectators", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => liveGameSessions.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+  leftAt: timestamp("left_at"),
+  totalGiftsSent: decimal("total_gifts_sent", { precision: 15, scale: 2 }).notNull().default("0.00"),
+}, (table) => [
+  index("idx_spectators_session").on(table.sessionId),
+  index("idx_spectators_user").on(table.userId),
+]);
+
+export const gameSpectatorsRelations = relations(gameSpectators, ({ one }) => ({
+  session: one(liveGameSessions, { fields: [gameSpectators.sessionId], references: [liveGameSessions.id] }),
+  user: one(users, { fields: [gameSpectators.userId], references: [users.id] }),
+}));
+
+export const insertGameSpectatorSchema = createInsertSchema(gameSpectators).omit({ id: true, joinedAt: true });
+export type InsertGameSpectator = z.infer<typeof insertGameSpectatorSchema>;
+export type GameSpectator = typeof gameSpectators.$inferSelect;
+
+// ==================== GIFT ITEMS ====================
+
+export const giftItems = pgTable("gift_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  nameAr: text("name_ar"),
+  description: text("description"),
+  descriptionAr: text("description_ar"),
+  icon: text("icon").notNull(),
+  animationUrl: text("animation_url"),
+  price: decimal("price", { precision: 15, scale: 2 }).notNull(),
+  creatorShare: decimal("creator_share", { precision: 5, scale: 2 }).notNull().default("70.00"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_gift_items_active").on(table.isActive),
+]);
+
+export const insertGiftItemSchema = createInsertSchema(giftItems).omit({ id: true, createdAt: true });
+export type InsertGiftItem = z.infer<typeof insertGiftItemSchema>;
+export type GiftItem = typeof giftItems.$inferSelect;
+
+// ==================== SPECTATOR GIFTS ====================
+
+export const spectatorGifts = pgTable("spectator_gifts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => liveGameSessions.id),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  recipientId: varchar("recipient_id").notNull().references(() => users.id),
+  giftItemId: varchar("gift_item_id").notNull().references(() => giftItems.id),
+  quantity: integer("quantity").notNull().default(1),
+  totalPrice: decimal("total_price", { precision: 15, scale: 2 }).notNull(),
+  recipientEarnings: decimal("recipient_earnings", { precision: 15, scale: 2 }).notNull(),
+  message: text("message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_gifts_session").on(table.sessionId),
+  index("idx_gifts_sender").on(table.senderId),
+  index("idx_gifts_recipient").on(table.recipientId),
+]);
+
+export const spectatorGiftsRelations = relations(spectatorGifts, ({ one }) => ({
+  session: one(liveGameSessions, { fields: [spectatorGifts.sessionId], references: [liveGameSessions.id] }),
+  sender: one(users, { fields: [spectatorGifts.senderId], references: [users.id] }),
+  recipient: one(users, { fields: [spectatorGifts.recipientId], references: [users.id] }),
+  giftItem: one(giftItems, { fields: [spectatorGifts.giftItemId], references: [giftItems.id] }),
+}));
+
+export const insertSpectatorGiftSchema = createInsertSchema(spectatorGifts).omit({ id: true, createdAt: true });
+export type InsertSpectatorGift = z.infer<typeof insertSpectatorGiftSchema>;
+export type SpectatorGift = typeof spectatorGifts.$inferSelect;
+
+// ==================== GAME CHAT MESSAGES ====================
+
+export const gameChatMessages = pgTable("game_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => liveGameSessions.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  message: text("message").notNull(),
+  messageType: text("message_type").notNull().default("text"),
+  isFromSpectator: boolean("is_from_spectator").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_game_chat_session").on(table.sessionId),
+  index("idx_game_chat_user").on(table.userId),
+]);
+
+export const gameChatMessagesRelations = relations(gameChatMessages, ({ one }) => ({
+  session: one(liveGameSessions, { fields: [gameChatMessages.sessionId], references: [liveGameSessions.id] }),
+  user: one(users, { fields: [gameChatMessages.userId], references: [users.id] }),
+}));
+
+export const insertGameChatMessageSchema = createInsertSchema(gameChatMessages).omit({ id: true, createdAt: true });
+export type InsertGameChatMessage = z.infer<typeof insertGameChatMessageSchema>;
+export type GameChatMessage = typeof gameChatMessages.$inferSelect;
