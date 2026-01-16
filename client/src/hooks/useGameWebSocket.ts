@@ -24,10 +24,17 @@ interface DominoGameState {
 }
 
 interface BackgammonGameState {
-  board: any[];
-  currentTurn: string;
+  board: number[];
+  currentTurn: 'white' | 'black';
   dice: number[];
-  validMoves: any[];
+  diceUsed: boolean[];
+  bar: { white: number; black: number };
+  borneOff: { white: number; black: number };
+  validMoves: Array<{ type: string; from: string; to: string }>;
+  mustRoll: boolean;
+  gamePhase: 'rolling' | 'moving' | 'finished';
+  myColor: 'white' | 'black' | 'spectator';
+  players: { white: string; black: string };
 }
 
 interface CardGameState {
@@ -405,7 +412,7 @@ export function useGameWebSocket(sessionId: string | null) {
   const turnNumberRef = useRef(turnNumber);
   turnNumberRef.current = turnNumber;
 
-  const makeMove = useCallback((from: string, to: string, promotion?: string) => {
+  const makeMove = useCallback((moveData: { type?: string; from?: string; to?: string; promotion?: string } | string, to?: string, promotion?: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       console.warn('[WS] Cannot make move: not connected');
       return false;
@@ -416,14 +423,22 @@ export function useGameWebSocket(sessionId: string | null) {
       return false;
     }
     
-    console.log('[WS] Making move:', from, '->', to, 'expectedTurn:', turnNumberRef.current);
+    let move: any;
+    if (typeof moveData === 'object') {
+      move = moveData;
+      console.log('[WS] Making move (object):', move, 'expectedTurn:', turnNumberRef.current);
+    } else {
+      move = { from: moveData, to, promotion };
+      console.log('[WS] Making move:', moveData, '->', to, 'expectedTurn:', turnNumberRef.current);
+    }
+    
     setIsMovePending(true);
     
     wsRef.current.send(JSON.stringify({
       type: 'make_move',
       payload: { 
         sessionId: sessionIdRef.current, 
-        move: { from, to, promotion },
+        move,
         expectedTurn: turnNumberRef.current
       }
     }));

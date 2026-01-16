@@ -42,6 +42,18 @@ A multi-role user system with balance tracking, VIP levels, referrals, and withd
 - **Protocol Normalization**: Consistent WebSocket message schema for all message types, including `view` field for player-specific state and `gameType` discriminants.
 - **Security**: Server-authoritative game logic with comprehensive authentication guards (unauthenticated, spectators, non-players cannot make moves). Production-grade financial safety using `SELECT ... FOR UPDATE` row-level locking within database transactions to ensure atomicity, prevent concurrent move conflicts, and handle race conditions. Includes client-side turn tracking for UX optimization, but server remains the ultimate authority.
 
+### Implemented Games
+- **Chess**: Full implementation with legal move validation, check/checkmate detection, stalemate, draw offers, resignation, and pawn promotion. Uses chess.js engine with WebSocket multiplayer.
+- **Backgammon**: Complete game engine with all standard rules (dice rolling, checker movement, hitting/blots, bar re-entry, bearing off, gammon/backgammon scoring). Interactive board with drag-and-drop, valid move highlighting, and RTL support for Arabic. Route: `/game/backgammon/:sessionId`
+
+### Game Engine Pattern
+Games implement the `GameEngine` interface in `server/game-engines/`:
+- `validateMove(state, move, playerId)`: Server-side move validation
+- `applyMove(state, move)`: State mutation after validation
+- `getGameStatus(state)`: Returns game status (ongoing, finished, winner)
+- `getValidMoves(state, playerId)`: All legal moves for a player
+- `getPlayerView(state, playerId)`: Player-specific state view
+
 ## External Dependencies
 
 ### Database
