@@ -68,7 +68,7 @@ export interface IStorage {
   createGame(game: InsertGame): Promise<Game>;
   updateGame(id: string, data: Partial<InsertGame>): Promise<Game | undefined>;
   deleteGame(id: string): Promise<boolean>;
-  listGames(status?: string): Promise<Game[]>;
+  listGames(status?: string, section?: string): Promise<Game[]>;
   incrementGamePlayCount(id: string, volume: string): Promise<void>;
 
   // Game Sessions
@@ -341,9 +341,16 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
-  async listGames(status?: string): Promise<Game[]> {
+  async listGames(status?: string, section?: string): Promise<Game[]> {
+    const conditions = [];
     if (status) {
-      return db.select().from(games).where(eq(games.status, status as any)).orderBy(asc(games.sortOrder));
+      conditions.push(eq(games.status, status as any));
+    }
+    if (section) {
+      conditions.push(sql`${section} = ANY(${games.sections})`);
+    }
+    if (conditions.length > 0) {
+      return db.select().from(games).where(and(...conditions)).orderBy(asc(games.sortOrder));
     }
     return db.select().from(games).orderBy(asc(games.sortOrder));
   }

@@ -553,8 +553,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.get("/api/games", async (req: Request, res: Response) => {
     try {
-      const { status } = req.query;
-      const games = await storage.listGames(status as string);
+      const { status, section } = req.query;
+      const games = await storage.listGames(status as string, section as string);
       res.json(games);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

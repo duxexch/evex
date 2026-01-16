@@ -1658,7 +1658,12 @@ export default function PlayPage() {
   });
 
   const { data: games, isLoading: gamesLoading } = useQuery<Game[]>({
-    queryKey: ['/api/games'],
+    queryKey: ['/api/games', { section: 'play' }],
+    queryFn: async () => {
+      const res = await fetch('/api/games?section=play&status=active');
+      if (!res.ok) throw new Error('Failed to load games');
+      return res.json();
+    },
   });
 
   const playMutation = useMutation({

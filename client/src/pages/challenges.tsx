@@ -97,12 +97,25 @@ interface InventoryItem {
   coinValue: number;
 }
 
-const CHALLENGE_GAMES = [
-  { id: 'domino', name: 'Domino', icon: Target, minBet: 1, maxBet: 100 },
-  { id: 'chess', name: 'Chess', icon: Crown, minBet: 5, maxBet: 500 },
-  { id: 'backgammon', name: 'Backgammon', icon: Shuffle, minBet: 2, maxBet: 200 },
-  { id: 'cards', name: 'Card Game', icon: Gem, minBet: 1, maxBet: 100 },
-];
+interface ChallengeGame {
+  id: string;
+  name: string;
+  category: string;
+  minBet: string;
+  maxBet: string;
+  status: string;
+}
+
+const GAME_ICONS: Record<string, any> = {
+  domino: Target,
+  chess: Crown,
+  backgammon: Shuffle,
+  tarneeb: Gem,
+  baloot: Gem,
+  board: Target,
+  strategy: Crown,
+  cards: Gem,
+};
 
 const RANK_COLORS: Record<string, string> = {
   bronze: "bg-amber-700/20 text-amber-600",
@@ -180,7 +193,21 @@ export default function ChallengesPage() {
     queryKey: ['/api/challenger-follows'],
   });
 
+  const { data: challengeGames = [], isLoading: loadingGames } = useQuery<ChallengeGame[]>({
+    queryKey: ['/api/games', { section: 'challenges' }],
+    queryFn: async () => {
+      const res = await fetch('/api/games?section=challenges&status=active');
+      if (!res.ok) throw new Error('Failed to load games');
+      return res.json();
+    },
+  });
+
   const followedIds = new Set(followedChallengers?.map(f => f.userId) || []);
+  
+  const getGameIconByName = (name: string) => {
+    const lowerName = name.toLowerCase();
+    return GAME_ICONS[lowerName] || Target;
+  };
 
   const followChallengerMutation = useMutation({
     mutationFn: (userId: string) =>
@@ -332,8 +359,9 @@ export default function ChallengesPage() {
   };
 
   const getGameIcon = (gameType: string) => {
-    const game = CHALLENGE_GAMES.find(g => g.id === gameType);
-    return game?.icon || Target;
+    const game = challengeGames.find(g => g.name.toLowerCase() === gameType.toLowerCase() || g.id === gameType);
+    if (game) return getGameIconByName(game.name);
+    return GAME_ICONS[gameType.toLowerCase()] || Target;
   };
 
   const toggleGameFilter = (gameId: string) => {
@@ -430,8 +458,10 @@ export default function ChallengesPage() {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {CHALLENGE_GAMES.map(game => {
-                const Icon = game.icon;
+              {loadingGames ? (
+                <div className="text-muted-foreground text-sm">{t('common.loading')}</div>
+              ) : challengeGames.map(game => {
+                const Icon = getGameIconByName(game.name);
                 const isSelected = gameFilter.includes(game.id);
                 return (
                   <Button
@@ -440,7 +470,7 @@ export default function ChallengesPage() {
                     size="sm"
                     onClick={() => toggleGameFilter(game.id)}
                     className="gap-2"
-                    data-testid={`button-filter-${game.id}`}
+                    data-testid={`button-filter-${game.name.toLowerCase()}`}
                   >
                     <Icon className="h-4 w-4" />
                     {game.name}
@@ -784,15 +814,19 @@ export default function ChallengesPage() {
             <div>
               <Label>{t('challenges.selectGame')}</Label>
               <div className="grid grid-cols-2 gap-2 mt-2">
-                {CHALLENGE_GAMES.map(game => {
-                  const Icon = game.icon;
+                {loadingGames ? (
+                  <div className="col-span-2 text-center text-muted-foreground">{t('common.loading')}</div>
+                ) : challengeGames.length === 0 ? (
+                  <div className="col-span-2 text-center text-muted-foreground">{t('challenges.noGamesAvailable')}</div>
+                ) : challengeGames.map(game => {
+                  const Icon = getGameIconByName(game.name);
                   return (
                     <Button
                       key={game.id}
                       variant={selectedGame === game.id ? "default" : "outline"}
                       className="h-auto py-3 flex-col"
                       onClick={() => setSelectedGame(game.id)}
-                      data-testid={`button-game-${game.id}`}
+                      data-testid={`button-game-${game.name.toLowerCase()}`}
                     >
                       <Icon className="h-6 w-6 mb-1" />
                       <span>{game.name}</span>
