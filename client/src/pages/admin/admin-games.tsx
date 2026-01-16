@@ -117,6 +117,8 @@ const categories = [
   { value: "roulette", label: "Roulette" },
   { value: "arcade", label: "Arcade" },
   { value: "sports", label: "Sports" },
+  { value: "board", label: "Board Games" },
+  { value: "strategy", label: "Strategy" },
   { value: "other", label: "Other" },
 ];
 
@@ -309,6 +311,9 @@ function GameForm({
           render={() => (
             <FormItem>
               <FormLabel>Sections (where to display)</FormLabel>
+              <p className="text-xs text-muted-foreground">
+                Selecting "Challenges" or "Multiplayer" will automatically set the game as multiplayer
+              </p>
               <div className="grid grid-cols-2 gap-2 pt-2">
                 {sections.map((section) => (
                   <FormField
@@ -322,10 +327,26 @@ function GameForm({
                             checked={field.value?.includes(section.id)}
                             onCheckedChange={(checked) => {
                               const current = field.value || [];
+                              let newSections: string[];
                               if (checked) {
-                                field.onChange([...current, section.id]);
+                                newSections = [...current, section.id];
                               } else {
-                                field.onChange(current.filter((v) => v !== section.id));
+                                newSections = current.filter((v) => v !== section.id);
+                              }
+                              field.onChange(newSections);
+                              
+                              // Auto-set gameType based on sections
+                              const hasChallenges = newSections.includes("challenges");
+                              const hasMultiplayer = newSections.includes("multiplayer");
+                              if (hasChallenges || hasMultiplayer) {
+                                form.setValue("gameType", "multiplayer");
+                                // Set default min/max players for multiplayer games
+                                if (form.getValues("minPlayers") === 1) {
+                                  form.setValue("minPlayers", 2);
+                                }
+                                if (form.getValues("maxPlayers") === 1) {
+                                  form.setValue("maxPlayers", 4);
+                                }
                               }
                             }}
                             data-testid={`checkbox-section-${section.id}`}
