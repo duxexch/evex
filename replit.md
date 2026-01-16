@@ -89,6 +89,16 @@ Run: `npx tsx server/tests/chess-websocket-test.ts`
 4. **Stress & Concurrency (4 tests)**: Multiple independent games, rapid sequential moves, concurrent validation, high-volume integrity
 5. **Database Transaction Logic (3 tests)**: SELECT FOR UPDATE locking, turn mismatch detection, atomic commit/rollback
 
+### Backgammon Game Test Suite (21 tests, all passing)
+Run: `npx tsx server/tests/backgammon-websocket-test.ts`
+
+**Test Categories**:
+1. **Turn Integrity (6 tests)**: White-first enforcement, duplicate roll rejection, mustRoll enforcement, turn switching, wrong turn rejection, end_turn blocking
+2. **Network Reliability (4 tests)**: State reconstruction from JSON, multiple reconnects, player-specific views, validMoves shrinking with dice use
+3. **Financial Safety (4 tests)**: No double-apply moves, deterministic initial states, server state override, no corruption from invalid moves
+4. **Stress & Concurrency (4 tests)**: Multiple independent games, game isolation, concurrent duplicate rejection, rapid sequential moves
+5. **Database Transaction Logic (3 tests)**: Hit/blot mechanics, bar re-entry enforcement, bearing off restrictions
+
 ### Platform Financial Test Suite (14 tests, all passing)
 Run: `npx tsx server/tests/platform-financial-test.ts`
 
