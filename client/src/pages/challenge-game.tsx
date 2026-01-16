@@ -372,7 +372,7 @@ export default function ChallengeGamePage() {
                 <div className="flex items-center justify-between p-3 bg-card rounded-lg border">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 ring-2 ring-primary">
-                      <AvatarImage src={user?.profilePicture || undefined} />
+                      <AvatarImage src={user?.avatarUrl} />
                       <AvatarFallback>{user?.username?.[0]?.toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div>

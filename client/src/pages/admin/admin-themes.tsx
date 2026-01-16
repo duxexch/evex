@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
-import { applyThemeColors, type Theme } from "@/lib/theme-utils";
 import { Check, Palette } from "lucide-react";
 
 function getAdminToken() {
@@ -73,20 +72,16 @@ export default function AdminThemesPage() {
 
   const setDefaultMutation = useMutation({
     mutationFn: async (themeId: string) => {
-      const result = await adminFetch(`/api/admin/themes/${themeId}/activate`, {
+      return adminFetch(`/api/admin/themes/${themeId}/activate`, {
         method: "PATCH",
       });
-      return result;
     },
-    onSuccess: async (data: Theme) => {
-      if (data) {
-        applyThemeColors(data);
-      }
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/themes"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/settings/public"] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/themes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/public"] });
       toast({
         title: "Theme Updated",
-        description: "Default theme has been changed and applied",
+        description: "Default theme has been changed",
       });
     },
     onError: () => {

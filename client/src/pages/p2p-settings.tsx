@@ -106,7 +106,7 @@ function IdVerificationSection({ language }: { language: string }) {
 
   const submitMutation = useMutation({
     mutationFn: (data: { frontImage: string; backImage: string }) =>
-      apiRequest('POST', '/api/user/id-verification', data),
+      apiRequest('/api/user/id-verification', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({ 
         title: language === 'ar' ? 'تم الإرسال' : 'Submitted',
@@ -337,7 +337,7 @@ export default function P2PSettingsPage() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: (data: Partial<P2PSettings>) =>
-      apiRequest('PATCH', '/api/p2p/settings', data),
+      apiRequest('/api/p2p/settings', { method: 'PATCH', body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('p2p.settings.saved') });
       queryClient.invalidateQueries({ queryKey: ['/api/p2p/settings'] });
@@ -349,7 +349,7 @@ export default function P2PSettingsPage() {
 
   const addPaymentMutation = useMutation({
     mutationFn: (data: typeof newPayment) =>
-      apiRequest('POST', '/api/p2p/payment-methods', data),
+      apiRequest('/api/p2p/payment-methods', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('p2p.settings.paymentAdded') });
       queryClient.invalidateQueries({ queryKey: ['/api/p2p/payment-methods'] });
@@ -363,7 +363,7 @@ export default function P2PSettingsPage() {
 
   const deletePaymentMutation = useMutation({
     mutationFn: (id: string) =>
-      apiRequest('DELETE', `/api/p2p/payment-methods/${id}`),
+      apiRequest(`/api/p2p/payment-methods/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('p2p.settings.paymentDeleted') });
       queryClient.invalidateQueries({ queryKey: ['/api/p2p/payment-methods'] });

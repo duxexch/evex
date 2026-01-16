@@ -310,7 +310,7 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/admin/users", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
     try {
-      const { role, status, limit = "500", offset = "0" } = req.query;
+      const { role, status, limit = "50", offset = "0" } = req.query;
       
       let query = db.select().from(users);
       const conditions = [];
@@ -326,10 +326,6 @@ export function registerAdminRoutes(app: Express) {
         .orderBy(desc(users.createdAt))
         .limit(Number(limit))
         .offset(Number(offset));
-      
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
       
       res.json(result.map(u => ({ ...u, password: undefined })));
     } catch (error: any) {
@@ -671,12 +667,6 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/settings/public", async (req: Request, res: Response) => {
     try {
-      res.set({
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0"
-      });
-      
       const [flagsList, activeTheme] = await Promise.all([
         db.select().from(featureFlags),
         db.select().from(themes).where(eq(themes.isDefault, true)).limit(1)

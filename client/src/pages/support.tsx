@@ -19,7 +19,6 @@ import {
   SiDiscord 
 } from "react-icons/si";
 import { FaTwitter } from "react-icons/fa";
-import { BackButton } from "@/components/BackButton";
 
 interface SupportContact {
   id: string;
@@ -83,8 +82,6 @@ export default function SupportPage() {
 
   const { data: contacts, isLoading } = useQuery<SupportContact[]>({
     queryKey: ["/api/support/contacts"],
-    staleTime: 10 * 60 * 1000, // 10 minutes - support contacts rarely change
-    gcTime: 30 * 60 * 1000, // 30 minutes cache
   });
 
   const activeContacts = contacts?.filter(c => c.isActive) || [];
@@ -92,7 +89,6 @@ export default function SupportPage() {
   return (
     <div className="p-6 space-y-6" dir={dir}>
       <div className="flex items-center gap-3">
-        <BackButton fallbackPath="/dashboard" />
         <Headset className="h-8 w-8 text-primary" />
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-support-title">

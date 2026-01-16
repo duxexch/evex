@@ -828,6 +828,7 @@ export function setupWebSocket(server: Server) {
               updatedAt: new Date(),
               status: isGameOver ? 'completed' : 'playing',
               winnerId: winnerId,
+              endedAt: isGameOver ? new Date() : null,
             })
             .where(eq(challengeGameSessions.id, session.id))
             .returning();
@@ -1019,7 +1020,7 @@ export function setupWebSocket(server: Server) {
             .set({
               status: "completed",
               winnerId,
-              endedAt: new Date(),
+              completedAt: new Date(),
             })
             .where(eq(challenges.id, challengeId));
 
@@ -1062,28 +1063,6 @@ export function setupWebSocket(server: Server) {
                   amount,
                 }
               }));
-            }
-          });
-        }
-
-        // ========== P2P TRADE HANDLERS ==========
-
-        // Send balance update to specific user
-        if (data.type === "p2p_trade_completed" && ws.userId) {
-          const { tradeId, buyerId, sellerId, amount } = data;
-          
-          // Notify both parties about balance change
-          [buyerId, sellerId].forEach(userId => {
-            const userSockets = clients.get(userId);
-            if (userSockets) {
-              userSockets.forEach(socket => {
-                if (socket.readyState === WebSocket.OPEN) {
-                  socket.send(JSON.stringify({ 
-                    type: "balance_updated", 
-                    data: { reason: "p2p_trade", tradeId, timestamp: new Date().toISOString() }
-                  }));
-                }
-              });
             }
           });
         }
@@ -1137,22 +1116,6 @@ export function setupWebSocket(server: Server) {
   });
 
   return wss;
-}
-
-// Broadcast balance update to specific user
-export function broadcastBalanceUpdate(userId: string, reason: string, amount?: string, tradeId?: string) {
-  const userSockets = clients.get(userId);
-  if (userSockets) {
-    const message = JSON.stringify({
-      type: "balance_updated",
-      data: { reason, amount, tradeId, timestamp: new Date().toISOString() }
-    });
-    userSockets.forEach(socket => {
-      if (socket.readyState === 1) { // WebSocket.OPEN
-        socket.send(message);
-      }
-    });
-  }
 }
 
 export async function sendNotification(userId: string, notification: {

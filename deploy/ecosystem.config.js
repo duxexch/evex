@@ -12,7 +12,7 @@ module.exports = {
       // Environment
       env: {
         NODE_ENV: "production",
-        PORT: 5050,
+        PORT: 5000,
       },
       
       // Clustering - set to CPU count to avoid memory exhaustion
@@ -58,9 +58,9 @@ module.exports = {
   deploy: {
     production: {
       user: "vex",
-      host: ["vixo.click"], // Hostinger VPS
+      host: ["YOUR_HOSTINGER_VPS_IP"], // Replace with your VPS IP
       ref: "origin/main",
-      repo: "git@github.com:vex-platform/vex.git",
+      repo: "git@github.com:yourusername/vex-platform.git",
       path: "/var/www/vex",
       "pre-deploy-local": "echo 'Starting deployment...'",
       "post-deploy": 
@@ -80,7 +80,7 @@ module.exports = {
       user: "vex",
       host: ["YOUR_STAGING_VPS_IP"],
       ref: "origin/develop",
-      repo: "git@github.com:vex-platform/vex.git",
+      repo: "git@github.com:yourusername/vex-platform.git",
       path: "/var/www/vex-staging",
       "post-deploy": "npm ci && npm run build && pm2 reload ecosystem.config.js --env staging",
       env: {

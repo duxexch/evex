@@ -20,7 +20,6 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User, Shield, Settings2, Loader2, Monitor, Smartphone, Globe, Trash2, LogOut, CheckCircle, KeyRound, Camera } from "lucide-react";
 import { format } from "date-fns";
-import { BackButton } from "@/components/BackButton";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -152,7 +151,7 @@ function ProfileSection() {
         <div className="flex flex-col items-center gap-4 mb-6">
           <div className="relative">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={user?.profilePicture || undefined} alt={user?.firstName || "Profile"} />
+              <AvatarImage src={user?.profilePicture} alt={user?.firstName || "Profile"} />
               <AvatarFallback className="text-2xl bg-primary/10">{getUserInitials()}</AvatarFallback>
             </Avatar>
             <input
@@ -995,10 +994,7 @@ export default function SettingsPage() {
 
   return (
     <div className="container max-w-4xl mx-auto p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <BackButton fallbackPath="/dashboard" />
-        <h1 className="text-2xl font-bold" data-testid="text-settings-title">{t("nav.settings")}</h1>
-      </div>
+      <h1 className="text-2xl font-bold mb-6" data-testid="text-settings-title">{t("nav.settings")}</h1>
       
       <Tabs defaultValue="profile" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">

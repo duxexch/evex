@@ -15,7 +15,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import type { Complaint, ComplaintMessage } from "@shared/schema";
 import { AlertTriangle, MessageSquare, Clock, CheckCircle, Loader2, Plus, Send } from "lucide-react";
-import { BackButton } from "@/components/BackButton";
 
 interface ComplaintWithMessages extends Complaint {
   messages?: ComplaintMessage[];
@@ -57,7 +56,11 @@ export default function ComplaintsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      return apiRequest("POST", "/api/complaints", data);
+      return apiRequest("/api/complaints", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(data),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/complaints"] });
@@ -72,7 +75,11 @@ export default function ComplaintsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Complaint> }) => {
-      return apiRequest("PATCH", `/api/complaints/${id}`, data);
+      return apiRequest(`/api/complaints/${id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(data),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/complaints"] });
@@ -86,7 +93,11 @@ export default function ComplaintsPage() {
 
   const messageMutation = useMutation({
     mutationFn: async ({ complaintId, message }: { complaintId: string; message: string }) => {
-      return apiRequest("POST", `/api/complaints/${complaintId}/messages`, { message });
+      return apiRequest(`/api/complaints/${complaintId}/messages`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ message }),
+      });
     },
     onSuccess: () => {
       refetchDetails();
@@ -142,10 +153,7 @@ export default function ComplaintsPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <BackButton fallbackPath="/dashboard" />
-          <h1 className="text-2xl font-bold">Complaints</h1>
-        </div>
+        <h1 className="text-2xl font-bold">Complaints</h1>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-new-complaint">

@@ -37,7 +37,6 @@ import {
   Search,
   CreditCard,
   Share2,
-  Palette,
 } from "lucide-react";
 
 interface AdminLayoutProps {
@@ -75,7 +74,6 @@ function AdminSidebar() {
 
   const settingsItems = [
     { title: "App Settings", url: "/admin/app-settings", icon: Cog },
-    { title: "Themes", url: "/admin/themes", icon: Palette },
     { title: "SEO Settings", url: "/admin/seo", icon: Search },
     { title: "Section Controls", url: "/admin/sections", icon: Settings },
     { title: "Social Platforms", url: "/admin/social-platforms", icon: Share2 },

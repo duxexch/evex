@@ -75,8 +75,6 @@ const SupportPage = lazy(() => import("@/pages/support"));
 const ChatPage = lazy(() => import("@/pages/chat"));
 const ChallengeGamePage = lazy(() => import("@/pages/challenge-game"));
 const ChallengeWatchPage = lazy(() => import("@/pages/challenge-watch"));
-const ReplaysPage = lazy(() => import("@/pages/replays"));
-const ReplayViewPage = lazy(() => import("@/pages/replay-view"));
 
 const AdminLoginPage = lazy(() => import("@/pages/admin/admin-login"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/admin-dashboard"));
@@ -99,7 +97,6 @@ const AdminIntegrationsPage = lazy(() => import("@/pages/admin/admin-integration
 const AdminSocialPlatformsPage = lazy(() => import("@/pages/admin/admin-social-platforms"));
 const AdminAdvertisementsPage = lazy(() => import("@/pages/admin/admin-advertisements"));
 const AdminGameSectionsPage = lazy(() => import("@/pages/admin/admin-game-sections"));
-const AdminThemesPage = lazy(() => import("@/pages/admin/admin-themes"));
 
 function PageLoader() {
   return (
@@ -518,9 +515,6 @@ function AdminRouter() {
         <Route path="/admin/game-sections">
           <AdminLayout><AdminGameSectionsPage /></AdminLayout>
         </Route>
-        <Route path="/admin/themes">
-          <AdminLayout><AdminThemesPage /></AdminLayout>
-        </Route>
       </Switch>
     </Suspense>
   );
@@ -608,8 +602,6 @@ function Router() {
           <Route path="/complaints" component={ComplaintsPage} />
           <Route path="/friends" component={FriendsPage} />
           <Route path="/multiplayer" component={MultiplayerPage} />
-          <Route path="/replays" component={ReplaysPage} />
-          <Route path="/replays/:id" component={ReplayViewPage} />
           <Route path="/chat" component={ChatPage} />
           <Route path="/support" component={SupportPage} />
           <Route path="/settings" component={SettingsPage} />

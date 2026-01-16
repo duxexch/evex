@@ -20,12 +20,6 @@ import crypto from "crypto";
 import { setupWebSocket, sendNotification } from "./websocket";
 import { db, pool } from "./db";
 import { eq, desc, and, or, sql } from "drizzle-orm";
-import {
-  loginSchema, loginByAccountSchema, loginByPhoneSchema, registerSchema,
-  forgotPasswordSchema, resetPasswordSchema, depositSchema, withdrawSchema,
-  p2pOfferSchema, p2pTradeInitiateSchema, p2pTradeActionSchema, p2pDisputeSchema,
-  p2pMessageSchema, p2pEvidenceSchema, p2pResolveSchema, p2pDisputeMessageSchema, validateBody
-} from "./validators";
 
 // Security: JWT_SECRET must be set in production
 const JWT_SECRET = process.env.SESSION_SECRET;
@@ -112,19 +106,6 @@ const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunctio
   } catch {
     return res.status(401).json({ error: "Invalid token" });
   }
-};
-
-const optionalAuthMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SIGNING_KEY) as any;
-      req.user = decoded;
-    } catch {
-      // Invalid token, but continue without user
-    }
-  }
-  next();
 };
 
 const adminMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -272,10 +253,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/auth/register", registrationRateLimiter, async (req: Request, res: Response) => {
     try {
-      const validated = validateBody(registerSchema, req.body, res);
-      if (!validated) return;
-      
-      const { username, password, email, firstName, lastName, referralCode } = validated;
+      const { username, password, email, firstName, lastName, referralCode } = req.body;
       
       const existing = await storage.getUserByUsername(username);
       if (existing) {
@@ -325,10 +303,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/auth/login", authRateLimiter, async (req: Request, res: Response) => {
     try {
-      const validated = validateBody(loginSchema, req.body, res);
-      if (!validated) return;
-      
-      const { username, password } = validated;
+      const { username, password } = req.body;
       
       const user = await storage.getUserByUsername(username);
       if (!user) {
@@ -392,10 +367,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Login by account ID (one-click generated users)
   app.post("/api/auth/login-by-account", authRateLimiter, async (req: Request, res: Response) => {
     try {
-      const validated = validateBody(loginByAccountSchema, req.body, res);
-      if (!validated) return;
-      
-      const { accountId, password } = validated;
+      const { accountId, password } = req.body;
       
       const user = await storage.getUserByAccountId(accountId);
       if (!user) {
@@ -433,10 +405,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Login by phone number
   app.post("/api/auth/login-by-phone", authRateLimiter, async (req: Request, res: Response) => {
     try {
-      const validated = validateBody(loginByPhoneSchema, req.body, res);
-      if (!validated) return;
-      
-      const { phone, password } = validated;
+      const { phone, password } = req.body;
       
       const user = await storage.getUserByPhone(phone);
       if (!user) {
@@ -474,10 +443,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Request password reset
   app.post("/api/auth/forgot-password", strictRateLimiter, async (req: Request, res: Response) => {
     try {
-      const validated = validateBody(forgotPasswordSchema, req.body, res);
-      if (!validated) return;
-      
-      const { email, phone, accountId } = validated;
+      const { email, phone, accountId } = req.body;
       
       let user;
       if (email) {
@@ -514,10 +480,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Reset password with token
   app.post("/api/auth/reset-password", strictRateLimiter, async (req: Request, res: Response) => {
     try {
-      const validated = validateBody(resetPasswordSchema, req.body, res);
-      if (!validated) return;
-      
-      const { token, password: newPassword } = validated;
+      const { token, newPassword } = req.body;
       
       const resetToken = await storage.getPasswordResetToken(token);
       if (!resetToken) {
@@ -843,16 +806,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/transactions/deposit", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const validated = validateBody(depositSchema, req.body, res);
-      if (!validated) return;
-      
-      const { amount, paymentMethod, paymentReference, walletNumber } = validated;
+      const { amount, paymentMethod, paymentReference, walletNumber } = req.body;
       const user = await storage.getUser(req.user!.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
       
-      const totalAmount = amount;
+      if (!amount || parseFloat(amount) <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+      
+      if (!paymentReference) {
+        return res.status(400).json({ error: "Payment reference is required" });
+      }
+      
+      const totalAmount = parseFloat(amount);
       
       const transaction = await storage.createTransaction({
         userId: user.id,
@@ -881,16 +849,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   app.post("/api/transactions/withdraw", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
     try {
-      const validated = validateBody(withdrawSchema, req.body, res);
-      if (!validated) return;
-      
-      const { amount } = validated;
+      const { amount } = req.body;
       const user = await storage.getUser(req.user!.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
       
-      if (amount > parseFloat(user.balance)) {
+      if (parseFloat(amount) > parseFloat(user.balance)) {
         return res.status(400).json({ error: "Insufficient balance" });
       }
       
@@ -898,9 +863,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         userId: user.id,
         type: "withdrawal",
         status: "pending",
-        amount: amount.toFixed(2),
+        amount: amount,
         balanceBefore: user.balance,
-        balanceAfter: (parseFloat(user.balance) - amount).toFixed(2),
+        balanceAfter: (parseFloat(user.balance) - parseFloat(amount)).toFixed(2),
         description: "Withdrawal request",
       });
       
@@ -1801,10 +1766,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/offers - Create new offer
   app.post("/api/p2p/offers", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const validated = validateBody(p2pOfferSchema, req.body, res);
-      if (!validated) return;
-      
-      const { type, amount, price, currency, minLimit, maxLimit, paymentMethods } = validated;
+      const { type, amount, price, currency, minLimit, maxLimit, paymentMethods } = req.body;
       const user = await storage.getUser(req.user!.id);
       
       const newOffer = {
@@ -1901,185 +1863,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // POST /api/p2p/trades/initiate - Initiate a trade from an offer
-  app.post("/api/p2p/trades/initiate", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
-    try {
-      const validated = validateBody(p2pTradeInitiateSchema, req.body, res);
-      if (!validated) return;
-      
-      const { offerId, amount } = validated;
-      
-      // Find the offer
-      const offer = [...mockP2POffers, ...userP2POffers].find(o => o.id === offerId);
-      if (!offer) {
-        return res.status(404).json({ error: "Offer not found" });
-      }
-      
-      // Can't trade with yourself
-      if (offer.userId === req.user!.id) {
-        return res.status(400).json({ error: "Cannot trade with your own offer" });
-      }
-      
-      const user = await storage.getUser(req.user!.id);
-      const tradeAmount = amount;
-      
-      // Check balance for buyers
-      if (offer.type === "sell") {
-        const balance = parseFloat(user?.balance || "0");
-        const totalCost = tradeAmount * parseFloat(offer.price);
-        if (balance < totalCost) {
-          return res.status(400).json({ error: "Insufficient balance" });
-        }
-      }
-      
-      const newTrade = {
-        id: `trade-${Date.now()}`,
-        offerId,
-        buyerId: offer.type === "sell" ? req.user!.id : offer.userId,
-        sellerId: offer.type === "sell" ? offer.userId : req.user!.id,
-        amount: `${tradeAmount} ${offer.currency}`,
-        price: offer.price,
-        totalPrice: (tradeAmount * parseFloat(offer.price)).toFixed(2),
-        status: "pending",
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        counterpartyUsername: offer.username,
-        buyerUsername: offer.type === "sell" ? user?.username : offer.username,
-        sellerUsername: offer.type === "sell" ? offer.username : user?.username,
-      };
-      
-      userP2PTrades.push(newTrade);
-      
-      res.status(201).json(newTrade);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // POST /api/p2p/trades/:id/complete - Complete a trade (updates balances instantly)
-  app.post("/api/p2p/trades/:id/complete", authMiddleware, sensitiveRateLimiter, async (req: AuthRequest, res: Response) => {
-    try {
-      const validated = validateBody(p2pTradeActionSchema, req.body || {}, res);
-      if (!validated) return;
-      
-      const trade = userP2PTrades.find(t => t.id === req.params.id);
-      if (!trade) {
-        return res.status(404).json({ error: "Trade not found" });
-      }
-      
-      // Only seller can mark as complete
-      if (trade.sellerId !== req.user!.id) {
-        return res.status(403).json({ error: "Only seller can complete the trade" });
-      }
-      
-      if (trade.status === "completed") {
-        return res.status(400).json({ error: "Trade already completed" });
-      }
-      
-      if (trade.status === "cancelled") {
-        return res.status(400).json({ error: "Cannot complete a cancelled trade" });
-      }
-      
-      // Extract amount value
-      const amountStr = trade.amount.split(" ")[0];
-      const amount = parseFloat(amountStr);
-      
-      if (isNaN(amount) || amount <= 0) {
-        return res.status(400).json({ error: "Invalid trade amount" });
-      }
-      
-      // Update balances instantly
-      const buyer = await storage.getUser(trade.buyerId);
-      const seller = await storage.getUser(trade.sellerId);
-      
-      if (!buyer || !seller) {
-        return res.status(400).json({ error: "Trade participants not found" });
-      }
-      
-      const sellerBalance = parseFloat(seller.balance);
-      
-      // Verify seller has sufficient balance to release
-      if (sellerBalance < amount) {
-        return res.status(400).json({ error: "Insufficient seller balance to complete trade" });
-      }
-      
-      // Credit buyer with the crypto amount
-      const newBuyerBalance = parseFloat(buyer.balance) + amount;
-      await storage.updateUser(trade.buyerId, { balance: newBuyerBalance.toFixed(2) });
-      
-      // Debit seller's balance (validated above)
-      const newSellerBalance = sellerBalance - amount;
-      await storage.updateUser(trade.sellerId, { balance: newSellerBalance.toFixed(2) });
-      
-      // Create transaction records
-      await storage.createTransaction({
-        userId: trade.buyerId,
-        type: "deposit",
-        amount: amount.toString(),
-        status: "completed",
-        referenceId: trade.id,
-        description: "P2P buy",
-        balanceBefore: buyer.balance,
-        balanceAfter: newBuyerBalance.toFixed(2),
-      });
-      
-      await storage.createTransaction({
-        userId: trade.sellerId,
-        type: "withdrawal",
-        amount: amount.toString(),
-        status: "completed",
-        referenceId: trade.id,
-        description: "P2P sell",
-        balanceBefore: seller.balance,
-        balanceAfter: newSellerBalance.toFixed(2),
-      });
-      
-      // Broadcast balance updates via WebSocket
-      try {
-        const { broadcastBalanceUpdate } = await import("./websocket");
-        broadcastBalanceUpdate(trade.buyerId, "p2p_trade", amount.toString(), trade.id);
-        broadcastBalanceUpdate(trade.sellerId, "p2p_trade", amount.toString(), trade.id);
-      } catch (wsError) {
-        console.error("WebSocket broadcast error:", wsError);
-      }
-      
-      // Update trade status
-      trade.status = "completed";
-      trade.completedAt = new Date().toISOString();
-      
-      res.json({ success: true, trade });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // POST /api/p2p/trades/:id/cancel - Cancel a pending trade
-  app.post("/api/p2p/trades/:id/cancel", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const validated = validateBody(p2pTradeActionSchema, req.body || {}, res);
-      if (!validated) return;
-      
-      const trade = userP2PTrades.find(t => t.id === req.params.id);
-      if (!trade) {
-        return res.status(404).json({ error: "Trade not found" });
-      }
-      
-      // Only participants can cancel
-      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
-        return res.status(403).json({ error: "Not authorized" });
-      }
-      
-      if (trade.status !== "pending") {
-        return res.status(400).json({ error: "Can only cancel pending trades" });
-      }
-      
-      trade.status = "cancelled";
-      res.json({ success: true, trade });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // ==================== P2P DISPUTES ====================
 
   // Mock data for disputes
@@ -2164,10 +1947,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes - Open a new dispute
   app.post("/api/p2p/disputes", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const validated = validateBody(p2pDisputeSchema, req.body, res);
-      if (!validated) return;
-      
-      const { tradeId, reason, description } = validated;
+      const { tradeId, reason, description } = req.body;
       
       const dispute = {
         id: `dispute-${Date.now()}`,
@@ -2241,10 +2021,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes/:id/messages - Send message in dispute
   app.post("/api/p2p/disputes/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const validated = validateBody(p2pDisputeMessageSchema, req.body, res);
-      if (!validated) return;
-      
-      const { message, isPrewritten, prewrittenTemplateId } = validated;
+      const { message, isPrewritten, prewrittenTemplateId } = req.body;
       
       const newMessage = {
         id: `msg-${Date.now()}`,
@@ -2281,10 +2058,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes/:id/evidence - Upload evidence
   app.post("/api/p2p/disputes/:id/evidence", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const validated = validateBody(p2pEvidenceSchema, req.body, res);
-      if (!validated) return;
-      
-      const { fileName, fileUrl, fileType, fileSize, description, evidenceType } = validated;
+      const { fileName, fileUrl, fileType, fileSize, description, evidenceType } = req.body;
       
       const evidence = {
         id: `evidence-${Date.now()}`,
@@ -2324,10 +2098,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/disputes/:id/resolve - Resolve dispute (consensus)
   app.post("/api/p2p/disputes/:id/resolve", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const validated = validateBody(p2pResolveSchema, req.body, res);
-      if (!validated) return;
-      
-      const { resolution, action } = validated;
+      const { resolution, action } = req.body;
       
       const dispute = p2pDisputes.find(d => d.id === req.params.id);
       if (dispute) {
@@ -4059,7 +3830,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         avatarUrl: users.avatarUrl,
       }).from(users).where(eq(users.id, userId));
 
-      const responseMessage: Record<string, any> = { ...newMessage, sender };
+      const responseMessage = { ...newMessage, sender };
 
       // If emoji, include emoji details
       if (isEmoji && emojiId) {
@@ -4317,7 +4088,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           isRead: false,
         });
         sendNotification(admin.id, {
-          type: 'system',
+          type: 'id_verification_request',
           title: 'New ID Verification Request',
           message: `User ${req.user!.username} has submitted ID verification documents`,
         });
@@ -4413,7 +4184,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       
       sendNotification(userId, {
-        type: 'system',
+        type: 'id_verification_result',
         title: notificationTitle,
         message: notificationMessage,
       });
@@ -4657,357 +4428,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("Failed to seed social platforms:", error);
     }
   })();
-
-  // ==================== GAME REPLAYS ====================
-
-  // Get list of public replays (paginated)
-  app.get("/api/replays", async (req: Request, res: Response) => {
-    try {
-      const { gameId, featured, limit } = req.query;
-      
-      const replays = await storage.listGameReplays({
-        gameId: gameId as string,
-        isPublic: true,
-        isFeatured: featured === 'true' ? true : undefined,
-        limit: parseInt(limit as string) || 50
-      });
-      
-      // Get players for each replay
-      const replaysWithPlayers = await Promise.all(
-        replays.map(async (replay) => {
-          const players = await storage.getReplayPlayers(replay.id);
-          const game = await storage.getGame(replay.gameId);
-          return {
-            ...replay,
-            players,
-            gameName: game?.name
-          };
-        })
-      );
-      
-      res.json(replaysWithPlayers);
-    } catch (error) {
-      console.error("Error fetching replays:", error);
-      res.status(500).json({ error: "Failed to fetch replays" });
-    }
-  });
-
-  // Get user's replays
-  app.get("/api/replays/my", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const userId = req.user!.id;
-      const limit = parseInt(req.query.limit as string) || 50;
-      
-      const replays = await storage.getUserReplays(userId, limit);
-      
-      // Get players for each replay
-      const replaysWithPlayers = await Promise.all(
-        replays.map(async (replay) => {
-          const players = await storage.getReplayPlayers(replay.id);
-          const game = await storage.getGame(replay.gameId);
-          return {
-            ...replay,
-            players,
-            gameName: game?.name
-          };
-        })
-      );
-      
-      res.json(replaysWithPlayers);
-    } catch (error) {
-      console.error("Error fetching user replays:", error);
-      res.status(500).json({ error: "Failed to fetch replays" });
-    }
-  });
-
-  // Get single replay with all data
-  app.get("/api/replays/:id", optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      
-      const replay = await storage.getGameReplay(id);
-      if (!replay) {
-        return res.status(404).json({ error: "Replay not found" });
-      }
-      
-      // Check access for private replays
-      if (!replay.isPublic) {
-        if (!req.user) {
-          return res.status(401).json({ error: "Authentication required for private replays" });
-        }
-        
-        // Check if user is a player in this replay or admin
-        const players = await storage.getReplayPlayers(id);
-        const isPlayer = players.some(p => p.userId === req.user!.id);
-        const isAdmin = req.user.role === 'admin';
-        
-        if (!isPlayer && !isAdmin) {
-          return res.status(403).json({ error: "Not authorized to view this private replay" });
-        }
-      }
-      
-      // Increment view count
-      await storage.incrementReplayViewCount(id);
-      
-      // Get all related data
-      const [events, players, game] = await Promise.all([
-        storage.getReplayEvents(id),
-        storage.getReplayPlayers(id),
-        storage.getGame(replay.gameId)
-      ]);
-      
-      // Get player usernames
-      const playersWithUsernames = await Promise.all(
-        players.map(async (player) => {
-          const user = await storage.getUser(player.userId);
-          return {
-            ...player,
-            username: user?.username,
-            nickname: user?.nickname,
-            profilePicture: user?.profilePicture
-          };
-        })
-      );
-      
-      res.json({
-        ...replay,
-        events,
-        players: playersWithUsernames,
-        gameName: game?.name,
-        gameCategory: game?.category
-      });
-    } catch (error) {
-      console.error("Error fetching replay:", error);
-      res.status(500).json({ error: "Failed to fetch replay" });
-    }
-  });
-
-  // Create new replay (usually called when a match starts)
-  app.post("/api/replays", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { matchId, gameId, title, players } = req.body;
-      
-      if (!matchId || !gameId) {
-        return res.status(400).json({ error: "matchId and gameId are required" });
-      }
-      
-      // Check if replay already exists for this match
-      const existing = await storage.getGameReplayByMatch(matchId);
-      if (existing) {
-        return res.json(existing);
-      }
-      
-      // Create replay
-      const replay = await storage.createGameReplay({
-        matchId,
-        gameId,
-        title,
-        status: 'recording',
-        isPublic: true
-      });
-      
-      // Add players if provided
-      if (players && Array.isArray(players)) {
-        for (const player of players) {
-          await storage.createReplayPlayer({
-            replayId: replay.id,
-            userId: player.userId,
-            position: player.position || 0,
-            color: player.color
-          });
-        }
-      }
-      
-      res.status(201).json(replay);
-    } catch (error) {
-      console.error("Error creating replay:", error);
-      res.status(500).json({ error: "Failed to create replay" });
-    }
-  });
-
-  // Add event to replay (for recording moves)
-  app.post("/api/replays/:id/events", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { eventType, eventData, timestamp, sequenceNumber, playerId } = req.body;
-      
-      const replay = await storage.getGameReplay(id);
-      if (!replay) {
-        return res.status(404).json({ error: "Replay not found" });
-      }
-      
-      if (replay.status !== 'recording') {
-        return res.status(400).json({ error: "Replay is not in recording state" });
-      }
-      
-      const event = await storage.createReplayEvent({
-        replayId: id,
-        playerId: playerId || req.user!.id,
-        eventType,
-        eventData: typeof eventData === 'string' ? eventData : JSON.stringify(eventData),
-        timestamp,
-        sequenceNumber
-      });
-      
-      // Update total moves count
-      await storage.updateGameReplay(id, {
-        totalMoves: (replay.totalMoves || 0) + 1,
-        duration: timestamp
-      });
-      
-      res.status(201).json(event);
-    } catch (error) {
-      console.error("Error adding replay event:", error);
-      res.status(500).json({ error: "Failed to add event" });
-    }
-  });
-
-  // Bulk add events (for efficiency)
-  app.post("/api/replays/:id/events/bulk", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { events } = req.body;
-      
-      const replay = await storage.getGameReplay(id);
-      if (!replay) {
-        return res.status(404).json({ error: "Replay not found" });
-      }
-      
-      if (!Array.isArray(events) || events.length === 0) {
-        return res.status(400).json({ error: "events array is required" });
-      }
-      
-      const eventsToInsert = events.map(e => ({
-        replayId: id,
-        playerId: e.playerId,
-        eventType: e.eventType,
-        eventData: typeof e.eventData === 'string' ? e.eventData : JSON.stringify(e.eventData),
-        timestamp: e.timestamp,
-        sequenceNumber: e.sequenceNumber
-      }));
-      
-      const created = await storage.bulkCreateReplayEvents(eventsToInsert as any);
-      
-      // Update replay stats
-      const lastEvent = events[events.length - 1];
-      await storage.updateGameReplay(id, {
-        totalMoves: (replay.totalMoves || 0) + events.length,
-        duration: lastEvent?.timestamp || replay.duration
-      });
-      
-      res.status(201).json({ count: created.length });
-    } catch (error) {
-      console.error("Error bulk adding replay events:", error);
-      res.status(500).json({ error: "Failed to add events" });
-    }
-  });
-
-  // Complete a replay (when match ends)
-  app.post("/api/replays/:id/complete", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { winnerId, duration } = req.body;
-      
-      const replay = await storage.getGameReplay(id);
-      if (!replay) {
-        return res.status(404).json({ error: "Replay not found" });
-      }
-      
-      // Update replay to completed
-      const updated = await storage.updateGameReplay(id, {
-        status: 'completed',
-        winnerId,
-        duration: duration || replay.duration,
-        completedAt: new Date()
-      });
-      
-      // Mark winner in players
-      if (winnerId) {
-        const players = await storage.getReplayPlayers(id);
-        for (const player of players) {
-          // This would need an update method - for now we just note the winner is in the replay
-        }
-      }
-      
-      res.json(updated);
-    } catch (error) {
-      console.error("Error completing replay:", error);
-      res.status(500).json({ error: "Failed to complete replay" });
-    }
-  });
-
-  // Toggle replay visibility
-  app.patch("/api/replays/:id/visibility", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { isPublic } = req.body;
-      
-      const replay = await storage.getGameReplay(id);
-      if (!replay) {
-        return res.status(404).json({ error: "Replay not found" });
-      }
-      
-      // Check if user is a player in this replay
-      const players = await storage.getReplayPlayers(id);
-      const isPlayer = players.some(p => p.userId === req.user!.id);
-      const isAdmin = req.user!.role === 'admin';
-      
-      if (!isPlayer && !isAdmin) {
-        return res.status(403).json({ error: "Not authorized to modify this replay" });
-      }
-      
-      const updated = await storage.updateGameReplay(id, { isPublic });
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating replay visibility:", error);
-      res.status(500).json({ error: "Failed to update replay" });
-    }
-  });
-
-  // Admin: Feature/unfeature a replay
-  app.patch("/api/replays/:id/feature", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      const { isFeatured } = req.body;
-      
-      const updated = await storage.updateGameReplay(id, { isFeatured });
-      if (!updated) {
-        return res.status(404).json({ error: "Replay not found" });
-      }
-      
-      res.json(updated);
-    } catch (error) {
-      console.error("Error featuring replay:", error);
-      res.status(500).json({ error: "Failed to update replay" });
-    }
-  });
-
-  // Delete replay (admin or player)
-  app.delete("/api/replays/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const { id } = req.params;
-      
-      const replay = await storage.getGameReplay(id);
-      if (!replay) {
-        return res.status(404).json({ error: "Replay not found" });
-      }
-      
-      // Check authorization
-      const players = await storage.getReplayPlayers(id);
-      const isPlayer = players.some(p => p.userId === req.user!.id);
-      const isAdmin = req.user!.role === 'admin';
-      
-      if (!isPlayer && !isAdmin) {
-        return res.status(403).json({ error: "Not authorized to delete this replay" });
-      }
-      
-      await storage.deleteGameReplay(id);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting replay:", error);
-      res.status(500).json({ error: "Failed to delete replay" });
-    }
-  });
 
   // ==================== WEBSOCKET SETUP ====================
 

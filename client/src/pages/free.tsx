@@ -37,23 +37,12 @@ export default function FreePage() {
   const referralCode = user?.accountId || "";
   const referralLink = `${window.location.origin}?ref=${referralCode}`;
 
-  interface FreeRewards {
-    dailyBonus?: { available: boolean; amount: number; streak: number; nextClaim: string | null };
-    adsWatched: number;
-    maxAdsPerDay: number;
-    adReward: number;
-    referrals: number;
-    referralReward: number;
-    trialGamesPlayed: number;
-    trialReward: number;
-  }
-
-  const { data: freeRewards, isLoading } = useQuery<FreeRewards>({
+  const { data: freeRewards, isLoading } = useQuery({
     queryKey: ['/api/free/rewards'],
   });
 
   const claimDailyMutation = useMutation({
-    mutationFn: () => apiRequest('POST', '/api/free/claim-daily'),
+    mutationFn: () => apiRequest('/api/free/claim-daily', { method: 'POST' }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('free.dailyClaimed') });
       queryClient.invalidateQueries({ queryKey: ['/api/free/rewards'] });
@@ -65,7 +54,7 @@ export default function FreePage() {
   });
 
   const watchAdMutation = useMutation({
-    mutationFn: () => apiRequest('POST', '/api/free/watch-ad'),
+    mutationFn: () => apiRequest('/api/free/watch-ad', { method: 'POST' }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('free.adWatched') });
       queryClient.invalidateQueries({ queryKey: ['/api/free/rewards'] });

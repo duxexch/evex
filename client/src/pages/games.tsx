@@ -64,7 +64,11 @@ export default function GamesPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      return apiRequest("POST", "/api/games", data);
+      return apiRequest("/api/games", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(data),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/games"] });
@@ -79,7 +83,11 @@ export default function GamesPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
-      return apiRequest("PATCH", `/api/games/${id}`, data);
+      return apiRequest(`/api/games/${id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(data),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/games"] });
@@ -95,7 +103,10 @@ export default function GamesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return apiRequest("DELETE", `/api/games/${id}`);
+      return apiRequest(`/api/games/${id}`, {
+        method: "DELETE",
+        headers,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/games"] });

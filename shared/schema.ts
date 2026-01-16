@@ -30,7 +30,6 @@ export const users = pgTable("users", {
   email: text("email").unique(),
   password: text("password").notNull(),
   profilePicture: text("profile_picture"),
-  avatarUrl: text("avatar_url"),
   role: userRoleEnum("role").notNull().default("player"),
   status: userStatusEnum("status").notNull().default("active"),
   firstName: text("first_name"),
@@ -54,7 +53,7 @@ export const users = pgTable("users", {
   idBackImage: text("id_back_image"),
   idVerificationRejectionReason: text("id_verification_rejection_reason"),
   idVerifiedAt: timestamp("id_verified_at"),
-  referredBy: varchar("referred_by"),
+  referredBy: varchar("referred_by").references(() => users.id),
   freePlayCount: integer("free_play_count").notNull().default(0),
   freePlayResetAt: timestamp("free_play_reset_at"),
   withdrawalPassword: text("withdrawal_password"),
@@ -1144,7 +1143,7 @@ export const challengerFollowsRelations = relations(challengerFollows, ({ one })
 }));
 
 export const insertChallengerFollowSchema = createInsertSchema(challengerFollows).omit({ id: true, createdAt: true });
-export type InsertChallengerFollow = typeof challengerFollows.$inferInsert;
+export type InsertChallengerFollow = z.infer<typeof insertChallengerFollowSchema>;
 export type ChallengerFollow = typeof challengerFollows.$inferSelect;
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
@@ -1438,42 +1437,42 @@ export const insertChallengeGameSessionSchema = createInsertSchema(challengeGame
   createdAt: true,
   updatedAt: true,
 });
-export type InsertChallengeGameSession = typeof challengeGameSessions.$inferInsert;
+export type InsertChallengeGameSession = z.infer<typeof insertChallengeGameSessionSchema>;
 export type ChallengeGameSession = typeof challengeGameSessions.$inferSelect;
 
 export const insertChessMoveSchema = createInsertSchema(chessMoves).omit({
   id: true,
   createdAt: true,
 });
-export type InsertChessMove = typeof chessMoves.$inferInsert;
+export type InsertChessMove = z.infer<typeof insertChessMoveSchema>;
 export type ChessMove = typeof chessMoves.$inferSelect;
 
 export const insertDominoMoveSchema = createInsertSchema(dominoMoves).omit({
   id: true,
   createdAt: true,
 });
-export type InsertDominoMove = typeof dominoMoves.$inferInsert;
+export type InsertDominoMove = z.infer<typeof insertDominoMoveSchema>;
 export type DominoMove = typeof dominoMoves.$inferSelect;
 
 export const insertChallengeChatMessageSchema = createInsertSchema(challengeChatMessages).omit({
   id: true,
   createdAt: true,
 });
-export type InsertChallengeChatMessage = typeof challengeChatMessages.$inferInsert;
+export type InsertChallengeChatMessage = z.infer<typeof insertChallengeChatMessageSchema>;
 export type ChallengeChatMessage = typeof challengeChatMessages.$inferSelect;
 
 export const insertChallengePointsLedgerSchema = createInsertSchema(challengePointsLedger).omit({
   id: true,
   createdAt: true,
 });
-export type InsertChallengePointsLedger = typeof challengePointsLedger.$inferInsert;
+export type InsertChallengePointsLedger = z.infer<typeof insertChallengePointsLedgerSchema>;
 export type ChallengePointsLedgerEntry = typeof challengePointsLedger.$inferSelect;
 
 export const insertChallengeFollowSchema = createInsertSchema(challengeFollows).omit({
   id: true,
   createdAt: true,
 });
-export type InsertChallengeFollow = typeof challengeFollows.$inferInsert;
+export type InsertChallengeFollow = z.infer<typeof insertChallengeFollowSchema>;
 export type ChallengeFollow = typeof challengeFollows.$inferSelect;
 
 // ==================== APP SETTINGS ====================
@@ -1732,7 +1731,6 @@ export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
 export const insertAnnouncementViewSchema = createInsertSchema(announcementViews).omit({ id: true });
 export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({ id: true, updatedAt: true });
 
-// Note: Using $inferInsert to avoid drizzle-zod type inference issues
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAgentSchema = createInsertSchema(agents).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAffiliateSchema = createInsertSchema(affiliates).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1779,180 +1777,179 @@ export const insertGameplaySettingSchema = createInsertSchema(gameplaySettings).
 
 // ==================== TYPES ====================
 
-// Use Drizzle's native type inference for Insert types to avoid drizzle-zod version bugs
-export type InsertUser = typeof users.$inferInsert;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export type InsertAgent = typeof agents.$inferInsert;
+export type InsertAgent = z.infer<typeof insertAgentSchema>;
 export type Agent = typeof agents.$inferSelect;
 
-export type InsertAffiliate = typeof affiliates.$inferInsert;
+export type InsertAffiliate = z.infer<typeof insertAffiliateSchema>;
 export type Affiliate = typeof affiliates.$inferSelect;
 
-export type InsertGame = typeof games.$inferInsert;
+export type InsertGame = z.infer<typeof insertGameSchema>;
 export type Game = typeof games.$inferSelect;
 
-export type InsertTransaction = typeof transactions.$inferInsert;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Transaction = typeof transactions.$inferSelect;
 
-export type InsertComplaint = typeof complaints.$inferInsert;
+export type InsertComplaint = z.infer<typeof insertComplaintSchema>;
 export type Complaint = typeof complaints.$inferSelect;
 
-export type InsertPromoCode = typeof promoCodes.$inferInsert;
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 export type PromoCode = typeof promoCodes.$inferSelect;
 
-export type InsertGameSession = typeof gameSessions.$inferInsert;
+export type InsertGameSession = z.infer<typeof insertGameSessionSchema>;
 export type GameSession = typeof gameSessions.$inferSelect;
 
-export type InsertAgentPaymentMethod = typeof agentPaymentMethods.$inferInsert;
+export type InsertAgentPaymentMethod = z.infer<typeof insertAgentPaymentMethodSchema>;
 export type AgentPaymentMethod = typeof agentPaymentMethods.$inferSelect;
 
-export type InsertComplaintMessage = typeof complaintMessages.$inferInsert;
+export type InsertComplaintMessage = z.infer<typeof insertComplaintMessageSchema>;
 export type ComplaintMessage = typeof complaintMessages.$inferSelect;
 
-export type InsertAuditLog = typeof auditLogs.$inferInsert;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 
-export type InsertFinancialLimit = typeof financialLimits.$inferInsert;
+export type InsertFinancialLimit = z.infer<typeof insertFinancialLimitSchema>;
 export type FinancialLimit = typeof financialLimits.$inferSelect;
 
-export type InsertSystemSetting = typeof systemSettings.$inferInsert;
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
 export type SystemSetting = typeof systemSettings.$inferSelect;
 
 export type ComplaintAttachment = typeof complaintAttachments.$inferSelect;
 export type LinkAnalytic = typeof linkAnalytics.$inferSelect;
 export type PromoCodeUsage = typeof promoCodeUsages.$inferSelect;
 
-export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 
-export type InsertDepositRequest = typeof depositRequests.$inferInsert;
+export type InsertDepositRequest = z.infer<typeof insertDepositRequestSchema>;
 export type DepositRequest = typeof depositRequests.$inferSelect;
 
-export type InsertLanguage = typeof languages.$inferInsert;
+export type InsertLanguage = z.infer<typeof insertLanguageSchema>;
 export type Language = typeof languages.$inferSelect;
 
-export type InsertCurrency = typeof currencies.$inferInsert;
+export type InsertCurrency = z.infer<typeof insertCurrencySchema>;
 export type Currency = typeof currencies.$inferSelect;
 
-export type InsertCountryPaymentMethod = typeof countryPaymentMethods.$inferInsert;
+export type InsertCountryPaymentMethod = z.infer<typeof insertCountryPaymentMethodSchema>;
 export type CountryPaymentMethod = typeof countryPaymentMethods.$inferSelect;
 
-export type InsertTheme = typeof themes.$inferInsert;
+export type InsertTheme = z.infer<typeof insertThemeSchema>;
 export type Theme = typeof themes.$inferSelect;
 
-export type InsertFeatureFlag = typeof featureFlags.$inferInsert;
+export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
 export type FeatureFlag = typeof featureFlags.$inferSelect;
 
-export type InsertAdminAuditLog = typeof adminAuditLogs.$inferInsert;
+export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
 export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 
-export type InsertP2POffer = typeof p2pOffers.$inferInsert;
+export type InsertP2POffer = z.infer<typeof insertP2POfferSchema>;
 export type P2POffer = typeof p2pOffers.$inferSelect;
 
-export type InsertP2PTrade = typeof p2pTrades.$inferInsert;
+export type InsertP2PTrade = z.infer<typeof insertP2PTradeSchema>;
 export type P2PTrade = typeof p2pTrades.$inferSelect;
 
-export type InsertP2PEscrow = typeof p2pEscrow.$inferInsert;
+export type InsertP2PEscrow = z.infer<typeof insertP2PEscrowSchema>;
 export type P2PEscrow = typeof p2pEscrow.$inferSelect;
 
-export type InsertP2PDispute = typeof p2pDisputes.$inferInsert;
+export type InsertP2PDispute = z.infer<typeof insertP2PDisputeSchema>;
 export type P2PDispute = typeof p2pDisputes.$inferSelect;
 
-export type InsertP2PSettings = typeof p2pSettings.$inferInsert;
+export type InsertP2PSettings = z.infer<typeof insertP2PSettingsSchema>;
 export type P2PSettings = typeof p2pSettings.$inferSelect;
 
-export type InsertP2PTransactionLog = typeof p2pTransactionLogs.$inferInsert;
+export type InsertP2PTransactionLog = z.infer<typeof insertP2PTransactionLogSchema>;
 export type P2PTransactionLog = typeof p2pTransactionLogs.$inferSelect;
 
-export type InsertP2PDisputeMessage = typeof p2pDisputeMessages.$inferInsert;
+export type InsertP2PDisputeMessage = z.infer<typeof insertP2PDisputeMessageSchema>;
 export type P2PDisputeMessage = typeof p2pDisputeMessages.$inferSelect;
 
-export type InsertP2PDisputeEvidence = typeof p2pDisputeEvidence.$inferInsert;
+export type InsertP2PDisputeEvidence = z.infer<typeof insertP2PDisputeEvidenceSchema>;
 export type P2PDisputeEvidence = typeof p2pDisputeEvidence.$inferSelect;
 
-export type InsertP2PPrewrittenResponse = typeof p2pPrewrittenResponses.$inferInsert;
+export type InsertP2PPrewrittenResponse = z.infer<typeof insertP2PPrewrittenResponseSchema>;
 export type P2PPrewrittenResponse = typeof p2pPrewrittenResponses.$inferSelect;
 
-export type InsertP2PDisputeRule = typeof p2pDisputeRules.$inferInsert;
+export type InsertP2PDisputeRule = z.infer<typeof insertP2PDisputeRuleSchema>;
 export type P2PDisputeRule = typeof p2pDisputeRules.$inferSelect;
 
-export type InsertNotification = typeof notifications.$inferInsert;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
 
-export type InsertUserSession = typeof userSessions.$inferInsert;
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
 export type UserSession = typeof userSessions.$inferSelect;
 
-export type InsertLoginHistory = typeof loginHistory.$inferInsert;
+export type InsertLoginHistory = z.infer<typeof insertLoginHistorySchema>;
 export type LoginHistory = typeof loginHistory.$inferSelect;
 
-export type InsertAnnouncement = typeof announcements.$inferInsert;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
 export type Announcement = typeof announcements.$inferSelect;
 
 export type AnnouncementView = typeof announcementViews.$inferSelect;
 
-export type InsertUserPreferences = typeof userPreferences.$inferInsert;
+export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
 export type UserPreferences = typeof userPreferences.$inferSelect;
 
 // Challenge system types
-export type InsertChallenge = typeof challenges.$inferInsert;
+export type InsertChallenge = z.infer<typeof insertChallengeSchema>;
 export type Challenge = typeof challenges.$inferSelect;
 
-export type InsertChallengeSpectatorBet = typeof challengeSpectatorBets.$inferInsert;
+export type InsertChallengeSpectatorBet = z.infer<typeof insertChallengeSpectatorBetSchema>;
 export type ChallengeSpectatorBet = typeof challengeSpectatorBets.$inferSelect;
 
-export type InsertChallengeRating = typeof challengeRatings.$inferInsert;
+export type InsertChallengeRating = z.infer<typeof insertChallengeRatingSchema>;
 export type ChallengeRating = typeof challengeRatings.$inferSelect;
 
-export type InsertGiftCatalog = typeof giftCatalog.$inferInsert;
+export type InsertGiftCatalog = z.infer<typeof insertGiftCatalogSchema>;
 export type GiftCatalog = typeof giftCatalog.$inferSelect;
 
-export type InsertUserGiftInventory = typeof userGiftInventory.$inferInsert;
+export type InsertUserGiftInventory = z.infer<typeof insertUserGiftInventorySchema>;
 export type UserGiftInventory = typeof userGiftInventory.$inferSelect;
 
-export type InsertChallengeGift = typeof challengeGifts.$inferInsert;
+export type InsertChallengeGift = z.infer<typeof insertChallengeGiftSchema>;
 export type ChallengeGift = typeof challengeGifts.$inferSelect;
 
-export type InsertChallengeSpectator = typeof challengeSpectators.$inferInsert;
+export type InsertChallengeSpectator = z.infer<typeof insertChallengeSpectatorSchema>;
 export type ChallengeSpectator = typeof challengeSpectators.$inferSelect;
 
-export type InsertSupportContact = typeof supportContacts.$inferInsert;
+export type InsertSupportContact = z.infer<typeof insertSupportContactSchema>;
 export type SupportContact = typeof supportContacts.$inferSelect;
 
-export type InsertAppSetting = typeof appSettings.$inferInsert;
+export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
 export type AppSetting = typeof appSettings.$inferSelect;
 
-export type InsertLoginMethodConfig = typeof loginMethodConfigs.$inferInsert;
+export type InsertLoginMethodConfig = z.infer<typeof insertLoginMethodConfigSchema>;
 export type LoginMethodConfig = typeof loginMethodConfigs.$inferSelect;
 
-export type InsertManagedLanguage = typeof managedLanguages.$inferInsert;
+export type InsertManagedLanguage = z.infer<typeof insertManagedLanguageSchema>;
 export type ManagedLanguage = typeof managedLanguages.$inferSelect;
 
-export type InsertBadgeCatalog = typeof badgeCatalog.$inferInsert;
+export type InsertBadgeCatalog = z.infer<typeof insertBadgeCatalogSchema>;
 export type BadgeCatalog = typeof badgeCatalog.$inferSelect;
 
-export type InsertUserBadge = typeof userBadges.$inferInsert;
+export type InsertUserBadge = z.infer<typeof insertUserBadgeSchema>;
 export type UserBadge = typeof userBadges.$inferSelect;
 
-export type InsertUserRelationship = typeof userRelationships.$inferInsert;
+export type InsertUserRelationship = z.infer<typeof insertUserRelationshipSchema>;
 export type UserRelationship = typeof userRelationships.$inferSelect;
 
-export type InsertChatMessage = typeof chatMessages.$inferInsert;
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 
-export type InsertBroadcastNotification = typeof broadcastNotifications.$inferInsert;
+export type InsertBroadcastNotification = z.infer<typeof insertBroadcastNotificationSchema>;
 export type BroadcastNotification = typeof broadcastNotifications.$inferSelect;
 
-export type InsertChatSetting = typeof chatSettings.$inferInsert;
+export type InsertChatSetting = z.infer<typeof insertChatSettingSchema>;
 export type ChatSetting = typeof chatSettings.$inferSelect;
 
-export type InsertGameplaySetting = typeof gameplaySettings.$inferInsert;
+export type InsertGameplaySetting = z.infer<typeof insertGameplaySettingSchema>;
 export type GameplaySetting = typeof gameplaySettings.$inferSelect;
 
-export type InsertMatchmakingQueue = typeof matchmakingQueue.$inferInsert;
+export type InsertMatchmakingQueue = z.infer<typeof insertMatchmakingQueueSchema>;
 export type MatchmakingQueue = typeof matchmakingQueue.$inferSelect;
 
-export type InsertGameMatch = typeof gameMatches.$inferInsert;
+export type InsertGameMatch = z.infer<typeof insertGameMatchSchema>;
 export type GameMatch = typeof gameMatches.$inferSelect;
 
 // ==================== GAMEPLAY EMOJIS (Paid Emojis) ====================
@@ -1970,7 +1967,7 @@ export const gameplayEmojis = pgTable("gameplay_emojis", {
 });
 
 export const insertGameplayEmojiSchema = createInsertSchema(gameplayEmojis).omit({ id: true, createdAt: true });
-export type InsertGameplayEmoji = typeof gameplayEmojis.$inferInsert;
+export type InsertGameplayEmoji = z.infer<typeof insertGameplayEmojiSchema>;
 export type GameplayEmoji = typeof gameplayEmojis.$inferSelect;
 
 // ==================== GAMEPLAY MESSAGES (In-game Chat) ====================
@@ -1996,7 +1993,7 @@ export const gameplayMessagesRelations = relations(gameplayMessages, ({ one }) =
 }));
 
 export const insertGameplayMessageSchema = createInsertSchema(gameplayMessages).omit({ id: true, createdAt: true });
-export type InsertGameplayMessage = typeof gameplayMessages.$inferInsert;
+export type InsertGameplayMessage = z.infer<typeof insertGameplayMessageSchema>;
 export type GameplayMessage = typeof gameplayMessages.$inferSelect;
 
 // ==================== GAME SECTIONS (Customizable Section Names) ====================
@@ -2015,7 +2012,7 @@ export const gameSections = pgTable("game_sections", {
 });
 
 export const insertGameSectionSchema = createInsertSchema(gameSections).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertGameSection = typeof gameSections.$inferInsert;
+export type InsertGameSection = z.infer<typeof insertGameSectionSchema>;
 export type GameSection = typeof gameSections.$inferSelect;
 
 // ==================== ADVERTISEMENTS (Carousel Ads) ====================
@@ -2048,7 +2045,7 @@ export const advertisementsRelations = relations(advertisements, ({ one }) => ({
 }));
 
 export const insertAdvertisementSchema = createInsertSchema(advertisements).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertAdvertisement = typeof advertisements.$inferInsert;
+export type InsertAdvertisement = z.infer<typeof insertAdvertisementSchema>;
 export type Advertisement = typeof advertisements.$inferSelect;
 
 // ==================== SOCIAL PLATFORMS (OAuth & OTP Settings) ====================
@@ -2087,100 +2084,5 @@ export const socialPlatforms = pgTable("social_platforms", {
 ]);
 
 export const insertSocialPlatformSchema = createInsertSchema(socialPlatforms).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertSocialPlatform = typeof socialPlatforms.$inferInsert;
+export type InsertSocialPlatform = z.infer<typeof insertSocialPlatformSchema>;
 export type SocialPlatform = typeof socialPlatforms.$inferSelect;
-
-// ==================== GAME REPLAYS ====================
-
-export const replayStatusEnum = pgEnum("replay_status", ["recording", "completed", "archived", "deleted"]);
-
-export const gameReplays = pgTable("game_replays", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  matchId: varchar("match_id").notNull().references(() => gameMatches.id),
-  gameId: varchar("game_id").notNull().references(() => games.id),
-  title: text("title"),
-  status: replayStatusEnum("status").notNull().default("recording"),
-  duration: integer("duration").default(0),
-  totalMoves: integer("total_moves").default(0),
-  winnerId: varchar("winner_id").references(() => users.id),
-  metadata: text("metadata"),
-  viewCount: integer("view_count").notNull().default(0),
-  isPublic: boolean("is_public").notNull().default(true),
-  isFeatured: boolean("is_featured").notNull().default(false),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  completedAt: timestamp("completed_at"),
-}, (table) => [
-  index("idx_game_replays_match").on(table.matchId),
-  index("idx_game_replays_game").on(table.gameId),
-  index("idx_game_replays_status").on(table.status),
-  index("idx_game_replays_public").on(table.isPublic),
-  index("idx_game_replays_featured").on(table.isFeatured),
-  index("idx_game_replays_created").on(table.createdAt),
-]);
-
-export const gameReplaysRelations = relations(gameReplays, ({ one, many }) => ({
-  match: one(gameMatches, { fields: [gameReplays.matchId], references: [gameMatches.id] }),
-  game: one(games, { fields: [gameReplays.gameId], references: [games.id] }),
-  winner: one(users, { fields: [gameReplays.winnerId], references: [users.id] }),
-  events: many(replayEvents),
-  players: many(replayPlayers),
-}));
-
-export const insertGameReplaySchema = createInsertSchema(gameReplays).omit({ id: true, createdAt: true });
-export type InsertGameReplay = typeof gameReplays.$inferInsert;
-export type GameReplay = typeof gameReplays.$inferSelect;
-
-// ==================== REPLAY EVENTS (Individual moves/actions) ====================
-
-export const replayEventTypeEnum = pgEnum("replay_event_type", [
-  "game_start", "game_end", "move", "chat", "emoji", "timeout", 
-  "resign", "draw_offer", "draw_accept", "draw_reject", "pause", "resume"
-]);
-
-export const replayEvents = pgTable("replay_events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  replayId: varchar("replay_id").notNull().references(() => gameReplays.id, { onDelete: "cascade" }),
-  playerId: varchar("player_id").references(() => users.id),
-  eventType: replayEventTypeEnum("event_type").notNull(),
-  eventData: text("event_data").notNull(),
-  timestamp: integer("timestamp").notNull(),
-  sequenceNumber: integer("sequence_number").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => [
-  index("idx_replay_events_replay").on(table.replayId),
-  index("idx_replay_events_sequence").on(table.replayId, table.sequenceNumber),
-]);
-
-export const replayEventsRelations = relations(replayEvents, ({ one }) => ({
-  replay: one(gameReplays, { fields: [replayEvents.replayId], references: [gameReplays.id] }),
-  player: one(users, { fields: [replayEvents.playerId], references: [users.id] }),
-}));
-
-export const insertReplayEventSchema = createInsertSchema(replayEvents).omit({ id: true, createdAt: true });
-export type InsertReplayEvent = typeof replayEvents.$inferInsert;
-export type ReplayEvent = typeof replayEvents.$inferSelect;
-
-// ==================== REPLAY PLAYERS (Players in a replay) ====================
-
-export const replayPlayers = pgTable("replay_players", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  replayId: varchar("replay_id").notNull().references(() => gameReplays.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  position: integer("position").notNull(),
-  color: text("color"),
-  finalScore: integer("final_score"),
-  isWinner: boolean("is_winner").notNull().default(false),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table) => [
-  index("idx_replay_players_replay").on(table.replayId),
-  index("idx_replay_players_user").on(table.userId),
-]);
-
-export const replayPlayersRelations = relations(replayPlayers, ({ one }) => ({
-  replay: one(gameReplays, { fields: [replayPlayers.replayId], references: [gameReplays.id] }),
-  user: one(users, { fields: [replayPlayers.userId], references: [users.id] }),
-}));
-
-export const insertReplayPlayerSchema = createInsertSchema(replayPlayers).omit({ id: true, createdAt: true });
-export type InsertReplayPlayer = typeof replayPlayers.$inferInsert;
-export type ReplayPlayer = typeof replayPlayers.$inferSelect;

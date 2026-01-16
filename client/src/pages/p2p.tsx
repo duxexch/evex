@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { useWebSocket } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -27,7 +26,6 @@ import { Separator } from "@/components/ui/separator";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Wallet, Plus, ArrowUpRight, ArrowDownRight, Star, Filter, RefreshCw, Trash2, Edit2, Check, ChevronsUpDown, AlertTriangle, MessageSquare, Upload, FileCheck, Camera, Video, Ban, Clock, ChevronRight, Send, Paperclip, Eye, Shield, Scale, History, User, Settings } from "lucide-react";
 import { Link } from "wouter";
-import { BackButton } from "@/components/BackButton";
 import { cn } from "@/lib/utils";
 
 const WORLD_CURRENCIES = [
@@ -289,8 +287,6 @@ function MarketplaceTab() {
 
   const { data: offers, isLoading, refetch } = useQuery<P2POffer[]>({
     queryKey: ["/api/p2p/offers", { type: typeFilter, currency: currencyFilter, payment: paymentFilter }],
-    staleTime: 30_000,
-    gcTime: 60_000,
   });
 
   const filteredOffers = offers?.filter(offer => {
@@ -480,8 +476,6 @@ function MyOffersTab() {
 
   const { data: myOffers, isLoading } = useQuery<P2POffer[]>({
     queryKey: ["/api/p2p/my-offers"],
-    staleTime: 30_000,
-    gcTime: 60_000,
   });
 
   const form = useForm<CreateOfferForm>({
@@ -789,8 +783,6 @@ function MyTradesTab() {
 
   const { data: trades, isLoading } = useQuery<P2PTrade[]>({
     queryKey: ["/api/p2p/my-trades"],
-    staleTime: 60_000,
-    gcTime: 120_000,
   });
 
   const getStatusBadge = (status: string) => {
@@ -1634,23 +1626,13 @@ function DisputesTab() {
 
 export default function P2PPage() {
   const { t, dir } = useI18n();
-  const { lastMessage } = useWebSocket();
-
-  useEffect(() => {
-    if (lastMessage?.type === "balance_updated") {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    }
-  }, [lastMessage]);
 
   return (
     <div className="p-2 md:p-3" dir={dir}>
       <div className="mb-4 flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <BackButton fallbackPath="/dashboard" />
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-p2p-title">{t('nav.p2p')}</h1>
-            <p className="text-muted-foreground">{t('p2p.description')}</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-p2p-title">{t('nav.p2p')}</h1>
+          <p className="text-muted-foreground">{t('p2p.description')}</p>
         </div>
         <div className="flex gap-2">
           <Link href="/p2p/profile/me">

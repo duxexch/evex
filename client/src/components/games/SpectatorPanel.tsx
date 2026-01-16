@@ -108,7 +108,7 @@ export function SpectatorPanel({
 
   const sendGiftMutation = useMutation({
     mutationFn: (data: { challengeId: string; recipientId: string; giftId: string }) =>
-      apiRequest("POST", "/api/challenge-gifts", data),
+      apiRequest("/api/challenge-gifts", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({
         title: language === "ar" ? "تم إرسال الهدية!" : "Gift sent!",
@@ -128,7 +128,7 @@ export function SpectatorPanel({
 
   const addPointsMutation = useMutation({
     mutationFn: (data: { challengeId: string; targetPlayerId: string; pointsAmount: number }) =>
-      apiRequest("POST", "/api/challenge-points", data),
+      apiRequest("/api/challenge-points", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({
         title: language === "ar" ? "تمت إضافة النقاط!" : "Points added!",
@@ -148,7 +148,7 @@ export function SpectatorPanel({
 
   const followMutation = useMutation({
     mutationFn: (userId: string) =>
-      apiRequest("POST", "/api/challenger-follows", { followedId: userId }),
+      apiRequest("/api/challenger-follows", { method: "POST", body: JSON.stringify({ followedId: userId }) }),
     onSuccess: () => {
       toast({ title: language === "ar" ? "تمت المتابعة!" : "Following!" });
       queryClient.invalidateQueries({ queryKey: ["/api/challenger-follows"] });
@@ -160,7 +160,7 @@ export function SpectatorPanel({
 
   const unfollowMutation = useMutation({
     mutationFn: (userId: string) =>
-      apiRequest("DELETE", `/api/challenger-follows/${userId}`),
+      apiRequest(`/api/challenger-follows/${userId}`, { method: "DELETE" }),
     onSuccess: () => {
       toast({ title: language === "ar" ? "تم إلغاء المتابعة" : "Unfollowed" });
       queryClient.invalidateQueries({ queryKey: ["/api/challenger-follows"] });

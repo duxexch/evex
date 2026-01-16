@@ -31,7 +31,6 @@ import {
   XCircle,
   RefreshCw
 } from "lucide-react";
-import { BackButton } from "@/components/BackButton";
 
 export default function WalletPage() {
   const { t, language } = useI18n();
@@ -122,15 +121,12 @@ export default function WalletPage() {
   return (
     <div className="p-4 md:p-6 space-y-6" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <BackButton fallbackPath="/dashboard" />
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Wallet className="h-7 w-7 text-primary" />
-              {t('wallet.title')}
-            </h1>
-            <p className="text-muted-foreground">{t('wallet.description')}</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Wallet className="h-7 w-7 text-primary" />
+            {t('wallet.title')}
+          </h1>
+          <p className="text-muted-foreground">{t('wallet.description')}</p>
         </div>
       </div>
 

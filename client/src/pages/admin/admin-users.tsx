@@ -33,7 +33,6 @@ import {
   Mail,
   Shield,
   ArrowLeftRight,
-  RefreshCw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -69,11 +68,9 @@ export default function AdminUsersPage() {
   const [actionAmount, setActionAmount] = useState("");
   const [adjustType, setAdjustType] = useState<"add" | "subtract">("add");
 
-  const { data: users, isLoading, refetch } = useQuery({
+  const { data: users, isLoading } = useQuery({
     queryKey: ["/api/admin/users"],
     queryFn: () => adminFetch("/api/admin/users"),
-    refetchOnWindowFocus: true,
-    staleTime: 0,
   });
 
   const banMutation = useMutation({
@@ -225,30 +222,17 @@ export default function AdminUsersPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">User Management</h1>
-          <p className="text-muted-foreground">
-            Manage all platform users 
-            {users && <span className="ml-2">({users.length} total)</span>}
-          </p>
+          <p className="text-muted-foreground">Manage all platform users</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => refetch()}
-            data-testid="button-refresh-users"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search users..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              data-testid="input-search-users"
-            />
-          </div>
+        <div className="relative w-full md:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search users..."
+            className="pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="input-search-users"
+          />
         </div>
       </div>
 

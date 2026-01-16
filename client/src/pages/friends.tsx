@@ -22,7 +22,6 @@ import {
   CheckCircle,
   Loader2,
 } from "lucide-react";
-import { BackButton } from "@/components/BackButton";
 import type { User } from "@shared/schema";
 
 type UserWithFollowStatus = Omit<User, "password"> & { isFollowing?: boolean };
@@ -41,7 +40,7 @@ function UserCard({
   t: (key: string) => string;
 }) {
   const initials = (user.username || "U").slice(0, 2).toUpperCase();
-  const level = user.vipLevel || 1;
+  const level = user.level || 1;
 
   return (
     <div
@@ -50,7 +49,7 @@ function UserCard({
     >
       <div className="flex items-center gap-3 min-w-0">
         <Avatar data-testid={`avatar-user-${user.id}`}>
-          <AvatarImage src={user.profilePicture || undefined} alt={user.username} />
+          <AvatarImage src={user.avatarUrl || undefined} alt={user.username} />
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
@@ -61,11 +60,11 @@ function UserCard({
             >
               {user.username}
             </span>
-            <Badge variant="secondary" data-testid={`badge-level-${user.id}`}>
+            <Badge variant="secondary" size="sm" data-testid={`badge-level-${user.id}`}>
               {t("friends.level")} {level}
             </Badge>
             {actionType === "friend" && (
-              <Badge variant="default" data-testid={`badge-mutual-${user.id}`}>
+              <Badge variant="default" size="sm" data-testid={`badge-mutual-${user.id}`}>
                 <CheckCircle className="w-3 h-3 me-1" />
                 {t("friends.mutualFriend")}
               </Badge>
@@ -272,7 +271,7 @@ export default function FriendsPage() {
 
   const followMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return apiRequest("POST", `/api/users/follow/${userId}`);
+      return apiRequest(`/api/users/follow/${userId}`, { method: "POST" });
     },
     onSuccess: () => {
       toast({ title: t("friends.followSuccess") });
@@ -291,7 +290,7 @@ export default function FriendsPage() {
 
   const unfollowMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return apiRequest("DELETE", `/api/users/unfollow/${userId}`);
+      return apiRequest(`/api/users/unfollow/${userId}`, { method: "DELETE" });
     },
     onSuccess: () => {
       toast({ title: t("friends.unfollowSuccess") });
@@ -310,7 +309,7 @@ export default function FriendsPage() {
 
   const unblockMutation = useMutation({
     mutationFn: async (userId: string) => {
-      return apiRequest("DELETE", `/api/users/unblock/${userId}`);
+      return apiRequest(`/api/users/unblock/${userId}`, { method: "DELETE" });
     },
     onSuccess: () => {
       toast({ title: t("friends.unblockSuccess") });
@@ -353,16 +352,13 @@ export default function FriendsPage() {
 
   return (
     <div className="container max-w-4xl mx-auto p-4 space-y-6">
-      <div className="flex items-center gap-3 mb-2">
-        <BackButton fallbackPath="/dashboard" />
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold" data-testid="text-friends-title">
-            {t("friends.title")}
-          </h1>
-          <p className="text-muted-foreground" data-testid="text-friends-subtitle">
-            {t("friends.subtitle")}
-          </p>
-        </div>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold" data-testid="text-friends-title">
+          {t("friends.title")}
+        </h1>
+        <p className="text-muted-foreground" data-testid="text-friends-subtitle">
+          {t("friends.subtitle")}
+        </p>
       </div>
 
       <Tabs defaultValue="friends" className="w-full">
@@ -396,7 +392,7 @@ export default function FriendsPage() {
                 <Users className="w-5 h-5" />
                 {t("friends.friends")}
                 {friends.length > 0 && (
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" size="sm">
                     {friends.length}
                   </Badge>
                 )}
@@ -436,7 +432,7 @@ export default function FriendsPage() {
                 <UserPlus className="w-5 h-5" />
                 {t("friends.following")}
                 {following.length > 0 && (
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" size="sm">
                     {following.length}
                   </Badge>
                 )}
@@ -476,7 +472,7 @@ export default function FriendsPage() {
                 <Users className="w-5 h-5" />
                 {t("friends.followers")}
                 {followers.length > 0 && (
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" size="sm">
                     {followers.length}
                   </Badge>
                 )}
@@ -518,7 +514,7 @@ export default function FriendsPage() {
                 <Ban className="w-5 h-5" />
                 {t("friends.blocked")}
                 {blocked.length > 0 && (
-                  <Badge variant="secondary">
+                  <Badge variant="secondary" size="sm">
                     {blocked.length}
                   </Badge>
                 )}

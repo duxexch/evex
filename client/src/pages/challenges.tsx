@@ -184,7 +184,7 @@ export default function ChallengesPage() {
 
   const followChallengerMutation = useMutation({
     mutationFn: (userId: string) =>
-      apiRequest('POST', '/api/challenger-follows', { followedId: userId }),
+      apiRequest('/api/challenger-follows', { method: 'POST', body: JSON.stringify({ followedId: userId }) }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.followedChallenger') });
       queryClient.invalidateQueries({ queryKey: ['/api/challenger-follows'] });
@@ -196,7 +196,7 @@ export default function ChallengesPage() {
 
   const unfollowChallengerMutation = useMutation({
     mutationFn: (userId: string) =>
-      apiRequest('DELETE', `/api/challenger-follows/${userId}`),
+      apiRequest(`/api/challenger-follows/${userId}`, { method: 'DELETE' }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.unfollowedChallenger') });
       queryClient.invalidateQueries({ queryKey: ['/api/challenger-follows'] });
@@ -216,7 +216,7 @@ export default function ChallengesPage() {
 
   const createChallengeMutation = useMutation({
     mutationFn: (data: { gameType: string; betAmount: number; opponentType: string; friendAccountId?: string; visibility: string }) =>
-      apiRequest('POST', '/api/challenges', data),
+      apiRequest('/api/challenges', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.created') });
       queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
@@ -230,7 +230,7 @@ export default function ChallengesPage() {
 
   const joinChallengeMutation = useMutation({
     mutationFn: (challengeId: string) =>
-      apiRequest('POST', `/api/challenges/${challengeId}/join`),
+      apiRequest(`/api/challenges/${challengeId}/join`, { method: 'POST' }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.joined') });
       queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
@@ -242,7 +242,7 @@ export default function ChallengesPage() {
 
   const withdrawChallengeMutation = useMutation({
     mutationFn: (challengeId: string) =>
-      apiRequest('POST', `/api/challenges/${challengeId}/withdraw`),
+      apiRequest(`/api/challenges/${challengeId}/withdraw`, { method: 'POST' }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.withdrawn') });
       queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
@@ -256,7 +256,7 @@ export default function ChallengesPage() {
 
   const placeStakeMutation = useMutation({
     mutationFn: (data: { challengeId: string; backedPlayerId: string; stakeAmount: number }) =>
-      apiRequest('POST', `/api/challenges/${data.challengeId}/stake`, data),
+      apiRequest(`/api/challenges/${data.challengeId}/stake`, { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.stakePlaced') });
       setSpectatorBetAmount("");
@@ -269,7 +269,7 @@ export default function ChallengesPage() {
 
   const purchaseGiftMutation = useMutation({
     mutationFn: (data: { giftId: string; quantity: number }) =>
-      apiRequest('POST', '/api/gifts/purchase', data),
+      apiRequest('/api/gifts/purchase', { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.giftPurchased') });
       queryClient.invalidateQueries({ queryKey: ['/api/gifts/inventory'] });
@@ -281,7 +281,7 @@ export default function ChallengesPage() {
 
   const sendGiftMutation = useMutation({
     mutationFn: (data: { challengeId: string; recipientId: string; giftId: string }) =>
-      apiRequest('POST', `/api/challenges/${data.challengeId}/gifts`, data),
+      apiRequest(`/api/challenges/${data.challengeId}/gifts`, { method: 'POST', body: JSON.stringify(data) }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.giftSent') });
       queryClient.invalidateQueries({ queryKey: ['/api/gifts/inventory'] });
@@ -892,7 +892,7 @@ export default function ChallengesPage() {
           {activeChallenge && (
             <div className="p-4 bg-destructive/10 rounded-md">
               <p className="text-sm">
-                {t('challenges.penaltyInfo').replace('{amount}', (activeChallenge.betAmount * 0.3).toFixed(2))}
+                {t('challenges.penaltyInfo', { amount: (activeChallenge.betAmount * 0.3).toFixed(2) })}
               </p>
             </div>
           )}
@@ -943,9 +943,9 @@ export default function ChallengesPage() {
               <div>
                 <Label className="flex items-center gap-2 mb-2">
                   <Coins className="h-4 w-4" />
-                  {t('challenges.placeStake')}
+                  {t('challenges.placeBet')}
                 </Label>
-                <p className="text-xs text-muted-foreground mb-3">{t('challenges.stakeWarning')}</p>
+                <p className="text-xs text-muted-foreground mb-3">{t('challenges.betWarning')}</p>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <Button
                     variant={selectedPlayer === spectatingChallenge.player1Id ? "default" : "outline"}
@@ -971,7 +971,7 @@ export default function ChallengesPage() {
                     data-testid="input-spectator-bet"
                   />
                   <Button onClick={handlePlaceBet} disabled={!selectedPlayer || !spectatorBetAmount}>
-                    {t('challenges.stake')}
+                    {t('challenges.bet')}
                   </Button>
                 </div>
               </div>

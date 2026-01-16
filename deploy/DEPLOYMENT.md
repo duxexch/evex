@@ -97,7 +97,7 @@ sudo su - vex
 cd /var/www/vex
 
 # Clone repository
-git clone https://github.com/vex-platform/vex.git .
+git clone https://github.com/yourusername/vex-platform.git .
 
 # Install dependencies
 npm ci --production=false
@@ -149,7 +149,7 @@ unset ADMIN_BOOTSTRAP_PASSWORD
 unset ADMIN_BOOTSTRAP_EMAIL
 
 # Verify admin was created
-curl http://localhost:5050/api/health
+curl http://localhost:5000/api/health
 
 # SECURITY: Never store these in .env file
 ```
@@ -172,7 +172,7 @@ sudo cp /var/www/vex/deploy/nginx.conf /etc/nginx/sites-available/vex
 
 # Edit domain name
 sudo nano /etc/nginx/sites-available/vex
-# Domain is already set to vixo.click
+# Replace 'yourdomain.com' with your actual domain
 
 # Enable site
 sudo ln -s /etc/nginx/sites-available/vex /etc/nginx/sites-enabled/
@@ -192,7 +192,7 @@ sudo systemctl reload nginx
 sudo apt install -y certbot python3-certbot-nginx
 
 # Get certificate
-sudo certbot --nginx -d vixo.click -d www.vixo.click
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
 
 # Auto-renewal test
 sudo certbot renew --dry-run
@@ -288,8 +288,8 @@ pm2 reload vex-platform
 pg_dump $DATABASE_URL > backup-$(date +%Y%m%d).sql
 
 # Check health
-curl http://localhost:5050/api/health
-curl http://localhost:5050/api/health/detailed
+curl http://localhost:5000/api/health
+curl http://localhost:5000/api/health/detailed
 
 # Check nginx status
 sudo nginx -t
@@ -325,7 +325,7 @@ pm2 set pm2-logrotate:retain 7
 # Healthcheck script (add to cron)
 cat > /var/www/vex/healthcheck.sh << 'EOF'
 #!/bin/bash
-if ! curl -sf http://localhost:5050/api/health > /dev/null; then
+if ! curl -sf http://localhost:5000/api/health > /dev/null; then
     pm2 restart vex-platform
     echo "$(date): VEX platform restarted due to health check failure" >> /var/log/vex/healthcheck.log
 fi
@@ -403,132 +403,6 @@ sudo nano /etc/nginx/sites-available/vex
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-## Rollback Strategy
-
-### Pre-Deployment Backup
-Always backup before deploying:
-```bash
-# Ensure backup directory exists
-cd /var/www/vex
-mkdir -p backups
-
-# Backup database before any deployment
-pg_dump $DATABASE_URL > backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql
-
-# Keep track of current git commit
-git rev-parse HEAD > backups/pre-deploy-commit.txt
-```
-
-### Quick Rollback (Code Only)
-If deployment fails and database wasn't affected:
-```bash
-# Get previous commit hash
-PREV_COMMIT=$(cat backups/pre-deploy-commit.txt)
-
-# Checkout previous version
-git checkout $PREV_COMMIT
-
-# Reinstall dependencies and rebuild
-npm ci --production=false
-npm run build
-npm prune --production
-
-# Reload PM2 (zero-downtime)
-pm2 reload vex-platform
-
-# Verify health
-curl http://localhost:5050/api/health
-```
-
-### Full Rollback (Code + Database)
-If database changes need to be reverted:
-```bash
-# Stop application
-pm2 stop vex-platform
-
-# Restore database from backup
-BACKUP_FILE=$(ls -t backups/pre-deploy-*.sql | head -1)
-psql $DATABASE_URL < $BACKUP_FILE
-
-# Rollback code
-PREV_COMMIT=$(cat backups/pre-deploy-commit.txt)
-git checkout $PREV_COMMIT
-npm ci --production=false
-npm run build
-npm prune --production
-
-# Restart application
-pm2 start vex-platform
-
-# Verify health
-curl http://localhost:5050/api/health
-```
-
-### Automated Rollback Script
-Create `/var/www/vex/scripts/rollback.sh`:
-```bash
-#!/bin/bash
-set -e
-cd /var/www/vex
-
-echo "Starting rollback..."
-
-# Check for backup
-if [ ! -f backups/pre-deploy-commit.txt ]; then
-    echo "Error: No backup commit found"
-    exit 1
-fi
-
-PREV_COMMIT=$(cat backups/pre-deploy-commit.txt)
-LATEST_BACKUP=$(ls -t backups/pre-deploy-*.sql 2>/dev/null | head -1)
-
-# Rollback code
-git checkout $PREV_COMMIT
-npm ci --production=false
-npm run build
-npm prune --production
-
-# Ask about database rollback
-read -p "Rollback database too? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    pm2 stop vex-platform
-    psql $DATABASE_URL < $LATEST_BACKUP
-fi
-
-pm2 reload vex-platform
-echo "Rollback complete!"
-```
-
-## PM2 Scaling Guide
-
-Configure PM2 instances based on your VPS resources:
-
-| VPS RAM | CPU Cores | PM2 Instances | DB_POOL_MAX | Concurrent Users |
-|---------|-----------|---------------|-------------|------------------|
-| 2GB     | 2         | 2             | 25          | ~1,000           |
-| 4GB     | 2-4       | 2-4           | 50          | ~4,000           |
-| 8GB     | 4+        | 4-8           | 75          | ~10,000          |
-| 16GB    | 8+        | 8-16          | 100         | ~20,000          |
-
-### Update ecosystem.config.js for your VPS:
-```javascript
-// For 4GB RAM, 4 CPU VPS:
-instances: 4,
-max_memory_restart: '900M',
-
-// For 8GB RAM, 4 CPU VPS:
-instances: 4,
-max_memory_restart: '1500M',
-```
-
-### Apply changes:
-```bash
-pm2 delete vex-platform
-pm2 start deploy/ecosystem.config.js
-pm2 save
-```
-
 ## Hostinger-Specific Notes
 
 1. **Database**: Use Hostinger's managed PostgreSQL if available
@@ -543,5 +417,5 @@ pm2 save
 For issues specific to the VEX platform:
 - Application logs: `pm2 logs vex-platform`
 - Database connectivity: `psql $DATABASE_URL -c "SELECT 1"`
-- Health endpoint: `curl localhost:5050/api/health`
-- Detailed health: `curl localhost:5050/api/health/detailed`
+- Health endpoint: `curl localhost:5000/api/health`
+- Detailed health: `curl localhost:5000/api/health/detailed`

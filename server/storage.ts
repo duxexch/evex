@@ -5,7 +5,6 @@ import {
   passwordResetTokens, countryPaymentMethods,
   notifications, userSessions, loginHistory, announcements, announcementViews, userPreferences,
   userRelationships, socialPlatforms,
-  gameReplays, replayEvents, replayPlayers,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -23,9 +22,6 @@ import {
   type UserPreferences, type InsertUserPreferences,
   type UserRelationship, type InsertUserRelationship,
   type SocialPlatform, type InsertSocialPlatform,
-  type GameReplay, type InsertGameReplay,
-  type ReplayEvent, type InsertReplayEvent,
-  type ReplayPlayer, type InsertReplayPlayer,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, asc, or, like, ne } from "drizzle-orm";
@@ -166,25 +162,6 @@ export interface IStorage {
   getUserFollowers(userId: string): Promise<UserRelationship[]>;
   getUserBlocked(userId: string): Promise<UserRelationship[]>;
   searchUsers(query: string, excludeUserId: string): Promise<User[]>;
-
-  // Game Replays
-  createGameReplay(replay: InsertGameReplay): Promise<GameReplay>;
-  getGameReplay(id: string): Promise<GameReplay | undefined>;
-  getGameReplayByMatch(matchId: string): Promise<GameReplay | undefined>;
-  updateGameReplay(id: string, data: Partial<InsertGameReplay>): Promise<GameReplay | undefined>;
-  listGameReplays(options?: { gameId?: string; userId?: string; isPublic?: boolean; isFeatured?: boolean; limit?: number }): Promise<GameReplay[]>;
-  incrementReplayViewCount(id: string): Promise<void>;
-  deleteGameReplay(id: string): Promise<boolean>;
-
-  // Replay Events
-  createReplayEvent(event: InsertReplayEvent): Promise<ReplayEvent>;
-  getReplayEvents(replayId: string): Promise<ReplayEvent[]>;
-  bulkCreateReplayEvents(events: InsertReplayEvent[]): Promise<ReplayEvent[]>;
-
-  // Replay Players
-  createReplayPlayer(player: InsertReplayPlayer): Promise<ReplayPlayer>;
-  getReplayPlayers(replayId: string): Promise<ReplayPlayer[]>;
-  getUserReplays(userId: string, limit?: number): Promise<GameReplay[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -867,123 +844,6 @@ export class DatabaseStorage implements IStorage {
   async deleteSocialPlatform(id: string): Promise<boolean> {
     const result = await db.delete(socialPlatforms).where(eq(socialPlatforms.id, id));
     return true;
-  }
-
-  // ==================== GAME REPLAYS ====================
-
-  async createGameReplay(replay: InsertGameReplay): Promise<GameReplay> {
-    const [created] = await db.insert(gameReplays).values(replay).returning();
-    return created;
-  }
-
-  async getGameReplay(id: string): Promise<GameReplay | undefined> {
-    const [replay] = await db.select().from(gameReplays).where(eq(gameReplays.id, id));
-    return replay || undefined;
-  }
-
-  async getGameReplayByMatch(matchId: string): Promise<GameReplay | undefined> {
-    const [replay] = await db.select().from(gameReplays).where(eq(gameReplays.matchId, matchId));
-    return replay || undefined;
-  }
-
-  async updateGameReplay(id: string, data: Partial<InsertGameReplay>): Promise<GameReplay | undefined> {
-    const [updated] = await db.update(gameReplays)
-      .set(data)
-      .where(eq(gameReplays.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
-  async listGameReplays(options?: { 
-    gameId?: string; 
-    userId?: string; 
-    isPublic?: boolean; 
-    isFeatured?: boolean; 
-    limit?: number 
-  }): Promise<GameReplay[]> {
-    let query = db.select().from(gameReplays);
-    
-    const conditions = [];
-    
-    if (options?.gameId) {
-      conditions.push(eq(gameReplays.gameId, options.gameId));
-    }
-    if (options?.isPublic !== undefined) {
-      conditions.push(eq(gameReplays.isPublic, options.isPublic));
-    }
-    if (options?.isFeatured !== undefined) {
-      conditions.push(eq(gameReplays.isFeatured, options.isFeatured));
-    }
-    conditions.push(eq(gameReplays.status, 'completed'));
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
-    
-    query = query.orderBy(desc(gameReplays.createdAt)) as any;
-    
-    if (options?.limit) {
-      query = query.limit(options.limit) as any;
-    }
-    
-    return query;
-  }
-
-  async incrementReplayViewCount(id: string): Promise<void> {
-    await db.update(gameReplays)
-      .set({ viewCount: sql`${gameReplays.viewCount} + 1` })
-      .where(eq(gameReplays.id, id));
-  }
-
-  async deleteGameReplay(id: string): Promise<boolean> {
-    await db.delete(gameReplays).where(eq(gameReplays.id, id));
-    return true;
-  }
-
-  // ==================== REPLAY EVENTS ====================
-
-  async createReplayEvent(event: InsertReplayEvent): Promise<ReplayEvent> {
-    const [created] = await db.insert(replayEvents).values(event).returning();
-    return created;
-  }
-
-  async getReplayEvents(replayId: string): Promise<ReplayEvent[]> {
-    return db.select().from(replayEvents)
-      .where(eq(replayEvents.replayId, replayId))
-      .orderBy(asc(replayEvents.sequenceNumber));
-  }
-
-  async bulkCreateReplayEvents(events: InsertReplayEvent[]): Promise<ReplayEvent[]> {
-    if (events.length === 0) return [];
-    return db.insert(replayEvents).values(events).returning();
-  }
-
-  // ==================== REPLAY PLAYERS ====================
-
-  async createReplayPlayer(player: InsertReplayPlayer): Promise<ReplayPlayer> {
-    const [created] = await db.insert(replayPlayers).values(player).returning();
-    return created;
-  }
-
-  async getReplayPlayers(replayId: string): Promise<ReplayPlayer[]> {
-    return db.select().from(replayPlayers)
-      .where(eq(replayPlayers.replayId, replayId))
-      .orderBy(asc(replayPlayers.position));
-  }
-
-  async getUserReplays(userId: string, limit: number = 50): Promise<GameReplay[]> {
-    const playerReplays = await db.select({ replayId: replayPlayers.replayId })
-      .from(replayPlayers)
-      .where(eq(replayPlayers.userId, userId));
-    
-    const replayIds = playerReplays.map(r => r.replayId);
-    
-    if (replayIds.length === 0) return [];
-    
-    return db.select().from(gameReplays)
-      .where(sql`${gameReplays.id} IN (${sql.join(replayIds.map(id => sql`${id}`), sql`, `)})`)
-      .orderBy(desc(gameReplays.createdAt))
-      .limit(limit);
   }
 }
 

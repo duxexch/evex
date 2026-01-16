@@ -1,10 +1,8 @@
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { applyThemeColors, type Theme } from "./theme-utils";
 
 interface PublicSettings {
   sections: Record<string, boolean>;
-  theme?: Theme | null;
 }
 
 interface SettingsContextType {
@@ -27,15 +25,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) return { sections: {} };
       return res.json();
     },
-    staleTime: 0,
-    refetchOnMount: true,
+    staleTime: 1000 * 60 * 5,
   });
-
-  useEffect(() => {
-    if (settings?.theme) {
-      applyThemeColors(settings.theme);
-    }
-  }, [settings?.theme]);
 
   const isSectionEnabled = (section: string): boolean => {
     if (!settings?.sections) return true;
