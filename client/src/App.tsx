@@ -77,6 +77,9 @@ const ChallengeGamePage = lazy(() => import("@/pages/challenge-game"));
 const ChallengeWatchPage = lazy(() => import("@/pages/challenge-watch"));
 const ChessGamePage = lazy(() => import("@/pages/games/ChessGame"));
 const BackgammonGamePage = lazy(() => import("@/pages/games/BackgammonGame"));
+const DominoGamePage = lazy(() => import("@/pages/games/DominoGame"));
+const TarneebGamePage = lazy(() => import("@/pages/games/TarneebGame"));
+const BalootGamePage = lazy(() => import("@/pages/games/BalootGame"));
 
 const AdminLoginPage = lazy(() => import("@/pages/admin/admin-login"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/admin-dashboard"));
@@ -597,6 +600,9 @@ function Router() {
           <Route path="/challenge/:id/watch" component={ChallengeWatchPage} />
           <Route path="/game/chess/:sessionId" component={ChessGamePage} />
           <Route path="/game/backgammon/:sessionId" component={BackgammonGamePage} />
+          <Route path="/game/domino/:sessionId" component={DominoGamePage} />
+          <Route path="/game/tarneeb/:sessionId" component={TarneebGamePage} />
+          <Route path="/game/baloot/:sessionId" component={BalootGamePage} />
           <Route path="/p2p" component={P2PPage} />
           <Route path="/p2p/profile/:userId?" component={P2PProfilePage} />
           <Route path="/p2p/settings" component={P2PSettingsPage} />

@@ -412,7 +412,7 @@ export function useGameWebSocket(sessionId: string | null) {
   const turnNumberRef = useRef(turnNumber);
   turnNumberRef.current = turnNumber;
 
-  const makeMove = useCallback((moveData: { type?: string; from?: string; to?: string; promotion?: string } | string, to?: string, promotion?: string) => {
+  const makeMove = useCallback((moveData: Record<string, any> | string, to?: string, promotion?: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       console.warn('[WS] Cannot make move: not connected');
       return false;

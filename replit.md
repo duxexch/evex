@@ -43,8 +43,11 @@ A multi-role user system with balance tracking, VIP levels, referrals, and withd
 - **Security**: Server-authoritative game logic with comprehensive authentication guards (unauthenticated, spectators, non-players cannot make moves). Production-grade financial safety using `SELECT ... FOR UPDATE` row-level locking within database transactions to ensure atomicity, prevent concurrent move conflicts, and handle race conditions. Includes client-side turn tracking for UX optimization, but server remains the ultimate authority.
 
 ### Implemented Games
-- **Chess**: Full implementation with legal move validation, check/checkmate detection, stalemate, draw offers, resignation, and pawn promotion. Uses chess.js engine with WebSocket multiplayer.
+- **Chess**: Full implementation with legal move validation, check/checkmate detection, stalemate, draw offers, resignation, and pawn promotion. Uses chess.js engine with WebSocket multiplayer. Route: `/game/chess/:sessionId`
 - **Backgammon**: Complete game engine with all standard rules (dice rolling, checker movement, hitting/blots, bar re-entry, bearing off, gammon/backgammon scoring). Interactive board with drag-and-drop, valid move highlighting, and RTL support for Arabic. Route: `/game/backgammon/:sessionId`
+- **Domino**: 2-4 player game with tile matching, boneyard drawing, pass mechanics, and blocked game detection. Supports multiple scoring modes. Route: `/game/domino/:sessionId`
+- **Tarneeb**: 4-player trick-taking card game with bidding phase, trump suit selection, team scoring (team0/team1 mapped to team1/team2 in UI), and target score victory conditions. Route: `/game/tarneeb/:sessionId`
+- **Baloot**: 4-player Saudi Arabian card game with Sun/Hokm game types, project declarations (Sra, 50, 100, 400, Baloot), team-based scoring, and round point accumulation. Route: `/game/baloot/:sessionId`
 
 ### Game Engine Pattern
 Games implement the `GameEngine` interface in `server/game-engines/`:

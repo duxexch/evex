@@ -1,11 +1,17 @@
 import type { GameEngine } from './types';
 import { chessEngine } from './chess';
 import { backgammonEngine } from './backgammon';
+import { dominoEngine } from './domino';
+import { tarneebEngine } from './tarneeb';
+import { balootEngine } from './baloot';
 
 const engines: Map<string, GameEngine> = new Map();
 
 engines.set('chess', chessEngine);
 engines.set('backgammon', backgammonEngine);
+engines.set('domino', dominoEngine);
+engines.set('tarneeb', tarneebEngine);
+engines.set('baloot', balootEngine);
 
 export function getGameEngine(gameType: string): GameEngine | undefined {
   return engines.get(gameType);
@@ -22,3 +28,6 @@ export function registerGameEngine(engine: GameEngine): void {
 export * from './types';
 export { chessEngine } from './chess';
 export { backgammonEngine } from './backgammon';
+export { dominoEngine } from './domino';
+export { tarneebEngine } from './tarneeb';
+export { balootEngine } from './baloot';
