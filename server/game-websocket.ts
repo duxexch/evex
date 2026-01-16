@@ -482,26 +482,29 @@ async function handleGameOver(room: GameRoom, status: any) {
     const winnerId = status.winner;
     const loserId = session.player1Id === winnerId ? session.player2Id : session.player1Id;
 
-    // Check if this is a paid game via challenge
-    if (session.challengeId && winnerId && loserId) {
-      // Get challenge to get stake amount
+    const gameType = session.gameType || 'chess';
+    const isDraw = status.status === 'draw' || (status.winner === null && !status.winningTeam);
+    let statsUpdatedInPayout = false;
+
+    // Check if this is a paid game via challenge (stats included in payout)
+    if (session.challengeId && winnerId && loserId && !isDraw) {
       const [challenge] = await db.select().from(challenges).where(eq(challenges.id, session.challengeId));
       
       if (challenge && parseFloat(challenge.betAmount) > 0) {
-        // Settle payout with transactional integrity
         const payoutResult = await storage.settleGamePayout(
           room.sessionId,
           winnerId,
           loserId,
           challenge.betAmount,
-          0 // Platform fee percent - can be configured
+          0,
+          gameType
         );
 
         if (!payoutResult.success) {
           console.error('[WS] Payout failed:', payoutResult.error);
-          // Still update session status but log the error
         } else {
-          console.log(`[WS] Game payout settled: winner=${winnerId}, stake=${challenge.betAmount}`);
+          statsUpdatedInPayout = true;
+          console.log(`[WS] Game payout and stats settled: winner=${winnerId}, stake=${challenge.betAmount}`);
         }
       }
     }
@@ -513,6 +516,27 @@ async function handleGameOver(room: GameRoom, status: any) {
       winningTeam: status.winningTeam,
       endedAt: new Date()
     });
+
+    // Update stats for non-paid games or draws only (skip if paid game payout was attempted)
+    const isPaidGame = session.challengeId && !isDraw;
+    if (!statsUpdatedInPayout && !isPaidGame) {
+      try {
+        await storage.updateGameStats(
+          room.sessionId,
+          gameType,
+          status.winner,
+          session.player1Id,
+          session.player2Id,
+          isDraw,
+          '0'
+        );
+        console.log(`[WS] Game stats updated for session ${room.sessionId}`);
+      } catch (statsError) {
+        console.error('[WS] Error updating game stats:', statsError);
+      }
+    } else if (isPaidGame && !statsUpdatedInPayout) {
+      console.error(`[WS] Stats not updated for paid game ${room.sessionId} due to payout failure`);
+    }
 
     broadcastToRoom(room, {
       type: 'game_over',

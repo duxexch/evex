@@ -43,7 +43,8 @@ export interface IStorage {
   updateUserBalance(id: string, amount: string, operation: 'add' | 'subtract'): Promise<User | undefined>;
   updateUserBalanceWithCheck(id: string, amount: string, operation: 'add' | 'subtract'): Promise<{ success: boolean; user?: User; error?: string }>;
   transferBalance(fromUserId: string, toUserId: string, amount: string, options?: { createTransactionRecords?: boolean; transactionType?: 'game_payout' | 'gift' | 'p2p_transfer'; description?: string; sessionId?: string }): Promise<{ success: boolean; fromUser?: User; toUser?: User; error?: string }>;
-  settleGamePayout(sessionId: string, winnerId: string, loserId: string, stakeAmount: string, platformFeePercent?: number): Promise<{ success: boolean; error?: string }>;
+  settleGamePayout(sessionId: string, winnerId: string, loserId: string, stakeAmount: string, platformFeePercent?: number, gameType?: string): Promise<{ success: boolean; error?: string }>;
+  updateGameStats(sessionId: string, gameType: string, winnerId: string | null, player1Id: string, player2Id: string | null, isDraw?: boolean, winAmount?: string): Promise<{ success: boolean; error?: string }>;
 
   // Agents
   getAgent(id: string): Promise<Agent | undefined>;
@@ -350,13 +351,14 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  // Settle game payout with full transactional integrity
+  // Settle game payout with full transactional integrity (includes stats update)
   async settleGamePayout(
     sessionId: string,
     winnerId: string,
     loserId: string,
     stakeAmount: string,
-    platformFeePercent: number = 0
+    platformFeePercent: number = 0,
+    gameType: string = 'chess'
   ): Promise<{ success: boolean; error?: string }> {
     const stake = parseFloat(stakeAmount);
     if (isNaN(stake) || stake <= 0) {
@@ -364,10 +366,10 @@ export class DatabaseStorage implements IStorage {
     }
 
     const platformFee = stake * (platformFeePercent / 100);
-    const winnerPayout = stake - platformFee; // Winner gets opponent's stake minus fee
+    const winnerPayout = stake - platformFee;
+    const validGameTypes = ['chess', 'backgammon', 'domino', 'tarneeb', 'baloot'];
 
     return await db.transaction(async (tx) => {
-      // Lock both users in consistent order
       const [id1, id2] = [winnerId, loserId].sort();
       const [user1] = await tx.select().from(users).where(eq(users.id, id1)).for('update');
       const [user2] = await tx.select().from(users).where(eq(users.id, id2)).for('update');
@@ -379,15 +381,42 @@ export class DatabaseStorage implements IStorage {
         return { success: false, error: 'User not found' };
       }
 
-      // Winner gets opponent's stake minus fee (their own stake stays with them)
       const winnerBalance = parseFloat(winner.balance);
       const winnerNewBalance = (winnerBalance + winnerPayout).toFixed(2);
 
-      await tx.update(users)
-        .set({ balance: winnerNewBalance, updatedAt: new Date() })
-        .where(eq(users.id, winnerId));
+      const winnerStatsUpdates: any = {
+        balance: winnerNewBalance,
+        gamesPlayed: winner.gamesPlayed + 1,
+        gamesWon: winner.gamesWon + 1,
+        currentWinStreak: winner.currentWinStreak + 1,
+        longestWinStreak: Math.max(winner.longestWinStreak, winner.currentWinStreak + 1),
+        totalEarnings: (parseFloat(winner.totalEarnings) + winnerPayout).toFixed(2),
+        updatedAt: new Date()
+      };
 
-      // Create transaction records with proper balance tracking
+      if (validGameTypes.includes(gameType)) {
+        const playedField = `${gameType}Played`;
+        const wonField = `${gameType}Won`;
+        winnerStatsUpdates[playedField] = (winner as any)[playedField] + 1;
+        winnerStatsUpdates[wonField] = (winner as any)[wonField] + 1;
+      }
+
+      await tx.update(users).set(winnerStatsUpdates).where(eq(users.id, winnerId));
+
+      const loserStatsUpdates: any = {
+        gamesPlayed: loser.gamesPlayed + 1,
+        gamesLost: loser.gamesLost + 1,
+        currentWinStreak: 0,
+        updatedAt: new Date()
+      };
+
+      if (validGameTypes.includes(gameType)) {
+        const playedField = `${gameType}Played`;
+        loserStatsUpdates[playedField] = (loser as any)[playedField] + 1;
+      }
+
+      await tx.update(users).set(loserStatsUpdates).where(eq(users.id, loserId));
+
       await tx.insert(transactions).values({
         userId: winnerId,
         type: 'win',
@@ -405,7 +434,7 @@ export class DatabaseStorage implements IStorage {
         userId: loserId,
         type: 'stake',
         amount: stakeAmount,
-        balanceBefore: (loserBalance + stake).toFixed(2), // Balance before stake was deducted
+        balanceBefore: (loserBalance + stake).toFixed(2),
         balanceAfter: loserBalance.toFixed(2),
         status: 'completed',
         description: `Game stake loss in session ${sessionId}`,
@@ -413,7 +442,6 @@ export class DatabaseStorage implements IStorage {
         processedAt: new Date()
       });
 
-      // Update game session with settlement info
       await tx.update(liveGameSessions)
         .set({
           status: 'completed',
@@ -421,6 +449,77 @@ export class DatabaseStorage implements IStorage {
           endedAt: new Date()
         })
         .where(eq(liveGameSessions.id, sessionId));
+
+      return { success: true };
+    });
+  }
+
+  async updateGameStats(
+    sessionId: string,
+    gameType: string,
+    winnerId: string | null,
+    player1Id: string,
+    player2Id: string | null,
+    isDraw: boolean = false,
+    winAmount: string = "0"
+  ): Promise<{ success: boolean; error?: string }> {
+    const playerIds = [player1Id, player2Id].filter(Boolean) as string[];
+    if (playerIds.length === 0) {
+      return { success: false, error: 'No players to update' };
+    }
+
+    const validGameTypes = ['chess', 'backgammon', 'domino', 'tarneeb', 'baloot'];
+    const isValidGameType = validGameTypes.includes(gameType);
+
+    return await db.transaction(async (tx) => {
+      const sortedIds = [...playerIds].sort();
+      const lockedUsers: Record<string, any> = {};
+      
+      for (const id of sortedIds) {
+        const [user] = await tx.select().from(users).where(eq(users.id, id)).for('update');
+        if (user) lockedUsers[id] = user;
+      }
+
+      for (const playerId of playerIds) {
+        const user = lockedUsers[playerId];
+        if (!user) continue;
+
+        const isWinner = winnerId === playerId;
+        const isLoser = winnerId && winnerId !== playerId && !isDraw;
+        
+        const updates: any = {
+          gamesPlayed: user.gamesPlayed + 1,
+          updatedAt: new Date()
+        };
+
+        if (isValidGameType) {
+          const playedField = `${gameType}Played`;
+          updates[playedField] = (user as any)[playedField] + 1;
+        }
+
+        if (isWinner) {
+          updates.gamesWon = user.gamesWon + 1;
+          updates.currentWinStreak = user.currentWinStreak + 1;
+          updates.longestWinStreak = Math.max(user.longestWinStreak, user.currentWinStreak + 1);
+          
+          if (isValidGameType) {
+            const wonField = `${gameType}Won`;
+            updates[wonField] = (user as any)[wonField] + 1;
+          }
+          
+          if (winAmount && parseFloat(winAmount) > 0) {
+            updates.totalEarnings = (parseFloat(user.totalEarnings) + parseFloat(winAmount)).toFixed(2);
+          }
+        } else if (isLoser) {
+          updates.gamesLost = user.gamesLost + 1;
+          updates.currentWinStreak = 0;
+        } else if (isDraw) {
+          updates.gamesDraw = user.gamesDraw + 1;
+          updates.currentWinStreak = 0;
+        }
+
+        await tx.update(users).set(updates).where(eq(users.id, playerId));
+      }
 
       return { success: true };
     });

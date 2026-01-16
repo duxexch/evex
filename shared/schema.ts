@@ -86,6 +86,14 @@ export const users = pgTable("users", {
   index("idx_users_role").on(table.role),
   index("idx_users_status").on(table.status),
   index("idx_users_referred_by").on(table.referredBy),
+  index("idx_users_games_won").on(table.gamesWon),
+  index("idx_users_total_earnings").on(table.totalEarnings),
+  index("idx_users_longest_win_streak").on(table.longestWinStreak),
+  index("idx_users_chess_won").on(table.chessWon),
+  index("idx_users_backgammon_won").on(table.backgammonWon),
+  index("idx_users_domino_won").on(table.dominoWon),
+  index("idx_users_tarneeb_won").on(table.tarneebWon),
+  index("idx_users_baloot_won").on(table.balootWon),
 ]);
 
 export const usersRelations = relations(users, ({ one, many }) => ({
