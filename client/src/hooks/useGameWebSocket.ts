@@ -79,6 +79,8 @@ export function useGameWebSocket(sessionId: string | null) {
   const [drawOfferReceived, setDrawOfferReceived] = useState(false);
   const [gameResult, setGameResult] = useState<{ winner: string | null; reason: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [turnNumber, setTurnNumber] = useState<number>(0);
+  const [isMovePending, setIsMovePending] = useState(false);
 
   const reconnectAttemptsRef = useRef(0);
   const sessionIdRef = useRef(sessionId);
@@ -110,7 +112,12 @@ export function useGameWebSocket(sessionId: string | null) {
         if (message.payload.playerColor) setPlayerColor(message.payload.playerColor);
         if (message.payload.opponent) setOpponent(message.payload.opponent);
         if (message.payload.view) setGameState(message.payload.view);
+        if (message.payload.turnNumber !== undefined) {
+          console.log('[WS] Turn number from join:', message.payload.turnNumber);
+          setTurnNumber(message.payload.turnNumber);
+        }
         setError(null);
+        setIsMovePending(false);
         
         if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
           console.log('[WS] Requesting state sync after join');
@@ -122,7 +129,7 @@ export function useGameWebSocket(sessionId: string | null) {
         break;
 
       case 'state_sync':
-        console.log('[WS] State synced from server');
+        console.log('[WS] State synced from server, turn:', message.payload.turnNumber);
         setConnectionStatus('connected');
         if (message.payload.gameType) {
           setGameType(message.payload.gameType);
@@ -139,6 +146,10 @@ export function useGameWebSocket(sessionId: string | null) {
         if (message.payload.chatMessages) {
           setChatMessages(message.payload.chatMessages);
         }
+        if (message.payload.turnNumber !== undefined) {
+          setTurnNumber(message.payload.turnNumber);
+        }
+        setIsMovePending(false);
         break;
 
       case 'game_state':
@@ -161,6 +172,19 @@ export function useGameWebSocket(sessionId: string | null) {
         }
         if (message.payload.view) {
           setGameState(message.payload.view);
+        }
+        if (message.payload.turnNumber !== undefined) {
+          console.log('[WS] Turn number updated:', message.payload.turnNumber);
+          setTurnNumber(message.payload.turnNumber);
+        }
+        setIsMovePending(false);
+        break;
+
+      case 'move_rejected':
+        console.warn('[WS] Move rejected:', message.payload.error);
+        setIsMovePending(false);
+        if (message.payload.requiresSync) {
+          console.log('[WS] Server requested sync after move rejection');
         }
         break;
 
@@ -376,19 +400,33 @@ export function useGameWebSocket(sessionId: string | null) {
     };
   }, [connect, requestStateSync]);
 
+  const turnNumberRef = useRef(turnNumber);
+  turnNumberRef.current = turnNumber;
+
   const makeMove = useCallback((from: string, to: string, promotion?: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       console.warn('[WS] Cannot make move: not connected');
       return false;
     }
     
-    console.log('[WS] Making move:', from, '->', to);
+    if (isMovePending) {
+      console.warn('[WS] Cannot make move: previous move pending');
+      return false;
+    }
+    
+    console.log('[WS] Making move:', from, '->', to, 'expectedTurn:', turnNumberRef.current);
+    setIsMovePending(true);
+    
     wsRef.current.send(JSON.stringify({
       type: 'make_move',
-      payload: { sessionId: sessionIdRef.current, move: { from, to, promotion } }
+      payload: { 
+        sessionId: sessionIdRef.current, 
+        move: { from, to, promotion },
+        expectedTurn: turnNumberRef.current
+      }
     }));
     return true;
-  }, []);
+  }, [isMovePending]);
 
   const sendChat = useCallback((content: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return false;
@@ -461,6 +499,8 @@ export function useGameWebSocket(sessionId: string | null) {
     drawOfferReceived,
     gameResult,
     error,
+    turnNumber,
+    isMovePending,
     makeMove,
     sendChat,
     resign,

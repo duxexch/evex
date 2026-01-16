@@ -131,6 +131,41 @@ The schema (in `shared/schema.ts`) includes:
 - **Error Logging**: All move errors logged with session/user context
 - **Graceful Degradation**: Connection errors don't corrupt state
 
+### Client-Side Turn Tracking (January 2026)
+**Purpose**: UX optimization layer only - server remains fully authoritative
+
+**Validation Flow**:
+1. **Client-side (optimization)**:
+   - Tracks `turnNumber` locally from server messages
+   - Prevents duplicate move submissions via `isMovePending` flag
+   - Sends `expectedTurn` with each move for early mismatch detection
+   - Blocks UI during pending moves to prevent double-clicks
+2. **Server-side (authoritative)**:
+   - SELECT FOR UPDATE locks session row
+   - Validates against DB state, not client-provided data
+   - If expectedTurn provided and mismatches DB, rejects with TURN_MISMATCH
+   - If expectedTurn not provided, move still processed (backwards compatible)
+   - All validation happens inside transaction before commit
+
+**Failure & Recovery Scenarios**:
+| Scenario | Detection | Recovery |
+|----------|-----------|----------|
+| Network lag | Server rejects stale turn | state_sync sent, client resets turnNumber |
+| Tab refresh | turnNumber resets to 0 | Server syncs on game_joined, turnNumber updated |
+| Reconnect | Client may have stale state | requestStateSync on reconnect, turnNumber updated |
+| Concurrent moves | Only one succeeds (row lock) | Loser gets TURN_MISMATCH + state_sync |
+| Malicious client | Sends wrong expectedTurn | Server validates against DB, ignores client value |
+
+**Assumptions**:
+- Server is the single source of truth; client turn tracking is advisory only
+- Browser may lose state (refresh, crash); always resync from server
+- Network may be unreliable; handle all edge cases gracefully
+- Client could be malicious; never trust client-provided state for security
+
+**Files**:
+- Server: `server/game-websocket.ts` (handleMakeMove with transaction + FOR UPDATE)
+- Client: `client/src/hooks/useGameWebSocket.ts` (turnNumber state + isMovePending)
+
 ### Build and Development
 - **Development**: `npm run dev` - runs tsx with hot reload
 - **Production Build**: Custom build script using esbuild for server and Vite for client
