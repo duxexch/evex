@@ -259,11 +259,11 @@ fi
 # ===========================================
 print_header "6. Network & Ports / الشبكة والمنافذ"
 
-# Check port 5000
-if netstat -tlnp 2>/dev/null | grep -q ":5000" || ss -tlnp 2>/dev/null | grep -q ":5000"; then
-    check_pass "Port 5000 is listening (Node.js)"
+# Check port 5050
+if netstat -tlnp 2>/dev/null | grep -q ":5050" || ss -tlnp 2>/dev/null | grep -q ":5050"; then
+    check_pass "Port 5050 is listening (Node.js)"
 else
-    check_fail "Port 5000 is not listening" "Application might not be running"
+    check_fail "Port 5050 is not listening" "Application might not be running"
 fi
 
 # Check port 80

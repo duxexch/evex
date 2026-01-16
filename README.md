@@ -353,7 +353,7 @@ npx tsx scripts/seed-data.ts
 npm run dev
 ```
 
-The application will be available at `http://localhost:5000`
+The application will be available at `http://localhost:5050`
 
 ---
 
@@ -485,7 +485,7 @@ npm run dev
 
 - Frontend: Hot reload enabled via Vite
 - Backend: Auto-restart via tsx
-- URL: http://localhost:5000
+- URL: http://localhost:5050
 
 ### Production Mode
 
@@ -515,7 +515,7 @@ docker build -t vex:latest .
 
 # Run with environment variables
 docker run -d \
-  -p 5000:5000 \
+  -p 5050:5050 \
   -e DATABASE_URL=postgresql://user:pass@host:5432/db \
   -e SESSION_SECRET=your-secret \
   --name vex-app \
@@ -697,7 +697,7 @@ psql $DATABASE_URL -c "SELECT 1"
 **Port 5000 already in use**
 ```bash
 # Find and kill process
-lsof -i :5000
+lsof -i :5050
 kill -9 <PID>
 ```
 
@@ -937,10 +937,10 @@ docker compose --profile with-nginx up -d
 docker compose ps
 
 # Test health endpoint
-curl http://localhost:5000/api/health
+curl http://localhost:5050/api/health
 
 # Access the application
-# http://your-vps-ip:5000
+# http://your-vps-ip:5050
 # or https://your-domain.com (if SSL configured)
 ```
 

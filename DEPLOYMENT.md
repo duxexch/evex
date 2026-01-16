@@ -317,7 +317,7 @@ server {
     client_max_body_size 50M;
 
     location / {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://localhost:5050;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -331,7 +331,7 @@ server {
 
     # WebSocket support
     location /ws {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://localhost:5050;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -457,7 +457,7 @@ sudo systemctl status nginx
 sudo ufw status
 
 # تحقق من التطبيق
-curl http://localhost:5000
+curl http://localhost:5050
 ```
 
 ### 4. خطأ 502 Bad Gateway
@@ -529,7 +529,7 @@ sudo certbot renew
 
 ```nginx
 location /ws {
-    proxy_pass http://localhost:5000;
+    proxy_pass http://localhost:5050;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";

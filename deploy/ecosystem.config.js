@@ -12,7 +12,7 @@ module.exports = {
       // Environment
       env: {
         NODE_ENV: "production",
-        PORT: 5000,
+        PORT: 5050,
       },
       
       // Clustering - set to CPU count to avoid memory exhaustion

@@ -516,7 +516,7 @@ start_new_version() {
         
         # Health check
         print_step "Performing health check..."
-        HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health 2>/dev/null || echo "000")
+        HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5050/api/health 2>/dev/null || echo "000")
         if [ "$HEALTH_STATUS" = "200" ]; then
             print_success "Health check passed! (HTTP 200)"
         elif [ "$HEALTH_STATUS" = "000" ]; then

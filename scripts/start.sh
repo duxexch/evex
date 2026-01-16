@@ -123,7 +123,7 @@ export NODE_ENV=production
 print_header "Starting Server / تشغيل الخادم"
 
 echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  VEX is starting on port ${PORT:-5000}           ║${NC}"
+echo -e "${GREEN}║  VEX is starting on port ${PORT:-5050}           ║${NC}"
 echo -e "${GREEN}║  Press Ctrl+C to stop                  ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
 echo

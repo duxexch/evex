@@ -261,7 +261,7 @@ pm2 logs vex
 
 ```bash
 # اختبار الاتصال المحلي
-curl http://localhost:5000/api/health
+curl http://localhost:5050/api/health
 
 # يجب أن يظهر رد إيجابي
 ```
@@ -285,7 +285,7 @@ server {
     server_name yourdomain.com www.yourdomain.com;
 
     location / {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://localhost:5050;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -298,7 +298,7 @@ server {
 
     # WebSocket support
     location /ws {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://localhost:5050;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -542,7 +542,7 @@ systemctl restart postgresql
 **الحل:**
 ```bash
 # معرفة العملية التي تستخدم المنفذ
-lsof -i :5000
+lsof -i :5050
 
 # إيقاف العملية
 kill -9 PID

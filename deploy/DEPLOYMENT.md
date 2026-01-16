@@ -149,7 +149,7 @@ unset ADMIN_BOOTSTRAP_PASSWORD
 unset ADMIN_BOOTSTRAP_EMAIL
 
 # Verify admin was created
-curl http://localhost:5000/api/health
+curl http://localhost:5050/api/health
 
 # SECURITY: Never store these in .env file
 ```
@@ -288,8 +288,8 @@ pm2 reload vex-platform
 pg_dump $DATABASE_URL > backup-$(date +%Y%m%d).sql
 
 # Check health
-curl http://localhost:5000/api/health
-curl http://localhost:5000/api/health/detailed
+curl http://localhost:5050/api/health
+curl http://localhost:5050/api/health/detailed
 
 # Check nginx status
 sudo nginx -t
@@ -325,7 +325,7 @@ pm2 set pm2-logrotate:retain 7
 # Healthcheck script (add to cron)
 cat > /var/www/vex/healthcheck.sh << 'EOF'
 #!/bin/bash
-if ! curl -sf http://localhost:5000/api/health > /dev/null; then
+if ! curl -sf http://localhost:5050/api/health > /dev/null; then
     pm2 restart vex-platform
     echo "$(date): VEX platform restarted due to health check failure" >> /var/log/vex/healthcheck.log
 fi
@@ -437,7 +437,7 @@ npm prune --production
 pm2 reload vex-platform
 
 # Verify health
-curl http://localhost:5000/api/health
+curl http://localhost:5050/api/health
 ```
 
 ### Full Rollback (Code + Database)
@@ -461,7 +461,7 @@ npm prune --production
 pm2 start vex-platform
 
 # Verify health
-curl http://localhost:5000/api/health
+curl http://localhost:5050/api/health
 ```
 
 ### Automated Rollback Script
@@ -543,5 +543,5 @@ pm2 save
 For issues specific to the VEX platform:
 - Application logs: `pm2 logs vex-platform`
 - Database connectivity: `psql $DATABASE_URL -c "SELECT 1"`
-- Health endpoint: `curl localhost:5000/api/health`
-- Detailed health: `curl localhost:5000/api/health/detailed`
+- Health endpoint: `curl localhost:5050/api/health`
+- Detailed health: `curl localhost:5050/api/health/detailed`

@@ -63,7 +63,7 @@ sleep 5
 
 echo ""
 echo "🏥 Checking health..."
-HEALTH=$(curl -sf http://localhost:5000/api/health 2>/dev/null || echo "FAILED")
+HEALTH=$(curl -sf http://localhost:5050/api/health 2>/dev/null || echo "FAILED")
 
 if echo "$HEALTH" | grep -q "healthy"; then
     echo "✅ Application is healthy!"

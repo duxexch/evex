@@ -410,7 +410,7 @@ configure_nginx() {
 limit_req_zone \$binary_remote_addr zone=vex_limit:10m rate=10r/s;
 
 upstream vex_backend {
-    server 127.0.0.1:5000;
+    server 127.0.0.1:5050;
     keepalive 64;
 }
 
