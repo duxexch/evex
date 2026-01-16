@@ -12,7 +12,8 @@ import {
   chatMessages, chatSettings, users, matchmakingQueue, gameMatches, games, gameplaySettings,
   gameplayEmojis, gameplayMessages, gameSections, advertisements,
   insertGameSectionSchema, insertAdvertisementSchema,
-  insertCountryPaymentMethodSchema, insertSocialPlatformSchema
+  insertCountryPaymentMethodSchema, insertSocialPlatformSchema,
+  liveGameSessions
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -1536,6 +1537,303 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const user = await storage.updateUser(req.user!.id, { nickname });
       const { password, ...safeUser } = user!;
       res.json(safeUser);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== PLAYER STATS & LEADERBOARDS ====================
+
+  // Get player statistics
+  app.get("/api/player/:userId/stats", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { userId } = req.params;
+      
+      const [user] = await db.select({
+        id: users.id,
+        username: users.username,
+        nickname: users.nickname,
+        profilePicture: users.profilePicture,
+        vipLevel: users.vipLevel,
+        gamesPlayed: users.gamesPlayed,
+        gamesWon: users.gamesWon,
+        gamesLost: users.gamesLost,
+        gamesDraw: users.gamesDraw,
+        totalEarnings: users.totalEarnings,
+        totalWagered: users.totalWagered,
+        totalWon: users.totalWon,
+        chessPlayed: users.chessPlayed,
+        chessWon: users.chessWon,
+        backgammonPlayed: users.backgammonPlayed,
+        backgammonWon: users.backgammonWon,
+        dominoPlayed: users.dominoPlayed,
+        dominoWon: users.dominoWon,
+        tarneebPlayed: users.tarneebPlayed,
+        tarneebWon: users.tarneebWon,
+        balootPlayed: users.balootPlayed,
+        balootWon: users.balootWon,
+        currentWinStreak: users.currentWinStreak,
+        longestWinStreak: users.longestWinStreak,
+        createdAt: users.createdAt,
+      }).from(users).where(eq(users.id, userId));
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const gamesPlayed = user.gamesPlayed || 0;
+      const gamesWon = user.gamesWon || 0;
+      const winRate = gamesPlayed > 0 ? Math.round((gamesWon / gamesPlayed) * 100) : 0;
+      
+      const gameStats = [
+        { game: 'chess', played: user.chessPlayed || 0, won: user.chessWon || 0 },
+        { game: 'backgammon', played: user.backgammonPlayed || 0, won: user.backgammonWon || 0 },
+        { game: 'domino', played: user.dominoPlayed || 0, won: user.dominoWon || 0 },
+        { game: 'tarneeb', played: user.tarneebPlayed || 0, won: user.tarneebWon || 0 },
+        { game: 'baloot', played: user.balootPlayed || 0, won: user.balootWon || 0 },
+      ].map(g => ({
+        ...g,
+        winRate: g.played > 0 ? Math.round((g.won / g.played) * 100) : 0
+      }));
+      
+      res.json({
+        ...user,
+        winRate,
+        gameStats,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get current user's own stats (shortcut)
+  app.get("/api/me/stats", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      
+      const [user] = await db.select({
+        id: users.id,
+        username: users.username,
+        nickname: users.nickname,
+        profilePicture: users.profilePicture,
+        vipLevel: users.vipLevel,
+        gamesPlayed: users.gamesPlayed,
+        gamesWon: users.gamesWon,
+        gamesLost: users.gamesLost,
+        gamesDraw: users.gamesDraw,
+        totalEarnings: users.totalEarnings,
+        totalWagered: users.totalWagered,
+        totalWon: users.totalWon,
+        chessPlayed: users.chessPlayed,
+        chessWon: users.chessWon,
+        backgammonPlayed: users.backgammonPlayed,
+        backgammonWon: users.backgammonWon,
+        dominoPlayed: users.dominoPlayed,
+        dominoWon: users.dominoWon,
+        tarneebPlayed: users.tarneebPlayed,
+        tarneebWon: users.tarneebWon,
+        balootPlayed: users.balootPlayed,
+        balootWon: users.balootWon,
+        currentWinStreak: users.currentWinStreak,
+        longestWinStreak: users.longestWinStreak,
+        createdAt: users.createdAt,
+      }).from(users).where(eq(users.id, userId));
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const gamesPlayed = user.gamesPlayed || 0;
+      const gamesWon = user.gamesWon || 0;
+      const winRate = gamesPlayed > 0 ? Math.round((gamesWon / gamesPlayed) * 100) : 0;
+      
+      const gameStats = [
+        { game: 'chess', played: user.chessPlayed || 0, won: user.chessWon || 0 },
+        { game: 'backgammon', played: user.backgammonPlayed || 0, won: user.backgammonWon || 0 },
+        { game: 'domino', played: user.dominoPlayed || 0, won: user.dominoWon || 0 },
+        { game: 'tarneeb', played: user.tarneebPlayed || 0, won: user.tarneebWon || 0 },
+        { game: 'baloot', played: user.balootPlayed || 0, won: user.balootWon || 0 },
+      ].map(g => ({
+        ...g,
+        winRate: g.played > 0 ? Math.round((g.won / g.played) * 100) : 0
+      }));
+      
+      res.json({
+        ...user,
+        winRate,
+        gameStats,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get match history for a player
+  app.get("/api/player/:userId/matches", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const gameType = req.query.gameType as string;
+      
+      let query = db.select({
+        id: liveGameSessions.id,
+        gameType: liveGameSessions.gameType,
+        status: liveGameSessions.status,
+        player1Id: liveGameSessions.player1Id,
+        player2Id: liveGameSessions.player2Id,
+        player1Score: liveGameSessions.player1Score,
+        player2Score: liveGameSessions.player2Score,
+        winnerId: liveGameSessions.winnerId,
+        startedAt: liveGameSessions.startedAt,
+        endedAt: liveGameSessions.endedAt,
+      }).from(liveGameSessions)
+        .where(
+          and(
+            or(
+              eq(liveGameSessions.player1Id, userId),
+              eq(liveGameSessions.player2Id, userId)
+            ),
+            eq(liveGameSessions.status, 'completed')
+          )
+        )
+        .orderBy(desc(liveGameSessions.endedAt))
+        .limit(limit)
+        .offset(offset);
+      
+      const matches = await query;
+      
+      const matchesWithDetails = matches.map(match => ({
+        ...match,
+        isWinner: match.winnerId === userId,
+        result: match.winnerId === userId ? 'win' : match.winnerId ? 'loss' : 'draw',
+      }));
+      
+      res.json(matchesWithDetails);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Leaderboard endpoints
+  app.get("/api/leaderboard", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const sortBy = (req.query.sortBy as string) || 'wins';
+      const gameType = req.query.gameType as string;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      
+      let orderByColumn;
+      let selectFields: any = {
+        id: users.id,
+        username: users.username,
+        nickname: users.nickname,
+        profilePicture: users.profilePicture,
+        vipLevel: users.vipLevel,
+        gamesPlayed: users.gamesPlayed,
+        gamesWon: users.gamesWon,
+        gamesLost: users.gamesLost,
+        totalEarnings: users.totalEarnings,
+        currentWinStreak: users.currentWinStreak,
+        longestWinStreak: users.longestWinStreak,
+      };
+      
+      if (gameType) {
+        switch (gameType) {
+          case 'chess':
+            selectFields.gamePlayed = users.chessPlayed;
+            selectFields.gameWon = users.chessWon;
+            orderByColumn = sortBy === 'earnings' ? users.totalEarnings : users.chessWon;
+            break;
+          case 'backgammon':
+            selectFields.gamePlayed = users.backgammonPlayed;
+            selectFields.gameWon = users.backgammonWon;
+            orderByColumn = sortBy === 'earnings' ? users.totalEarnings : users.backgammonWon;
+            break;
+          case 'domino':
+            selectFields.gamePlayed = users.dominoPlayed;
+            selectFields.gameWon = users.dominoWon;
+            orderByColumn = sortBy === 'earnings' ? users.totalEarnings : users.dominoWon;
+            break;
+          case 'tarneeb':
+            selectFields.gamePlayed = users.tarneebPlayed;
+            selectFields.gameWon = users.tarneebWon;
+            orderByColumn = sortBy === 'earnings' ? users.totalEarnings : users.tarneebWon;
+            break;
+          case 'baloot':
+            selectFields.gamePlayed = users.balootPlayed;
+            selectFields.gameWon = users.balootWon;
+            orderByColumn = sortBy === 'earnings' ? users.totalEarnings : users.balootWon;
+            break;
+          default:
+            orderByColumn = sortBy === 'earnings' ? users.totalEarnings : users.gamesWon;
+        }
+      } else {
+        switch (sortBy) {
+          case 'earnings':
+            orderByColumn = users.totalEarnings;
+            break;
+          case 'streak':
+            orderByColumn = users.longestWinStreak;
+            break;
+          case 'wins':
+          default:
+            orderByColumn = users.gamesWon;
+        }
+      }
+      
+      const leaderboard = await db.select(selectFields)
+        .from(users)
+        .where(sql`${users.gamesPlayed} > 0`)
+        .orderBy(desc(orderByColumn))
+        .limit(limit);
+      
+      const rankedLeaderboard = leaderboard.map((player, index) => ({
+        rank: index + 1,
+        ...player,
+        winRate: player.gamesPlayed > 0 ? Math.round((player.gamesWon / player.gamesPlayed) * 100) : 0,
+      }));
+      
+      res.json(rankedLeaderboard);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get user's rank position
+  app.get("/api/me/rank", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const sortBy = (req.query.sortBy as string) || 'wins';
+      
+      const [user] = await db.select({
+        gamesWon: users.gamesWon,
+        totalEarnings: users.totalEarnings,
+        longestWinStreak: users.longestWinStreak,
+      }).from(users).where(eq(users.id, userId));
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      let rankQuery;
+      switch (sortBy) {
+        case 'earnings':
+          rankQuery = sql`SELECT COUNT(*) + 1 as rank FROM users WHERE total_earnings > ${user.totalEarnings} AND games_played > 0`;
+          break;
+        case 'streak':
+          rankQuery = sql`SELECT COUNT(*) + 1 as rank FROM users WHERE longest_win_streak > ${user.longestWinStreak} AND games_played > 0`;
+          break;
+        case 'wins':
+        default:
+          rankQuery = sql`SELECT COUNT(*) + 1 as rank FROM users WHERE games_won > ${user.gamesWon} AND games_played > 0`;
+      }
+      
+      const [rankResult] = await db.execute(rankQuery);
+      
+      res.json({
+        rank: Number((rankResult as any).rank) || 1,
+        sortBy,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
