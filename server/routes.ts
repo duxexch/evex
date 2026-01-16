@@ -2614,25 +2614,75 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // In-memory lock for challenge joins to prevent race conditions
+  const challengeJoinLocks = new Set<string>();
+  
   app.post("/api/challenges/:id/join", authMiddleware, async (req: AuthRequest, res: Response) => {
+    const challengeId = req.params.id;
+    
+    // Acquire lock for this challenge
+    if (challengeJoinLocks.has(challengeId)) {
+      return res.status(400).json({ error: "Challenge is no longer available" });
+    }
+    challengeJoinLocks.add(challengeId);
+    
     try {
-      const challenge = challenges.find(c => c.id === req.params.id);
+      const challenge = challenges.find(c => c.id === challengeId);
       if (!challenge) {
+        challengeJoinLocks.delete(challengeId);
         return res.status(404).json({ error: "Challenge not found" });
       }
       if (challenge.player1Id === req.user!.id) {
+        challengeJoinLocks.delete(challengeId);
         return res.status(400).json({ error: "Cannot join your own challenge" });
       }
       if (challenge.status !== 'waiting') {
+        challengeJoinLocks.delete(challengeId);
         return res.status(400).json({ error: "Challenge is no longer available" });
       }
-      challenge.player2Id = req.user!.id;
-      challenge.player2Name = req.user!.username;
-      challenge.player2Rating = { wins: 0, losses: 0, winRate: 0, rank: "bronze" };
-      challenge.status = 'active';
-      challenge.startedAt = new Date().toISOString();
+      
+      // Financial safety: Check and deduct balance using transaction with row-level locking
+      const betAmount = parseFloat(String(challenge.betAmount));
+      const userId = req.user!.id;
+      
+      await db.transaction(async (tx) => {
+        // Lock user row and check balance
+        const [userRecord] = await tx.select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        
+        if (!userRecord) {
+          throw new Error('User not found');
+        }
+        
+        const currentBalance = parseFloat(userRecord.balance);
+        if (currentBalance < betAmount) {
+          throw new Error('Insufficient balance to join this challenge');
+        }
+        
+        // Deduct balance
+        await tx.update(users)
+          .set({ balance: (currentBalance - betAmount).toString() })
+          .where(eq(users.id, userId));
+        
+        // Update challenge atomically within the lock
+        challenge.player2Id = userId;
+        challenge.player2Name = req.user!.username;
+        challenge.player2Rating = { wins: 0, losses: 0, winRate: 0, rank: "bronze" };
+        challenge.status = 'active';
+        challenge.startedAt = new Date().toISOString();
+      });
+      
+      // Release lock after success (challenge is now 'active', so future joins will fail on status check)
+      challengeJoinLocks.delete(challengeId);
+      
       res.json(challenge);
     } catch (error: any) {
+      challengeJoinLocks.delete(challengeId);
+      if (error.message.includes('Insufficient balance')) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message });
     }
   });
