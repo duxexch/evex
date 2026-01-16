@@ -1,0 +1,306 @@
+. CHAT SYSTEM (Per-Game)
+1.1 Supported Game Types
+
+Chess: Full chat support during matches
+
+Backgammon: Full chat support during matches
+
+Domino: Full chat support for 2-4 players
+
+Tarneeb: Full chat support for 4-player teams
+
+Baloot: Full chat support for 4-player teams
+
+All games share the same unified WebSocket chat infrastructure via /ws/game.
+
+1.2 Message Types
+
+Supported:
+
+Text messages (players & spectators)
+
+Spectator flag (isFromSpectator)
+
+Server-side timestamps
+
+Not currently implemented:
+
+Emoji reactions
+
+Image/media attachments
+
+Voice messages
+
+Quick phrases / stickers
+
+1.3 Real-Time Delivery & WebSocket Reliability
+
+Architecture:
+
+Dedicated WebSocket server /ws/game
+
+Heartbeat ping/pong every 30s
+
+Automatic termination of unresponsive clients
+
+Low-latency message broadcast (deflate disabled)
+
+Delivery Flow:
+
+Client sends { type: 'chat', payload: { message } }
+
+Server validates session membership
+
+Message persisted to game_chat_messages table
+
+Broadcast to all room participants (players + spectators)
+
+Reliability Features:
+
+Database persistence prevents message loss
+
+Room-based broadcasting ensures all connected clients get messages
+
+JWT authentication required
+
+1.4 Spectator Handling
+Feature	Status
+Spectators can see chat	✅
+Spectators can send messages	✅
+Messages tagged as spectator	✅ (isSpectator)
+Anonymous spectators	✅
+Spectator count broadcast	✅
+Join/leave notifications	✅
+
+Code Example:
+
+async function handleChat(ws, payload) {
+  await storage.addGameChatMessage({
+    sessionId: ws.sessionId,
+    userId: ws.userId,
+    message: payload.message,
+    messageType: 'text',
+    isFromSpectator: ws.isSpectator || false
+  });
+  broadcastToRoom(room, { type: 'chat_message', ... });
+}
+
+1.5 Reconnection Logic
+
+On Disconnect:
+
+Remove user from room map
+
+Broadcast player_left / spectator_left
+
+Update and broadcast spectator count
+
+On Reconnect:
+
+JWT re-authentication
+
+Client calls get_state to sync game
+
+Retrieve chat history from DB
+
+Full state restoration including messages sent during disconnection
+
+Known Behavior:
+
+Client-driven reconnection
+
+Database is source of truth → messages never lost
+
+1.6 Message Storage
+
+Table: game_chat_messages
+
+id, session_id, user_id, message, message_type, is_from_spectator, created_at
+
+Characteristics:
+
+Persistent and indexed by session_id
+
+Linked to user profiles for avatars/names
+
+Messages immutable, no expiration/cleanup
+
+1.7 Current Limitations
+
+No rich media (images, emoji, voice)
+
+No editing/deletion of messages
+
+No profanity filter or rate limiting
+
+No mentions (@) or quick phrases
+
+No pagination → all messages loaded at once
+
+1.8 Known Issues & Improvements
+Issue	Severity	Recommendation
+No spam protection	Medium	Add rate limiting (e.g., 5 msg/sec)
+No content moderation	Medium	Word filter or AI moderation
+No typing indicators	Low	Broadcast typing status
+All chat history loaded	Low	Add pagination
+No quick phrases	Low	Add localized preset messages
+2. P2P INTERACTIONS
+2.1 Supported Features
+
+P2P Trading:
+
+Offer creation, discovery, trade execution
+
+Escrow system and multi-stage dispute resolution
+
+Direct Messaging:
+
+1:1 private chat
+
+Optional self-destruct messages
+
+Typing indicators and read receipts
+
+Paginated history
+
+In-Game Gifting:
+
+Player-to-player and spectator-to-player gifts
+
+Real-time balance updates
+
+Gift animation broadcasts
+
+2.2 Real-Time Delivery Reliability
+
+Private Chat (WebSocket /ws):
+
+User-keyed socket map for instant delivery
+
+Offline messages delivered on reconnect
+
+Persisted in chat_messages table
+
+In-Game Gifts (WebSocket /ws/game):
+
+Room-based broadcasting
+
+Gift confirmation to sender
+
+Real-time balance updates
+
+Transaction logging
+
+2.3 Race Condition & Concurrency Handling
+
+Financial Transactions:
+
+const transferResult = await storage.transferBalance(
+  ws.userId,
+  payload.recipientId,
+  amount,
+  { createTransactionRecords: true, transactionType: 'gift' }
+);
+
+
+Row-level locking (SELECT ... FOR UPDATE)
+
+Transaction rollback on failure
+
+Atomic debit + credit
+
+Negative balance prevention
+
+P2P Trading:
+
+Escrow atomic hold
+
+Trade state machine prevents race conditions
+
+Expiration timestamps
+
+Admin lock for disputed trades
+
+2.4 Security & Validation
+
+JWT authentication for all connections
+
+Server-side validation (Zod schemas)
+
+Authorization checks for all operations
+
+Balance checks before debits
+
+Audit logs for financial actions
+
+Escrow & admin intervention for fraud cases
+
+2.5 Current Limitations
+
+Mock P2P data in production
+
+No real payment gateway integration
+
+Limited payment methods
+
+No trust/reputation system
+
+Direct messaging: 1:1 only, no media, unencrypted
+
+Gift catalog hardcoded, no history page
+
+2.6 Known Issues & Potential Improvements
+Issue	Severity	Recommendation
+Mock P2P data in production	High	Full DB integration
+No message encryption	High	Implement E2E encryption
+No user blocking	Medium	Block list + enforcement
+No payment gateway	Medium	Integrate providers
+No reputation/trust	Medium	Calculate from completed trades
+Gift catalog hardcoded	Low	Admin gift management UI
+No group messaging	Low	Add group chat support
+3. SUMMARY & RECOMMENDATIONS
+3.1 Strengths
+
+Chat System:
+
+Unified architecture across games
+
+Persistent storage, spectator integration
+
+Reconnection support, reliable real-time delivery
+
+P2P Interactions:
+
+Atomic financial transactions with rollback
+
+Escrow + dispute workflow
+
+Concurrency-safe, production-grade
+
+3.2 Gaps
+
+Content moderation missing
+
+Rate limiting absent
+
+User blocking/muting not implemented
+
+Message encryption not present
+
+Reputation/trust system missing
+
+Rich media and group chats absent
+
+Payment gateway not integrated
+
+3.3 Suggested Priorities
+Phase	Feature	Effort	Impact
+1	Chat rate limiting	Low	High
+1	Content moderation	Medium	High
+1	User blocking/muting	Medium	High
+2	P2P DB migration	High	Critical
+2	Reputation system	Medium	High
+2	Message encryption	High	High
+3	Rich media support	Medium	Medium
+3	Quick phrases	Low	Medium
+3	Group messaging	High	Low
