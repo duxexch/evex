@@ -1,0 +1,216 @@
+vixo@srv1118737:~/evex$ # 1. حدّث كلمة سر المستخدم
+sudo -u postgres psql -c "ALTER USER vex_user WITH PASSWORD 'M784951m!!!!';"
+
+# 2. أعد بناء التطبيق كاملاً
+npm run build
+
+# 3. شغّل migrations
+npm run db:push
+
+# 4. شغّل PM2
+pm2 start ecosystem.config.cjs
+
+# 5. تحقق
+pm2 status
+curl http://localhost:5050/api/health
+sudo -u postgres psql -c "ALTER USER vex_user WITH PASSWORD 'M784951m# 1. حدّث كلمة سر المستخدم# 1. حدّث كلمة سر المستخدم';"
+ALTER ROLE
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v7.3.0 building client environment for production...
+transforming (5) ../vite/preload-helper.js
+warn - The class `duration-[3000ms]` is ambiguous and matches multiple utilities.
+warn - If this is content and not a class, replace it with `duration-&lsqb;3000ms&rsqb;` to silence this warning.
+✓ 2648 modules transformed.
+../dist/public/index.html                                   2.01 kB │ gzip:   0.77 kB
+../dist/public/assets/index-BFDyJ9A-.css                  116.40 kB │ gzip:  17.97 kB
+../dist/public/assets/chevron-right-BHN3vQsm.js             0.13 kB │ gzip:   0.14 kB
+../dist/public/assets/circle-DtK8j6g_.js                    0.13 kB │ gzip:   0.13 kB
+../dist/public/assets/plus-Cu88dA1O.js                      0.15 kB │ gzip:   0.15 kB
+../dist/public/assets/arrow-left-VnAmpS2R.js                0.16 kB │ gzip:   0.16 kB
+../dist/public/assets/arrow-up-right-tHuqBBs9.js            0.16 kB │ gzip:   0.16 kB
+../dist/public/assets/arrow-down-right-BI1chhvT.js          0.17 kB │ gzip:   0.16 kB
+../dist/public/assets/chevrons-up-down-Ci0ZFilG.js          0.17 kB │ gzip:   0.16 kB
+../dist/public/assets/skeleton-D3VWA6DI.js                  0.17 kB │ gzip:   0.16 kB
+../dist/public/assets/ban-tF3hEzsS.js                       0.17 kB │ gzip:   0.16 kB
+../dist/public/assets/message-square-DI6KwkE1.js            0.18 kB │ gzip:   0.17 kB
+../dist/public/assets/clock-D0t6ZRdT.js                     0.18 kB │ gzip:   0.17 kB
+../dist/public/assets/circle-check-big-Ckt9wF5J.js          0.19 kB │ gzip:   0.18 kB
+../dist/public/assets/user-BaK4GcqB.js                      0.19 kB │ gzip:   0.18 kB
+../dist/public/assets/smartphone-C74brhsm.js                0.20 kB │ gzip:   0.18 kB
+../dist/public/assets/chevron-up-4I8MVHHd.js                0.20 kB │ gzip:   0.17 kB
+../dist/public/assets/trending-up-DqBl_akU.js               0.20 kB │ gzip:   0.18 kB
+../dist/public/assets/circle-x-B_Fe_Y2f.js                  0.20 kB │ gzip:   0.18 kB
+../dist/public/assets/lock-Dh9IJweR.js                      0.20 kB │ gzip:   0.19 kB
+../dist/public/assets/trending-down-D-lFFhNQ.js             0.21 kB │ gzip:   0.18 kB
+../dist/public/assets/star-D_ie-gsA.js                      0.21 kB │ gzip:   0.18 kB
+../dist/public/assets/mail-Rj_w3iFS.js                      0.21 kB │ gzip:   0.20 kB
+../dist/public/assets/flag-WO0SIesr.js                      0.22 kB │ gzip:   0.20 kB
+../dist/public/assets/target-DoO1iErK.js                    0.22 kB │ gzip:   0.16 kB
+../dist/public/assets/activity-CXc8YkOS.js                  0.23 kB │ gzip:   0.20 kB
+../dist/public/assets/index-CkYFhOOj.js                     0.23 kB │ gzip:   0.17 kB
+../dist/public/assets/ellipsis-vertical-BPg-JY14.js         0.23 kB │ gzip:   0.17 kB
+../dist/public/assets/pen-CMokegUE.js                       0.23 kB │ gzip:   0.21 kB
+../dist/public/assets/copy-DFyvQ5Rp.js                      0.23 kB │ gzip:   0.21 kB
+../dist/public/assets/history-BlVrlQAb.js                   0.24 kB │ gzip:   0.19 kB
+../dist/public/assets/timer-CE1YpHut.js                     0.24 kB │ gzip:   0.18 kB
+../dist/public/assets/camera-Dnr3LGP4.js                    0.25 kB │ gzip:   0.21 kB
+../dist/public/assets/video-CTiFLZ_L.js                     0.25 kB │ gzip:   0.22 kB
+../dist/public/assets/external-link-DixKkVB-.js             0.25 kB │ gzip:   0.20 kB
+../dist/public/assets/settings-2-Dhi-gbWy.js                0.25 kB │ gzip:   0.19 kB
+../dist/public/assets/archive-BvR-JPMH.js                   0.25 kB │ gzip:   0.21 kB
+../dist/public/assets/user-check-RgrCvVtv.js                0.25 kB │ gzip:   0.22 kB
+../dist/public/assets/upload-7aokZQJI.js                    0.26 kB │ gzip:   0.22 kB
+../dist/public/assets/calendar-o56kPjBo.js                  0.26 kB │ gzip:   0.20 kB
+../dist/public/assets/monitor-CzPdOBGD.js                   0.26 kB │ gzip:   0.20 kB
+../dist/public/assets/zap-CzNR7u_U.js                       0.26 kB │ gzip:   0.21 kB
+../dist/public/assets/image-D0asfcch.js                     0.27 kB │ gzip:   0.22 kB
+../dist/public/assets/pencil-nuGpC_Mh.js                    0.27 kB │ gzip:   0.22 kB
+../dist/public/assets/coins-BZvA2CSZ.js                     0.28 kB │ gzip:   0.22 kB
+../dist/public/assets/send-sjOXugBx.js                      0.29 kB │ gzip:   0.23 kB
+../dist/public/assets/user-plus-Cb9HBjfz.js                 0.31 kB │ gzip:   0.23 kB
+../dist/public/assets/square-pen-BvpahwhE.js                0.32 kB │ gzip:   0.24 kB
+../dist/public/assets/refresh-cw-d5m2ruyN.js                0.32 kB │ gzip:   0.23 kB
+../dist/public/assets/save-a7OdroRt.js                      0.33 kB │ gzip:   0.23 kB
+../dist/public/assets/file-text-BIdqYhv-.js                 0.33 kB │ gzip:   0.22 kB
+../dist/public/assets/bitcoin-B5oi0vFN.js                   0.34 kB │ gzip:   0.26 kB
+../dist/public/assets/pin-DR7vY_cS.js                       0.34 kB │ gzip:   0.24 kB
+../dist/public/assets/key-round-CoSAIxJy.js                 0.35 kB │ gzip:   0.26 kB
+../dist/public/assets/arrow-up-from-line-BtcXdSlA.js        0.35 kB │ gzip:   0.24 kB
+../dist/public/assets/trash-2-D4zpzgo9.js                   0.36 kB │ gzip:   0.25 kB
+../dist/public/assets/shopping-bag-DFQ43yd7.js              0.36 kB │ gzip:   0.26 kB
+../dist/public/assets/crown-Ujn8q9bf.js                     0.36 kB │ gzip:   0.26 kB
+../dist/public/assets/grip-vertical-CIlb10YM.js             0.37 kB │ gzip:   0.20 kB
+../dist/public/assets/circle-arrow-up-8p15yT5i.js           0.38 kB │ gzip:   0.23 kB
+../dist/public/assets/shuffle-BJUGonpK.js                   0.38 kB │ gzip:   0.26 kB
+../dist/public/assets/link-D3K3vT4z.js                      0.39 kB │ gzip:   0.26 kB
+../dist/public/assets/phone-Bjq0fNZn.js                     0.39 kB │ gzip:   0.26 kB
+../dist/public/assets/film-14G_VrfW.js                      0.41 kB │ gzip:   0.24 kB
+../dist/public/assets/building-2-DkvkP9Gq.js                0.44 kB │ gzip:   0.25 kB
+../dist/public/assets/link-2-Bd3NriGN.js                    0.45 kB │ gzip:   0.30 kB
+../dist/public/assets/trophy-Bnu7zjH1.js                    0.46 kB │ gzip:   0.28 kB
+../dist/public/assets/textarea-BVH-vKg0.js                  0.50 kB │ gzip:   0.32 kB
+../dist/public/assets/user-x-B1Gj1cNu.js                    0.51 kB │ gzip:   0.26 kB
+../dist/public/assets/BackButton-CjzaeGrx.js                0.51 kB │ gzip:   0.38 kB
+../dist/public/assets/power-CD6ZYgLP.js                     0.52 kB │ gzip:   0.31 kB
+../dist/public/assets/label-38HcGTeF.js                     0.53 kB │ gzip:   0.36 kB
+../dist/public/assets/dices-DI0YeoWf.js                     0.53 kB │ gzip:   0.31 kB
+../dist/public/assets/scale-CpaX7pMq.js                     0.58 kB │ gzip:   0.32 kB
+../dist/public/assets/palette-CSKjSaVy.js                   0.61 kB │ gzip:   0.34 kB
+../dist/public/assets/skip-forward-DRxjwyWW.js              0.78 kB │ gzip:   0.39 kB
+../dist/public/assets/index-Bd5TWLlf.js                     0.95 kB │ gzip:   0.56 kB
+../dist/public/assets/rocket-DCQvnbeE.js                    1.04 kB │ gzip:   0.56 kB
+../dist/public/assets/phone-call-CsWyXU7T.js                1.19 kB │ gzip:   0.55 kB
+../dist/public/assets/thumbs-up-D2yiEoAO.js                 1.29 kB │ gzip:   0.61 kB
+../dist/public/assets/table-BVxtBFwq.js                     1.49 kB │ gzip:   0.51 kB
+../dist/public/assets/volume-x-BThLniIH.js                  1.74 kB │ gzip:   0.67 kB
+../dist/public/assets/progress-DZ9--msM.js                  1.90 kB │ gzip:   0.95 kB
+../dist/public/assets/dialog-7cutZhCh.js                    2.14 kB │ gzip:   0.84 kB
+../dist/public/assets/avatar-BUYgisPo.js                    2.34 kB │ gzip:   1.07 kB
+../dist/public/assets/switch-CUMrZZKV.js                    2.37 kB │ gzip:   1.20 kB
+../dist/public/assets/admin-login-BcZaYwKZ.js               2.44 kB │ gzip:   1.07 kB
+../dist/public/assets/admin-sections-Cq6iWL77.js            3.19 kB │ gzip:   1.44 kB
+../dist/public/assets/tabs-DlJgeQDD.js                      3.21 kB │ gzip:   1.35 kB
+../dist/public/assets/index-B1-MofsE.js                     3.34 kB │ gzip:   1.52 kB
+../dist/public/assets/support-Bn1AQip0.js                   4.35 kB │ gzip:   1.56 kB
+../dist/public/assets/alert-dialog-DZIUaZ63.js              4.69 kB │ gzip:   1.71 kB
+../dist/public/assets/admin-dashboard-D07UlErO.js           5.10 kB │ gzip:   1.77 kB
+../dist/public/assets/admin-anti-cheat-DKY4MR_h.js          5.62 kB │ gzip:   1.66 kB
+../dist/public/assets/admin-analytics-BEG5Klxg.js           5.90 kB │ gzip:   1.81 kB
+../dist/public/assets/dashboard-D3meXifm.js                 6.29 kB │ gzip:   1.97 kB
+../dist/public/assets/replays-DQ3mRcEa.js                   6.31 kB │ gzip:   1.97 kB
+../dist/public/assets/admin-disputes-DEb5pD8L.js            7.44 kB │ gzip:   2.24 kB
+../dist/public/assets/challenge-watch-BoThD_Ob.js           7.87 kB │ gzip:   2.79 kB
+../dist/public/assets/admin-support-D3g1VxoU.js             7.87 kB │ gzip:   2.51 kB
+../dist/public/assets/admin-id-verification--NXV2xmz.js     8.08 kB │ gzip:   2.46 kB
+../dist/public/assets/admin-advertisements-BJFWTrjf.js      8.47 kB │ gzip:   2.64 kB
+../dist/public/assets/admin-game-sections-Jjwe6slO.js       8.48 kB │ gzip:   2.71 kB
+../dist/public/assets/admin-notifications-DHvYEdBp.js       8.71 kB │ gzip:   3.06 kB
+../dist/public/assets/admin-languages-CNUGwhF4.js           8.82 kB │ gzip:   2.95 kB
+../dist/public/assets/complaints-BQw9X_Ap.js                9.13 kB │ gzip:   2.85 kB
+../dist/public/assets/admin-users-DgOTRCMZ.js               9.16 kB │ gzip:   2.84 kB
+../dist/public/assets/wallet-Cxu9rsnF.js                    9.96 kB │ gzip:   2.65 kB
+../dist/public/assets/free-BblJgSsJ.js                     10.04 kB │ gzip:   2.34 kB
+../dist/public/assets/admin-payment-methods-CFm_kxFk.js    10.26 kB │ gzip:   2.95 kB
+../dist/public/assets/friends-CPXl_ghv.js                  10.71 kB │ gzip:   2.48 kB
+../dist/public/assets/admin-integrations-BMYpAOer.js       10.92 kB │ gzip:   3.82 kB
+../dist/public/assets/chat-C7RtAMIa.js                     10.94 kB │ gzip:   3.48 kB
+../dist/public/assets/format-9w7kcxxa.js                   11.93 kB │ gzip:   3.20 kB
+../dist/public/assets/p2p-profile-DZ6lWOtj.js              12.20 kB │ gzip:   2.65 kB
+../dist/public/assets/announcements-rEQJHZxr.js            12.33 kB │ gzip:   3.15 kB
+../dist/public/assets/transactions-C_pmlU_B.js             12.41 kB │ gzip:   3.18 kB
+../dist/public/assets/admin-p2p-BZ0ZLUKW.js                12.68 kB │ gzip:   3.04 kB
+../dist/public/assets/multiplayer-B2wcFqyW.js              12.89 kB │ gzip:   3.54 kB
+../dist/public/assets/games-BD-SpLaQ.js                    12.97 kB │ gzip:   3.44 kB
+../dist/public/assets/index-BSFq8Rk-.js                    13.54 kB │ gzip:   5.76 kB
+../dist/public/assets/command-CmWkmFz-.js                  13.70 kB │ gzip:   5.23 kB
+../dist/public/assets/admin-social-platforms-CHPErzV9.js   16.42 kB │ gzip:   5.02 kB
+../dist/public/assets/p2p-settings-BIL_LNnN.js             18.14 kB │ gzip:   4.49 kB
+../dist/public/assets/challenge-game-DZfhz-JC.js           18.23 kB │ gzip:   5.91 kB
+../dist/public/assets/replay-view-BR1ADaJM.js              18.82 kB │ gzip:   6.32 kB
+../dist/public/assets/login-CtpxM-Gb.js                    19.14 kB │ gzip:   4.71 kB
+../dist/public/assets/dropdown-menu-EvyKOedu.js            20.62 kB │ gzip:   6.00 kB
+../dist/public/assets/select-C3eMxfid.js                   20.73 kB │ gzip:   7.19 kB
+../dist/public/assets/admin-seo-DpIH26f7.js                20.76 kB │ gzip:   5.09 kB
+../dist/public/assets/ShareMatchButton-DpFhB0G5.js         21.26 kB │ gzip:   7.12 kB
+../dist/public/assets/admin-games-BImjcJ-v.js              24.63 kB │ gzip:   6.62 kB
+../dist/public/assets/admin-app-settings-D5FZ52W5.js       25.48 kB │ gzip:   6.95 kB
+../dist/public/assets/settings-CWgRpeHT.js                 27.81 kB │ gzip:   7.30 kB
+../dist/public/assets/challenges-D213JWvI.js               29.41 kB │ gzip:   6.96 kB
+../dist/public/assets/p2p-BCtfstb8.js                      42.31 kB │ gzip:   9.94 kB
+../dist/public/assets/play-DF83tRSb.js                     56.20 kB │ gzip:  18.46 kB
+../dist/public/assets/form-B5DgGb6-.js                     88.58 kB │ gzip:  24.81 kB
+../dist/public/assets/admin-badges-h8kg688b.js            492.41 kB │ gzip: 127.38 kB
+../dist/public/assets/index-BqeKkbd3.js                   532.15 kB │ gzip: 161.85 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 23.36s
+building server...
+
+  dist/index.cjs  1.4mb ⚠️
+
+⚡ Done in 1365ms
+
+> rest-express@1.0.0 db:push
+> drizzle-kit push
+
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/home/vixo/evex/drizzle.config.ts'
+Using 'pg' driver for database querying
+[⣷] Pulling schema from database...
+error: password authentication failed for user "vex_user"
+    at /home/vixo/evex/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Object.query (/home/vixo/evex/node_modules/drizzle-kit/bin.cjs:80622:26)
+    at async fromDatabase2 (/home/vixo/evex/node_modules/drizzle-kit/bin.cjs:19276:25) {
+  length: 104,
+  severity: 'FATAL',
+  code: '28P01',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'auth.c',
+  line: '331',
+  routine: 'auth_failed'
+}
+[PM2][WARN] Applications vex not running, starting...
+[PM2][ERROR] Error: Script not found: /home/vixo/evex/dist/server/index.js
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+curl: (7) Failed to connect to localhost port 5050 after 0 ms: Couldn't connect to server
+vixo@srv1118737:~/evex$ 
