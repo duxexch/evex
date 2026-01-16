@@ -298,7 +298,7 @@ async function handleSpectate(ws: AuthenticatedWebSocket, payload: { sessionId: 
   }
 }
 
-async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveData }) {
+async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveData; expectedTurn?: number }) {
   if (!ws.userId || !ws.sessionId) {
     sendError(ws, 'Not in a game');
     return;
@@ -321,85 +321,114 @@ async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveD
     return;
   }
 
-  const validation = engine.validateMove(room.gameState, ws.userId, payload.move);
-  if (!validation.valid) {
-    send(ws, {
-      type: 'move_rejected',
-      payload: { error: validation.error, errorKey: validation.errorKey }
-    });
-    return;
-  }
-
-  const result = engine.applyMove(room.gameState, ws.userId, payload.move);
-  if (!result.success) {
-    send(ws, {
-      type: 'move_rejected',
-      payload: { error: result.error }
-    });
-    return;
-  }
-
-  const previousState = room.gameState;
+  const sessionId = ws.sessionId;
+  const userId = ws.userId;
 
   try {
-    const currentSession = await storage.getLiveGameSession(ws.sessionId);
-    if (!currentSession) {
-      sendError(ws, 'Session not found', 'SESSION_NOT_FOUND');
-      return;
-    }
-    
-    const expectedTurn = currentSession.turnNumber || 0;
-    const newTurnNumber = expectedTurn + 1;
-    
-    await db.transaction(async (tx) => {
-      const updateResult = await tx
+    const result = await db.transaction(async (tx) => {
+      const [lockedSession] = await tx
+        .select()
+        .from(liveGameSessions)
+        .where(eq(liveGameSessions.id, sessionId))
+        .for('update');
+      
+      if (!lockedSession) {
+        throw new Error('SESSION_NOT_FOUND');
+      }
+
+      const dbState = lockedSession.gameState || engine.createInitialState();
+      const dbTurn = lockedSession.turnNumber || 0;
+      
+      if (payload.expectedTurn !== undefined && payload.expectedTurn !== dbTurn) {
+        const error = new Error('TURN_MISMATCH');
+        (error as any).dbState = dbState;
+        (error as any).dbTurn = dbTurn;
+        throw error;
+      }
+
+      const validation = engine.validateMove(dbState, userId, payload.move);
+      if (!validation.valid) {
+        const error = new Error('INVALID_MOVE');
+        (error as any).validationError = validation.error;
+        (error as any).errorKey = validation.errorKey;
+        throw error;
+      }
+
+      const applyResult = engine.applyMove(dbState, userId, payload.move);
+      if (!applyResult.success) {
+        const error = new Error('MOVE_APPLY_FAILED');
+        (error as any).applyError = applyResult.error;
+        throw error;
+      }
+
+      const newTurnNumber = dbTurn + 1;
+
+      await tx
         .update(liveGameSessions)
         .set({
-          gameState: result.newState,
+          gameState: applyResult.newState,
           turnNumber: newTurnNumber
         })
-        .where(
-          and(
-            eq(liveGameSessions.id, ws.sessionId!),
-            eq(liveGameSessions.turnNumber, expectedTurn)
-          )
-        )
-        .returning({ id: liveGameSessions.id });
-      
-      if (updateResult.length === 0) {
-        throw new Error('CONCURRENT_MOVE_CONFLICT');
-      }
+        .where(eq(liveGameSessions.id, sessionId));
       
       await tx.insert(gameMoves).values({
-        sessionId: ws.sessionId!,
-        playerId: ws.userId!,
+        sessionId: sessionId,
+        playerId: userId,
         moveNumber: newTurnNumber,
         moveType: payload.move.type || 'move',
         moveData: JSON.stringify(payload.move),
         isValid: true
       });
+
+      return { 
+        newState: applyResult.newState, 
+        events: applyResult.events, 
+        turnNumber: newTurnNumber 
+      };
     });
     
     room.gameState = result.newState;
     
-    console.log(`[WS] Move committed: session=${ws.sessionId}, turn=${newTurnNumber}, player=${ws.userId}`);
+    console.log(`[WS] Move committed: session=${sessionId}, turn=${result.turnNumber}, player=${userId}`);
+    
+    for (const [playerId, playerWs] of room.players) {
+      const playerView = engine.getPlayerView(result.newState, playerId);
+      send(playerWs, {
+        type: 'game_update',
+        payload: {
+          gameType: room.gameType,
+          events: result.events,
+          view: playerView,
+          turnNumber: result.turnNumber
+        }
+      });
+    }
+
+    const spectatorView = engine.getPlayerView(result.newState, 'spectator');
+    for (const [, spectatorWs] of room.spectators) {
+      send(spectatorWs, {
+        type: 'game_update',
+        payload: {
+          gameType: room.gameType,
+          events: result.events,
+          view: spectatorView,
+          turnNumber: result.turnNumber
+        }
+      });
+    }
+
+    const gameStatus = engine.getGameStatus(result.newState);
+    if (gameStatus.isOver) {
+      await handleGameOver(room, gameStatus);
+    }
   } catch (error: any) {
     console.error('[WS] Move transaction failed:', error);
     
-    if (error.message === 'CONCURRENT_MOVE_CONFLICT') {
-      send(ws, {
-        type: 'move_rejected',
-        payload: { 
-          error: 'Game state changed. Please wait for sync.',
-          errorKey: 'game.concurrentMove',
-          requiresSync: true
-        }
-      });
-      
-      const freshSession = await storage.getLiveGameSession(ws.sessionId);
+    const syncRoom = async () => {
+      const freshSession = await storage.getLiveGameSession(sessionId);
       if (freshSession?.gameState) {
         room.gameState = freshSession.gameState;
-        const syncView = engine.getPlayerView(freshSession.gameState, ws.userId);
+        const syncView = engine.getPlayerView(freshSession.gameState, userId);
         send(ws, {
           type: 'state_sync',
           payload: {
@@ -409,39 +438,34 @@ async function handleMakeMove(ws: AuthenticatedWebSocket, payload: { move: MoveD
           }
         });
       }
+    };
+    
+    if (error.message === 'SESSION_NOT_FOUND') {
+      sendError(ws, 'Session not found', 'SESSION_NOT_FOUND');
+    } else if (error.message === 'TURN_MISMATCH') {
+      send(ws, {
+        type: 'move_rejected',
+        payload: { 
+          error: 'Game state has changed. Syncing...',
+          errorKey: 'game.turnMismatch',
+          requiresSync: true
+        }
+      });
+      await syncRoom();
+    } else if (error.message === 'INVALID_MOVE') {
+      send(ws, {
+        type: 'move_rejected',
+        payload: { error: error.validationError, errorKey: error.errorKey }
+      });
+    } else if (error.message === 'MOVE_APPLY_FAILED') {
+      send(ws, {
+        type: 'move_rejected',
+        payload: { error: error.applyError }
+      });
     } else {
       sendError(ws, 'Failed to save move. Please try again.');
+      await syncRoom();
     }
-    return;
-  }
-
-  for (const [playerId, playerWs] of room.players) {
-    const playerView = engine.getPlayerView(result.newState, playerId);
-    send(playerWs, {
-      type: 'game_update',
-      payload: {
-        gameType: room.gameType,
-        events: result.events,
-        view: playerView
-      }
-    });
-  }
-
-  const spectatorView = engine.getPlayerView(result.newState, 'spectator');
-  for (const [, spectatorWs] of room.spectators) {
-    send(spectatorWs, {
-      type: 'game_update',
-      payload: {
-        gameType: room.gameType,
-        events: result.events,
-        view: spectatorView
-      }
-    });
-  }
-
-  const gameStatus = engine.getGameStatus(result.newState);
-  if (gameStatus.isOver) {
-    await handleGameOver(room, gameStatus);
   }
 }
 
