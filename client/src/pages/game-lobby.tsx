@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,7 +54,15 @@ interface Challenge {
   startedAt?: string;
 }
 
-const GAME_CONFIG = {
+interface GameConfigItem {
+  name: string;
+  nameAr: string;
+  icon: typeof Crown;
+  color: string;
+  gradient: string;
+}
+
+const GAME_CONFIG: Record<string, GameConfigItem> = {
   chess: { name: 'Chess', nameAr: 'شطرنج', icon: Crown, color: 'bg-amber-500/20 text-amber-500 border-amber-500/30', gradient: 'from-amber-500/20 to-amber-600/10' },
   domino: { name: 'Domino', nameAr: 'دومينو', icon: Target, color: 'bg-blue-500/20 text-blue-500 border-blue-500/30', gradient: 'from-blue-500/20 to-blue-600/10' },
   backgammon: { name: 'Backgammon', nameAr: 'طاولة', icon: Shuffle, color: 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30', gradient: 'from-emerald-500/20 to-emerald-600/10' },
@@ -77,16 +85,238 @@ const STAKE_PRESETS = [
   { key: 'high', min: 200, max: 10000 },
 ];
 
+const LOBBY_PREFS_KEY = 'vex_lobby_preferences';
+
+interface LobbyPreferences {
+  selectedGame: string | null;
+  stakePreset: string;
+  defaultTab: string;
+}
+
+function loadPreferences(): LobbyPreferences {
+  try {
+    const stored = localStorage.getItem(LOBBY_PREFS_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Failed to load lobby preferences:', e);
+  }
+  return { selectedGame: null, stakePreset: 'all', defaultTab: 'open' };
+}
+
+function savePreferences(prefs: Partial<LobbyPreferences>) {
+  try {
+    const current = loadPreferences();
+    localStorage.setItem(LOBBY_PREFS_KEY, JSON.stringify({ ...current, ...prefs }));
+  } catch (e) {
+    console.warn('Failed to save lobby preferences:', e);
+  }
+}
+
+interface ChallengeRowProps {
+  challenge: Challenge;
+  type: 'yours' | 'open' | 'live';
+  isNew: boolean;
+  language: string;
+  onJoin: (id: string) => void;
+  onWatch: (id: string) => void;
+  onResume: (id: string) => void;
+  isJoining: boolean;
+  t: (key: string) => string;
+}
+
+const ChallengeRow = memo(function ChallengeRow({ 
+  challenge, 
+  type, 
+  isNew, 
+  language, 
+  onJoin, 
+  onWatch, 
+  onResume,
+  isJoining,
+  t 
+}: ChallengeRowProps) {
+  const config = GAME_CONFIG[challenge.gameType] || GAME_CONFIG.chess;
+  const Icon = config.icon;
+
+  return (
+    <div 
+      className={`relative flex items-center gap-4 p-4 rounded-lg bg-card/50 hover-elevate transition-all ${isNew ? 'ring-2 ring-primary' : ''}`}
+      data-testid={`row-challenge-${challenge.id}`}
+    >
+      {isNew && (
+        <Badge className="absolute -top-2 -right-2 bg-primary text-xs px-1.5 z-10">{t('lobby.new')}</Badge>
+      )}
+      
+      <div className={`p-2 rounded-lg ${config.color} border shrink-0`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium truncate">{challenge.player1Name}</span>
+          {challenge.player1Rating && (
+            <Badge variant="outline" className={`text-xs ${RANK_COLORS[challenge.player1Rating.rank] || ''}`}>
+              {challenge.player1Rating.rank}
+            </Badge>
+          )}
+          {type === 'live' && challenge.player2Name && (
+            <>
+              <span className="text-muted-foreground">vs</span>
+              <span className="font-medium truncate">{challenge.player2Name}</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
+          <Badge variant="secondary" className="text-xs">
+            {language === 'ar' ? config.nameAr : config.name}
+          </Badge>
+          <span className="flex items-center gap-1">
+            <Coins className="w-3 h-3 text-yellow-500" />
+            ${challenge.betAmount}
+          </span>
+          {challenge.player1Rating && (
+            <span className="flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" />
+              {challenge.player1Rating.winRate}%
+            </span>
+          )}
+          {type === 'live' && challenge.spectatorCount !== undefined && challenge.spectatorCount > 0 && (
+            <span className="flex items-center gap-1">
+              <Eye className="w-3 h-3" />
+              {challenge.spectatorCount}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        {type === 'yours' && (
+          <Button 
+            variant="outline"
+            size="sm"
+            onClick={() => onResume(challenge.id)}
+            data-testid={`button-resume-${challenge.id}`}
+          >
+            <Clock className="w-4 h-4 mr-1" />
+            {t('lobby.waiting')}
+          </Button>
+        )}
+        {type === 'open' && (
+          <Button 
+            size="sm"
+            onClick={() => onJoin(challenge.id)}
+            disabled={isJoining}
+            data-testid={`button-join-${challenge.id}`}
+          >
+            {isJoining ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-1" />
+                {t('lobby.join')}
+              </>
+            )}
+          </Button>
+        )}
+        {type === 'live' && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => onWatch(challenge.id)}
+            data-testid={`button-watch-${challenge.id}`}
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            {t('lobby.watch')}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+interface GameCardProps {
+  gameType: string;
+  config: GameConfigItem;
+  isSelected: boolean;
+  waitingCount: number;
+  liveCount: number;
+  language: string;
+  onSelect: (gameType: string) => void;
+  onQuickMatch: (gameType: string) => void;
+  t: (key: string) => string;
+}
+
+const GameCard = memo(function GameCard({ 
+  gameType, 
+  config, 
+  isSelected, 
+  waitingCount, 
+  liveCount, 
+  language,
+  onSelect,
+  onQuickMatch,
+  t
+}: GameCardProps) {
+  const Icon = config.icon;
+
+  return (
+    <Card 
+      className={`hover-elevate cursor-pointer transition-all overflow-hidden ${isSelected ? 'ring-2 ring-primary' : ''}`}
+      onClick={() => onSelect(gameType)}
+      data-testid={`card-game-${gameType}`}
+    >
+      <div className={`absolute inset-0 bg-gradient-to-br ${config.gradient} opacity-50`} />
+      <CardContent className="p-4 relative">
+        <div className="flex items-center gap-3">
+          <div className={`p-3 rounded-lg ${config.color} border`}>
+            <Icon className="w-6 h-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold">{language === 'ar' ? config.nameAr : config.name}</h3>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <Badge variant="outline" className="text-xs">
+                <Users className="w-3 h-3 mr-1" />
+                {waitingCount}
+              </Badge>
+              {liveCount > 0 && (
+                <Badge className="text-xs bg-red-500/20 text-red-500 border-red-500/30">
+                  <div className="w-2 h-2 rounded-full bg-red-500 mr-1 animate-pulse" />
+                  {liveCount} {t('lobby.live')}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <Button 
+            size="sm" 
+            onClick={(e) => { e.stopPropagation(); onQuickMatch(gameType); }}
+            data-testid={`button-quickmatch-${gameType}`}
+          >
+            <Zap className="w-4 h-4" />
+            <span className="hidden lg:inline ml-1">{t('lobby.quickMatch')}</span>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
 export default function GameLobbyPage() {
   const { t, language } = useI18n();
   const { user } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   
-  const [selectedGame, setSelectedGame] = useState<string | null>(null);
+  const savedPrefs = useMemo(() => loadPreferences(), []);
+  
+  const [selectedGame, setSelectedGame] = useState<string | null>(savedPrefs.selectedGame);
   const [searchQuery, setSearchQuery] = useState("");
-  const [stakePreset, setStakePreset] = useState('all');
-  const [betRange, setBetRange] = useState<[number, number]>([0, 10000]);
+  const [stakePreset, setStakePreset] = useState(savedPrefs.stakePreset);
+  const [betRange, setBetRange] = useState<[number, number]>(() => {
+    const preset = STAKE_PRESETS.find(p => p.key === savedPrefs.stakePreset);
+    return preset ? [preset.min, preset.max] : [0, 10000];
+  });
   const [showQuickMatch, setShowQuickMatch] = useState(false);
   const [quickMatchGame, setQuickMatchGame] = useState<string | null>(null);
   const [quickMatchBet, setQuickMatchBet] = useState(50);
@@ -97,14 +327,15 @@ export default function GameLobbyPage() {
   const { data: availableChallenges = [], isLoading: loadingAvailable, refetch: refetchAvailable } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/available'],
     refetchInterval: 5000,
+    staleTime: 2000,
   });
 
   const { data: liveChallenges = [], isLoading: loadingLive, refetch: refetchLive } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/public'],
     refetchInterval: 5000,
+    staleTime: 2000,
   });
 
-  // Track new matches for animation
   useEffect(() => {
     const currentIds = availableChallenges.map(c => c.id);
     const prevIds = prevAvailableRef.current;
@@ -112,10 +343,15 @@ export default function GameLobbyPage() {
     
     if (newIds.length > 0 && prevIds.length > 0) {
       setNewMatchIds(new Set(newIds));
-      setTimeout(() => setNewMatchIds(new Set()), 3000);
+      const timer = setTimeout(() => setNewMatchIds(new Set()), 3000);
+      return () => clearTimeout(timer);
     }
     prevAvailableRef.current = currentIds;
   }, [availableChallenges]);
+
+  useEffect(() => {
+    savePreferences({ selectedGame, stakePreset });
+  }, [selectedGame, stakePreset]);
 
   const joinChallengeMutation = useMutation({
     mutationFn: async (challengeId: string) => {
@@ -155,32 +391,75 @@ export default function GameLobbyPage() {
     },
   });
 
-  // Your own waiting challenges
-  const yourChallenges = availableChallenges.filter((c: Challenge) => 
-    c.player1Id === user?.id && c.status === 'waiting'
+  const yourChallenges = useMemo(() => 
+    availableChallenges.filter((c: Challenge) => 
+      c.player1Id === user?.id && c.status === 'waiting'
+    ),
+    [availableChallenges, user?.id]
   );
 
-  // Other players' open matches
-  const openMatches = availableChallenges.filter((c: Challenge) => {
-    if (c.player1Id === user?.id) return false;
-    if (selectedGame && c.gameType !== selectedGame) return false;
-    if (c.betAmount < betRange[0] || c.betAmount > betRange[1]) return false;
-    if (searchQuery && !c.player1Name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return c.status === 'waiting';
-  });
+  const openMatches = useMemo(() => 
+    availableChallenges.filter((c: Challenge) => {
+      if (c.player1Id === user?.id) return false;
+      if (selectedGame && c.gameType !== selectedGame) return false;
+      if (c.betAmount < betRange[0] || c.betAmount > betRange[1]) return false;
+      if (searchQuery && !c.player1Name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      return c.status === 'waiting';
+    }),
+    [availableChallenges, user?.id, selectedGame, betRange, searchQuery]
+  );
 
-  // Active games for spectating
-  const liveGames = liveChallenges.filter((c: Challenge) => {
-    if (selectedGame && c.gameType !== selectedGame) return false;
-    return c.status === 'active';
-  });
+  const liveGames = useMemo(() => 
+    liveChallenges.filter((c: Challenge) => {
+      if (selectedGame && c.gameType !== selectedGame) return false;
+      return c.status === 'active';
+    }),
+    [liveChallenges, selectedGame]
+  );
 
-  const handleQuickMatch = (gameType: string) => {
+  const gameStats = useMemo(() => {
+    const stats: Record<string, { waiting: number; live: number }> = {};
+    Object.keys(GAME_CONFIG).forEach(gameType => {
+      stats[gameType] = {
+        waiting: availableChallenges.filter((c: Challenge) => c.gameType === gameType && c.status === 'waiting').length,
+        live: liveChallenges.filter((c: Challenge) => c.gameType === gameType && c.status === 'active').length,
+      };
+    });
+    return stats;
+  }, [availableChallenges, liveChallenges]);
+
+  const handleQuickMatch = useCallback((gameType: string) => {
     setQuickMatchGame(gameType);
     setShowQuickMatch(true);
-  };
+  }, []);
 
-  const startQuickMatch = () => {
+  const handleGameSelect = useCallback((gameType: string) => {
+    setSelectedGame(prev => prev === gameType ? null : gameType);
+  }, []);
+
+  const handleJoin = useCallback((challengeId: string) => {
+    joinChallengeMutation.mutate(challengeId);
+  }, [joinChallengeMutation]);
+
+  const handleWatch = useCallback((challengeId: string) => {
+    navigate(`/challenge/${challengeId}/watch`);
+  }, [navigate]);
+
+  const handleResume = useCallback((challengeId: string) => {
+    navigate(`/challenge/${challengeId}/play`);
+  }, [navigate]);
+
+  const handleStakePreset = useCallback((preset: typeof STAKE_PRESETS[0]) => {
+    setStakePreset(preset.key);
+    setBetRange([preset.min, preset.max]);
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    refetchAvailable();
+    refetchLive();
+  }, [refetchAvailable, refetchLive]);
+
+  const startQuickMatch = useCallback(() => {
     if (!quickMatchGame) return;
     
     const matchingChallenge = availableChallenges.find(
@@ -196,183 +475,7 @@ export default function GameLobbyPage() {
       createChallengeMutation.mutate({ gameType: quickMatchGame, betAmount: quickMatchBet });
     }
     setShowQuickMatch(false);
-  };
-
-  const handleStakePreset = (preset: typeof STAKE_PRESETS[0]) => {
-    setStakePreset(preset.key);
-    setBetRange([preset.min, preset.max]);
-  };
-
-  const GameTypeButton = ({ gameType, config }: { gameType: string; config: typeof GAME_CONFIG[keyof typeof GAME_CONFIG] }) => {
-    const Icon = config.icon;
-    const isSelected = selectedGame === gameType;
-    const matchCount = availableChallenges.filter((c: Challenge) => c.gameType === gameType && c.status === 'waiting').length;
-    
-    return (
-      <Button
-        variant={isSelected ? "default" : "outline"}
-        size="sm"
-        onClick={() => setSelectedGame(isSelected ? null : gameType)}
-        className={`gap-2 ${isSelected ? '' : config.color}`}
-        data-testid={`button-filter-${gameType}`}
-      >
-        <Icon className="w-4 h-4" />
-        <span className="hidden sm:inline">{language === 'ar' ? config.nameAr : config.name}</span>
-        {matchCount > 0 && (
-          <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-            {matchCount}
-          </Badge>
-        )}
-      </Button>
-    );
-  };
-
-  const GameCard = ({ gameType, config }: { gameType: string; config: typeof GAME_CONFIG[keyof typeof GAME_CONFIG] }) => {
-    const Icon = config.icon;
-    const waitingCount = availableChallenges.filter((c: Challenge) => c.gameType === gameType && c.status === 'waiting').length;
-    const liveCount = liveChallenges.filter((c: Challenge) => c.gameType === gameType && c.status === 'active').length;
-
-    return (
-      <Card 
-        className={`hover-elevate cursor-pointer transition-all overflow-hidden ${selectedGame === gameType ? 'ring-2 ring-primary' : ''}`}
-        onClick={() => setSelectedGame(selectedGame === gameType ? null : gameType)}
-        data-testid={`card-game-${gameType}`}
-      >
-        <div className={`absolute inset-0 bg-gradient-to-br ${config.gradient} opacity-50`} />
-        <CardContent className="p-4 relative">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-lg ${config.color} border`}>
-              <Icon className="w-6 h-6" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold">{language === 'ar' ? config.nameAr : config.name}</h3>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge variant="outline" className="text-xs">
-                  <Users className="w-3 h-3 mr-1" />
-                  {waitingCount}
-                </Badge>
-                {liveCount > 0 && (
-                  <Badge className="text-xs bg-red-500/20 text-red-500 border-red-500/30">
-                    <div className="w-2 h-2 rounded-full bg-red-500 mr-1 animate-pulse" />
-                    {liveCount} {t('lobby.live')}
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <Button 
-              size="sm" 
-              onClick={(e) => { e.stopPropagation(); handleQuickMatch(gameType); }}
-              data-testid={`button-quickmatch-${gameType}`}
-            >
-              <Zap className="w-4 h-4" />
-              <span className="hidden lg:inline ml-1">{t('lobby.quickMatch')}</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  const ChallengeRow = ({ challenge, type }: { challenge: Challenge; type: 'yours' | 'open' | 'live' }) => {
-    const config = GAME_CONFIG[challenge.gameType as keyof typeof GAME_CONFIG] || GAME_CONFIG.chess;
-    const Icon = config.icon;
-    const isNew = newMatchIds.has(challenge.id);
-
-    return (
-      <div 
-        className={`relative flex items-center gap-4 p-4 rounded-lg bg-card/50 hover-elevate transition-all ${isNew ? 'ring-2 ring-primary' : ''}`}
-        data-testid={`row-challenge-${challenge.id}`}
-      >
-        {isNew && (
-          <Badge className="absolute -top-2 -right-2 bg-primary text-xs px-1.5 z-10">{t('lobby.new')}</Badge>
-        )}
-        
-        <div className={`p-2 rounded-lg ${config.color} border shrink-0`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium truncate">{challenge.player1Name}</span>
-            {challenge.player1Rating && (
-              <Badge variant="outline" className={`text-xs ${RANK_COLORS[challenge.player1Rating.rank] || ''}`}>
-                {challenge.player1Rating.rank}
-              </Badge>
-            )}
-            {type === 'live' && challenge.player2Name && (
-              <>
-                <span className="text-muted-foreground">vs</span>
-                <span className="font-medium truncate">{challenge.player2Name}</span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
-            <Badge variant="secondary" className="text-xs">
-              {language === 'ar' ? config.nameAr : config.name}
-            </Badge>
-            <span className="flex items-center gap-1">
-              <Coins className="w-3 h-3 text-yellow-500" />
-              ${challenge.betAmount}
-            </span>
-            {challenge.player1Rating && (
-              <span className="flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" />
-                {challenge.player1Rating.winRate}%
-              </span>
-            )}
-            {type === 'live' && challenge.spectatorCount !== undefined && challenge.spectatorCount > 0 && (
-              <span className="flex items-center gap-1">
-                <Eye className="w-3 h-3" />
-                {challenge.spectatorCount}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {type === 'yours' && (
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(`/challenge/${challenge.id}/play`)}
-              data-testid={`button-resume-${challenge.id}`}
-            >
-              <Clock className="w-4 h-4 mr-1" />
-              {t('lobby.waiting')}
-            </Button>
-          )}
-          {type === 'open' && (
-            <Button 
-              size="sm"
-              onClick={() => joinChallengeMutation.mutate(challenge.id)}
-              disabled={joinChallengeMutation.isPending}
-              data-testid={`button-join-${challenge.id}`}
-            >
-              {joinChallengeMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-1" />
-                  {t('lobby.join')}
-                </>
-              )}
-            </Button>
-          )}
-          {type === 'live' && (
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => navigate(`/challenge/${challenge.id}/watch`)}
-              data-testid={`button-watch-${challenge.id}`}
-            >
-              <Eye className="w-4 h-4 mr-1" />
-              {t('lobby.watch')}
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  };
+  }, [quickMatchGame, availableChallenges, user?.id, quickMatchBet, joinChallengeMutation, createChallengeMutation]);
 
   const EmptyState = ({ type }: { type: 'yours' | 'open' | 'live' }) => {
     const configs = {
@@ -402,7 +505,6 @@ export default function GameLobbyPage() {
 
   return (
     <div className="min-h-screen p-4 md:p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
           <BackButton data-testid="button-back" />
@@ -418,7 +520,7 @@ export default function GameLobbyPage() {
           <Button 
             variant="outline" 
             size="icon"
-            onClick={() => { refetchAvailable(); refetchLive(); }}
+            onClick={handleRefresh}
             data-testid="button-refresh"
           >
             <RefreshCw className="w-4 h-4" />
@@ -430,17 +532,25 @@ export default function GameLobbyPage() {
         </div>
       </div>
 
-      {/* Game Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {Object.entries(GAME_CONFIG).map(([gameType, config]) => (
-          <GameCard key={gameType} gameType={gameType} config={config} />
+          <GameCard 
+            key={gameType} 
+            gameType={gameType} 
+            config={config}
+            isSelected={selectedGame === gameType}
+            waitingCount={gameStats[gameType]?.waiting || 0}
+            liveCount={gameStats[gameType]?.live || 0}
+            language={language}
+            onSelect={handleGameSelect}
+            onQuickMatch={handleQuickMatch}
+            t={t}
+          />
         ))}
       </div>
 
-      {/* Filters Bar */}
       <Card className="p-4">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-          {/* Game Type Filters */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-muted-foreground mr-2">{t('lobby.gameType')}:</span>
             <Button
@@ -451,12 +561,32 @@ export default function GameLobbyPage() {
             >
               {t('lobby.allGames')}
             </Button>
-            {Object.entries(GAME_CONFIG).map(([gameType, config]) => (
-              <GameTypeButton key={gameType} gameType={gameType} config={config} />
-            ))}
+            {Object.entries(GAME_CONFIG).map(([gameType, config]) => {
+              const Icon = config.icon;
+              const isSelected = selectedGame === gameType;
+              const matchCount = gameStats[gameType]?.waiting || 0;
+              
+              return (
+                <Button
+                  key={gameType}
+                  variant={isSelected ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedGame(isSelected ? null : gameType)}
+                  className={`gap-2 ${isSelected ? '' : config.color}`}
+                  data-testid={`button-filter-${gameType}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{language === 'ar' ? config.nameAr : config.name}</span>
+                  {matchCount > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                      {matchCount}
+                    </Badge>
+                  )}
+                </Button>
+              );
+            })}
           </div>
 
-          {/* Stake Presets */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-muted-foreground mr-2">{t('lobby.stakes')}:</span>
             {STAKE_PRESETS.map((preset) => (
@@ -472,7 +602,6 @@ export default function GameLobbyPage() {
             ))}
           </div>
 
-          {/* Search */}
           <div className="relative w-full lg:w-64">
             <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
             <Input 
@@ -497,8 +626,7 @@ export default function GameLobbyPage() {
         </div>
       </Card>
 
-      {/* Main Content with Three Tabs */}
-      <Tabs defaultValue="open" className="w-full">
+      <Tabs defaultValue={savedPrefs.defaultTab} className="w-full" onValueChange={(value) => savePreferences({ defaultTab: value })}>
         <TabsList className="w-full justify-start mb-4 h-auto p-1 flex-wrap gap-1">
           <TabsTrigger value="yours" className="flex items-center gap-2" data-testid="tab-yours">
             <User className="w-4 h-4" />
@@ -543,7 +671,18 @@ export default function GameLobbyPage() {
                 ) : (
                   <div className="space-y-2">
                     {yourChallenges.map((challenge: Challenge) => (
-                      <ChallengeRow key={challenge.id} challenge={challenge} type="yours" />
+                      <ChallengeRow 
+                        key={challenge.id} 
+                        challenge={challenge} 
+                        type="yours"
+                        isNew={newMatchIds.has(challenge.id)}
+                        language={language}
+                        onJoin={handleJoin}
+                        onWatch={handleWatch}
+                        onResume={handleResume}
+                        isJoining={joinChallengeMutation.isPending}
+                        t={t}
+                      />
                     ))}
                   </div>
                 )}
@@ -574,7 +713,18 @@ export default function GameLobbyPage() {
                 ) : (
                   <div className="space-y-2">
                     {openMatches.map((challenge: Challenge) => (
-                      <ChallengeRow key={challenge.id} challenge={challenge} type="open" />
+                      <ChallengeRow 
+                        key={challenge.id} 
+                        challenge={challenge} 
+                        type="open"
+                        isNew={newMatchIds.has(challenge.id)}
+                        language={language}
+                        onJoin={handleJoin}
+                        onWatch={handleWatch}
+                        onResume={handleResume}
+                        isJoining={joinChallengeMutation.isPending}
+                        t={t}
+                      />
                     ))}
                   </div>
                 )}
@@ -608,7 +758,18 @@ export default function GameLobbyPage() {
                 ) : (
                   <div className="space-y-2">
                     {liveGames.map((challenge: Challenge) => (
-                      <ChallengeRow key={challenge.id} challenge={challenge} type="live" />
+                      <ChallengeRow 
+                        key={challenge.id} 
+                        challenge={challenge} 
+                        type="live"
+                        isNew={false}
+                        language={language}
+                        onJoin={handleJoin}
+                        onWatch={handleWatch}
+                        onResume={handleResume}
+                        isJoining={joinChallengeMutation.isPending}
+                        t={t}
+                      />
                     ))}
                   </div>
                 )}
@@ -618,7 +779,6 @@ export default function GameLobbyPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Quick Match Dialog */}
       <Dialog open={showQuickMatch} onOpenChange={setShowQuickMatch}>
         <DialogContent>
           <DialogHeader>
@@ -632,7 +792,7 @@ export default function GameLobbyPage() {
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
                 {(() => {
-                  const config = GAME_CONFIG[quickMatchGame as keyof typeof GAME_CONFIG];
+                  const config = GAME_CONFIG[quickMatchGame];
                   const Icon = config?.icon || Gamepad2;
                   return (
                     <>
@@ -690,7 +850,6 @@ export default function GameLobbyPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Searching Animation Dialog */}
       {isSearching && (
         <Dialog open={isSearching} onOpenChange={setIsSearching}>
           <DialogContent className="text-center">
