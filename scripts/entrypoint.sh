@@ -38,6 +38,49 @@ if [ "$NODE_ENV" = "production" ]; then
 fi
 echo "✅ SESSION_SECRET is set"
 
+# Validate JWT_SIGNING_KEY (required for user authentication)
+if [ -z "$JWT_SIGNING_KEY" ]; then
+    echo "❌ ERROR: JWT_SIGNING_KEY environment variable is required"
+    echo "   Generate one with: openssl rand -hex 64"
+    exit 1
+fi
+if [ "$NODE_ENV" = "production" ]; then
+    JWT_LENGTH=${#JWT_SIGNING_KEY}
+    if [ "$JWT_LENGTH" -lt 32 ]; then
+        echo "❌ ERROR: JWT_SIGNING_KEY must be at least 32 characters in production"
+        echo "   Current length: $JWT_LENGTH"
+        echo "   Generate one with: openssl rand -hex 64"
+        exit 1
+    fi
+fi
+echo "✅ JWT_SIGNING_KEY is set"
+
+# Validate ADMIN_JWT_SECRET (required for admin authentication)
+if [ -z "$ADMIN_JWT_SECRET" ]; then
+    echo "❌ ERROR: ADMIN_JWT_SECRET environment variable is required"
+    echo "   Generate one with: openssl rand -hex 64"
+    exit 1
+fi
+if [ "$NODE_ENV" = "production" ]; then
+    ADMIN_JWT_LENGTH=${#ADMIN_JWT_SECRET}
+    if [ "$ADMIN_JWT_LENGTH" -lt 32 ]; then
+        echo "❌ ERROR: ADMIN_JWT_SECRET must be at least 32 characters in production"
+        echo "   Current length: $ADMIN_JWT_LENGTH"
+        echo "   Generate one with: openssl rand -hex 64"
+        exit 1
+    fi
+fi
+echo "✅ ADMIN_JWT_SECRET is set"
+
+# Warn about ALLOW_FORCE_MIGRATIONS in production
+if [ "$NODE_ENV" = "production" ] && [ "$ALLOW_FORCE_MIGRATIONS" = "true" ]; then
+    echo "⚠️  WARNING: ALLOW_FORCE_MIGRATIONS is enabled in production!"
+    echo "   This can cause data loss. Only use for initial deployment or"
+    echo "   when you understand the schema changes being applied."
+    echo "   Continuing in 5 seconds..."
+    sleep 5
+fi
+
 # Extract database connection info from DATABASE_URL if individual vars not set
 if [ -z "$PGHOST" ]; then
     export PGHOST=$(echo "$DATABASE_URL" | sed -n 's/.*@\([^:\/]*\).*/\1/p')
