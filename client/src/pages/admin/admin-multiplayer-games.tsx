@@ -500,9 +500,9 @@ export default function AdminMultiplayerGames() {
             <Radio className="h-3 w-3 text-green-500 animate-pulse" />
             <span className="text-xs">Live Sync Active</span>
           </Badge>
-          {configVersion?.version && (
+          {configVersion?.version && !isNaN(parseInt(configVersion.version)) && (
             <Badge variant="secondary" className="text-xs" data-testid="badge-config-version">
-              Config v{new Date(parseInt(configVersion.version)).toLocaleTimeString()}
+              Last sync: {new Date(parseInt(configVersion.version)).toLocaleString()}
             </Badge>
           )}
           <Button onClick={handleCreate} data-testid="button-add-game">
