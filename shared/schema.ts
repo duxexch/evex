@@ -819,6 +819,26 @@ export const p2pDisputeMessages = pgTable("p2p_dispute_messages", {
   index("idx_p2p_dispute_messages_sender_id").on(table.senderId),
 ]);
 
+// ==================== P2P TRADE MESSAGES ====================
+
+export const p2pTradeMessages = pgTable("p2p_trade_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tradeId: varchar("trade_id").notNull().references(() => p2pTrades.id),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  message: text("message").notNull(),
+  isPrewritten: boolean("is_prewritten").notNull().default(false),
+  isSystemMessage: boolean("is_system_message").notNull().default(false),
+  attachmentUrl: text("attachment_url"),
+  attachmentType: text("attachment_type"),
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_p2p_trade_messages_trade_id").on(table.tradeId),
+  index("idx_p2p_trade_messages_sender_id").on(table.senderId),
+  index("idx_p2p_trade_messages_created_at").on(table.createdAt),
+]);
+
 // ==================== P2P DISPUTE EVIDENCE ====================
 
 export const p2pDisputeEvidence = pgTable("p2p_dispute_evidence", {
@@ -1786,6 +1806,7 @@ export const insertP2PDisputeSchema = createInsertSchema(p2pDisputes).omit({ id:
 export const insertP2PSettingsSchema = createInsertSchema(p2pSettings).omit({ id: true, updatedAt: true });
 export const insertP2PTransactionLogSchema = createInsertSchema(p2pTransactionLogs).omit({ id: true, createdAt: true });
 export const insertP2PDisputeMessageSchema = createInsertSchema(p2pDisputeMessages).omit({ id: true, createdAt: true });
+export const insertP2PTradeMessageSchema = createInsertSchema(p2pTradeMessages).omit({ id: true, createdAt: true });
 export const insertP2PDisputeEvidenceSchema = createInsertSchema(p2pDisputeEvidence).omit({ id: true, createdAt: true });
 export const insertP2PPrewrittenResponseSchema = createInsertSchema(p2pPrewrittenResponses).omit({ id: true, createdAt: true });
 export const insertP2PDisputeRuleSchema = createInsertSchema(p2pDisputeRules).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1891,6 +1912,9 @@ export type P2PTransactionLog = typeof p2pTransactionLogs.$inferSelect;
 
 export type InsertP2PDisputeMessage = z.infer<typeof insertP2PDisputeMessageSchema>;
 export type P2PDisputeMessage = typeof p2pDisputeMessages.$inferSelect;
+
+export type InsertP2PTradeMessage = z.infer<typeof insertP2PTradeMessageSchema>;
+export type P2PTradeMessage = typeof p2pTradeMessages.$inferSelect;
 
 export type InsertP2PDisputeEvidence = z.infer<typeof insertP2PDisputeEvidenceSchema>;
 export type P2PDisputeEvidence = typeof p2pDisputeEvidence.$inferSelect;
