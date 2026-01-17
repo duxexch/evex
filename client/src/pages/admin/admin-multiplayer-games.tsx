@@ -32,7 +32,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Gamepad2, Power, AlertCircle, Radio, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Gamepad2, Power, AlertCircle, Radio, CheckCircle2, Clock, Calendar, X, PlayCircle, PauseCircle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -76,6 +83,29 @@ interface MultiplayerGame {
   createdAt: string;
   updatedAt: string | null;
 }
+
+interface ScheduledConfigChange {
+  id: string;
+  gameId: string;
+  action: "activate" | "deactivate" | "update_settings";
+  scheduledAt: string;
+  status: "pending" | "applied" | "cancelled" | "failed";
+  changes: string | null;
+  description: string | null;
+  createdBy: string;
+  appliedAt: string | null;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+const scheduleFormSchema = z.object({
+  gameId: z.string().min(1, "Select a game"),
+  action: z.enum(["activate", "deactivate"]),
+  scheduledAt: z.string().min(1, "Schedule time is required"),
+  description: z.string().optional(),
+});
+
+type ScheduleFormData = z.infer<typeof scheduleFormSchema>;
 
 function GameForm({ 
   game, 
@@ -380,14 +410,173 @@ function GameForm({
   );
 }
 
+function ScheduleForm({ 
+  games,
+  onSuccess, 
+  onCancel 
+}: { 
+  games: MultiplayerGame[];
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const { toast } = useToast();
+
+  const form = useForm<ScheduleFormData>({
+    resolver: zodResolver(scheduleFormSchema),
+    defaultValues: {
+      gameId: "",
+      action: "activate",
+      scheduledAt: "",
+      description: "",
+    },
+  });
+
+  const scheduleMutation = useMutation({
+    mutationFn: (data: ScheduleFormData) =>
+      apiRequest("POST", "/api/admin/scheduled-changes", data),
+    onSuccess: () => {
+      toast({ 
+        title: "Change scheduled successfully",
+        description: "The change will be applied at the scheduled time",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scheduled-changes"] });
+      onSuccess();
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to schedule change", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const onSubmit = (data: ScheduleFormData) => {
+    scheduleMutation.mutate(data);
+  };
+
+  const getMinDateTime = () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 1);
+    return now.toISOString().slice(0, 16);
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="gameId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Game</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-schedule-game">
+                    <SelectValue placeholder="Select a game" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {games.map((game) => (
+                    <SelectItem key={game.id} value={game.id} data-testid={`select-item-game-${game.key}`}>
+                      {game.nameEn} ({game.key})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="action"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Action</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-schedule-action">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="activate" data-testid="select-item-activate">Activate Game</SelectItem>
+                  <SelectItem value="deactivate" data-testid="select-item-deactivate">Deactivate Game</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="scheduledAt"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Scheduled Time</FormLabel>
+              <FormControl>
+                <Input 
+                  type="datetime-local" 
+                  min={getMinDateTime()}
+                  {...field} 
+                  data-testid="input-schedule-datetime"
+                />
+              </FormControl>
+              <FormDescription>
+                The change will be applied automatically at this time
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Note (optional)</FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="Reason for this change..."
+                  {...field} 
+                  data-testid="input-schedule-description"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="flex justify-end gap-2 pt-4">
+          <Button type="button" variant="outline" onClick={onCancel} data-testid="button-cancel-schedule">
+            Cancel
+          </Button>
+          <Button type="submit" disabled={scheduleMutation.isPending} data-testid="button-submit-schedule">
+            {scheduleMutation.isPending ? "Scheduling..." : "Schedule Change"}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+}
+
 export default function AdminMultiplayerGames() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState<MultiplayerGame | null>(null);
   const [gameToDelete, setGameToDelete] = useState<MultiplayerGame | null>(null);
 
   const { data: games = [], isLoading } = useQuery<MultiplayerGame[]>({
     queryKey: ["/api/admin/multiplayer-games"],
+  });
+
+  const { data: scheduledChanges = [] } = useQuery<ScheduledConfigChange[]>({
+    queryKey: ["/api/admin/scheduled-changes"],
   });
 
   const { data: configVersion } = useQuery<{ version: string }>({
@@ -438,6 +627,29 @@ export default function AdminMultiplayerGames() {
       });
     },
   });
+
+  const cancelScheduleMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("POST", `/api/admin/scheduled-changes/${id}/cancel`),
+    onSuccess: () => {
+      toast({ title: "Scheduled change cancelled" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scheduled-changes"] });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to cancel", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const getGameName = (gameId: string) => {
+    const game = games.find(g => g.id === gameId);
+    return game?.nameEn || "Unknown Game";
+  };
+
+  const pendingChanges = scheduledChanges.filter(c => c.status === "pending");
 
   const handleEdit = (game: MultiplayerGame) => {
     setSelectedGame(game);
@@ -509,8 +721,58 @@ export default function AdminMultiplayerGames() {
             <Plus className="h-4 w-4 mr-2" />
             Add Game
           </Button>
+          <Button variant="outline" onClick={() => setIsScheduleDialogOpen(true)} data-testid="button-schedule-change">
+            <Clock className="h-4 w-4 mr-2" />
+            Schedule Change
+          </Button>
         </div>
       </div>
+
+      {pendingChanges.length > 0 && (
+        <Card className="border-amber-500/50 bg-amber-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4 text-amber-500" />
+              Upcoming Scheduled Changes ({pendingChanges.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pendingChanges.map((change) => (
+              <div 
+                key={change.id} 
+                className="flex items-center justify-between p-3 bg-background rounded-lg border"
+                data-testid={`scheduled-change-${change.id}`}
+              >
+                <div className="flex items-center gap-3">
+                  {change.action === "activate" ? (
+                    <PlayCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <PauseCircle className="h-4 w-4 text-orange-500" />
+                  )}
+                  <div>
+                    <div className="font-medium text-sm">
+                      {change.action === "activate" ? "Activate" : "Deactivate"} {getGameName(change.gameId)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(change.scheduledAt).toLocaleString()}
+                      {change.description && <span className="ml-2">• {change.description}</span>}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => cancelScheduleMutation.mutate(change.id)}
+                  disabled={cancelScheduleMutation.isPending}
+                  data-testid={`button-cancel-scheduled-${change.id}`}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -655,6 +917,22 @@ export default function AdminMultiplayerGames() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Schedule Configuration Change
+            </DialogTitle>
+          </DialogHeader>
+          <ScheduleForm
+            games={games}
+            onSuccess={() => setIsScheduleDialogOpen(false)}
+            onCancel={() => setIsScheduleDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
