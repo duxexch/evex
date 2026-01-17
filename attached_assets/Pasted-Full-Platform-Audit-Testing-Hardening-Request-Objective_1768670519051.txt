@@ -1,0 +1,284 @@
+Full Platform Audit, Testing & Hardening Request
+Objective
+
+Perform a complete, production-grade audit and test of the entire VEX platform to guarantee zero critical defects, strong stability under load, and long-term scalability.
+The goal is to ensure that Docker, backend, frontend, database, WebSockets, P2P, games, admin panel, and security layers all work together flawlessly, with correct data flow and no hidden edge cases.
+
+This is not feature development — this is system validation, correction, and hardening.
+
+Scope of Work (Mandatory)
+1. Infrastructure & Deployment Validation
+
+Review and test:
+
+Dockerfile
+
+docker-compose.yml (if present)
+
+Environment variables handling
+
+Ensure:
+
+Containers start cleanly from scratch
+
+No missing ENV variables
+
+No dev-only configs leaking into production
+
+Proper health checks
+
+Verify startup order (DB → backend → frontend).
+
+2. Database & Data Integrity Audit
+
+Validate all schemas and migrations:
+
+No orphaned tables
+
+No duplicated enums or unused columns
+
+Correct indexes for performance
+
+Test:
+
+Referential integrity
+
+Transactions & rollbacks
+
+Atomic operations (especially P2P, balances, points, escrow)
+
+Ensure:
+
+Admin data == User-facing data (single source of truth)
+
+No hardcoded game configs bypassing DB.
+
+3. Backend API & Business Logic Testing
+
+Test every API endpoint:
+
+Auth
+
+Games
+
+Lobby
+
+P2P trading
+
+Points / currency
+
+Admin operations
+
+Validate:
+
+Input validation (Zod / schemas)
+
+Authorization & role checks
+
+Idempotency (especially financial endpoints)
+
+Actively try to break flows:
+
+Double submissions
+
+Concurrent requests
+
+Invalid states
+
+Fix any inconsistency found, then re-test.
+
+4. WebSocket & Real-Time Systems
+
+Validate:
+
+Game sockets
+
+Chat
+
+Admin alerts
+
+Config sync events
+
+Test:
+
+Reconnection logic
+
+Message ordering
+
+Auth expiration handling
+
+Ensure:
+
+No memory leaks
+
+No orphan connections
+
+Correct event payload shapes
+
+Stress test with multiple simulated users.
+
+5. P2P System – Critical Path
+
+Deep test:
+
+Trade lifecycle (create → escrow → complete / cancel / dispute)
+
+Atomic escrow handling
+
+Points-based commission (if present)
+
+Verify:
+
+No race conditions
+
+No double-spend vectors
+
+Admin dispute handling is consistent and traceable
+
+Ensure admin notifications are:
+
+Real-time
+
+Clickable
+
+Route correctly to the relevant admin section.
+
+6. Games & Lobby Stability
+
+Test:
+
+All game types
+
+Free vs paid games
+
+Game config changes while users are online
+
+Verify:
+
+Lobby never crashes on missing config
+
+Games load safely even if disabled mid-session
+
+Trending / featured logic is safe and performant
+
+Ensure future game additions cannot crash the lobby.
+
+7. Frontend UX & Flow Verification
+
+Validate complete user journeys:
+
+Registration → wallet → play → trade → admin review
+
+Ensure:
+
+No broken navigation
+
+No dead buttons
+
+No inconsistent UI states
+
+Confirm:
+
+Errors are user-friendly
+
+Loading states are correct
+
+No silent failures.
+
+8. Security & Abuse Testing
+
+Actively attempt:
+
+Unauthorized access
+
+Balance manipulation
+
+Replay attacks
+
+Invalid WebSocket messages
+
+Confirm:
+
+JWT handling is strict
+
+Admin-only endpoints are protected
+
+Rate limiting works
+
+Fix anything unsafe immediately.
+
+9. Performance & Load Testing
+
+Simulate:
+
+Concurrent users
+
+Multiple games running
+
+High P2P activity
+
+Check:
+
+Query performance
+
+WebSocket throughput
+
+Memory usage
+
+Add optimizations if bottlenecks appear.
+
+10. Regression Testing Cycle
+
+For every bug found:
+
+Fix the issue
+
+Add or update a test (where applicable)
+
+Re-run the full flow
+
+Confirm no regression elsewhere
+
+Repeat until clean.
+
+11. Documentation & Developer Readiness
+
+Update:
+
+README.md
+
+Include:
+
+Setup steps
+
+ENV requirements
+
+Docker usage
+
+Architecture overview
+
+Known constraints
+
+Ensure a new developer can run the project without guesswork.
+
+Final Deliverables
+
+Fully validated, stable system
+
+No known critical or high-risk issues
+
+Updated scripts & configs
+
+Clean Docker startup
+
+Accurate README
+
+Confirmation that:
+
+“The platform is production-safe, scalable, and future-proof.”
+
+Important Note
+
+Use your understanding of the project structure to decide how to implement these checks.
+Do not skip any area.
+Assume real users, real money, and real scale.

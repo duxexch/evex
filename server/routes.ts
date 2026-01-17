@@ -2045,10 +2045,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           rankQuery = sql`SELECT COUNT(*) + 1 as rank FROM users WHERE games_won > ${user.gamesWon} AND games_played > 0`;
       }
       
-      const [rankResult] = await db.execute(rankQuery);
+      const rankResults = await db.execute(rankQuery);
+      const rows = Array.isArray(rankResults) ? rankResults : (rankResults as any).rows || [];
+      const firstRow = rows[0];
       
       res.json({
-        rank: Number((rankResult as any).rank) || 1,
+        rank: firstRow ? Number(firstRow.rank) || 1 : 1,
         sortBy,
       });
     } catch (error: any) {
