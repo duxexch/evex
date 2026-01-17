@@ -106,6 +106,15 @@ export function useNotifications() {
         if (data.type === "unread_notifications") {
           queryClient.setQueryData(["/api/notifications"], data.data);
         }
+
+        // Handle system events like game config changes
+        if (data.type === "system_event") {
+          const event = data.event;
+          if (event?.type === 'game_config_changed') {
+            // Invalidate multiplayer games cache to refresh game config
+            queryClient.invalidateQueries({ queryKey: ['/api/multiplayer-games'] });
+          }
+        }
       } catch (error) {
         console.error("WebSocket message error:", error);
       }

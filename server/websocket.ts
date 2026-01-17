@@ -1231,3 +1231,17 @@ export async function broadcastNotification(notification: {
 export function getConnectedClients() {
   return clients;
 }
+
+export function broadcastSystemEvent(event: {
+  type: 'config_updated' | 'game_config_changed' | 'maintenance' | 'system_message';
+  data?: any;
+}) {
+  const message = JSON.stringify({ type: 'system_event', event });
+  clients.forEach((sockets) => {
+    sockets.forEach((socket) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(message);
+      }
+    });
+  });
+}

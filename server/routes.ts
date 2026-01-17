@@ -18,7 +18,7 @@ import {
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { setupWebSocket, sendNotification } from "./websocket";
+import { setupWebSocket, sendNotification, broadcastSystemEvent } from "./websocket";
 import { db, pool } from "./db";
 import { eq, desc, and, or, sql } from "drizzle-orm";
 import { getHealthReport, trackError, errorTracker } from "./lib/health";
@@ -5262,6 +5262,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Increment config version
       await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
 
+      // Broadcast to all clients to refresh game config
+      broadcastSystemEvent({ type: 'game_config_changed', data: { action: 'create', gameKey: game.key } });
+
       res.status(201).json(game);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -5292,6 +5295,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Increment config version
       await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
+
+      // Broadcast to all clients to refresh game config
+      broadcastSystemEvent({ type: 'game_config_changed', data: { action: 'update', gameKey: updated?.key } });
 
       res.json(updated);
     } catch (error: any) {
@@ -5324,6 +5330,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Increment config version
       await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
 
+      // Broadcast to all clients to refresh game config
+      broadcastSystemEvent({ type: 'game_config_changed', data: { action: 'toggle', gameKey: updated?.key, isActive: updated?.isActive } });
+
       res.json(updated);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -5353,6 +5362,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Increment config version
       await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
+
+      // Broadcast to all clients to refresh game config
+      broadcastSystemEvent({ type: 'game_config_changed', data: { action: 'delete', gameKey: game.key } });
 
       res.json({ success: true });
     } catch (error: any) {
