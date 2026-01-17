@@ -8,6 +8,7 @@ import {
   liveGameSessions, gameMoves, gameSpectators, giftItems, spectatorGifts, gameChatMessages,
   achievements, userAchievements, seasons, seasonalStats, seasonRewards,
   p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics,
+  multiplayerGames, systemConfig, adminAuditLogs,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -36,6 +37,8 @@ import {
   type Season, type InsertSeason,
   type SeasonalStats, type InsertSeasonalStats,
   type SeasonReward, type InsertSeasonReward,
+  type MultiplayerGame, type InsertMultiplayerGame,
+  type SystemConfig, type InsertSystemConfig,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, asc, or, like, ne } from "drizzle-orm";
@@ -194,6 +197,24 @@ export interface IStorage {
   getP2PTraderMetrics(userId: string): Promise<any | undefined>;
   getP2POffer(id: string): Promise<any | undefined>;
   updateP2POffer(id: string, data: any): Promise<any | undefined>;
+
+  // Multiplayer Games (Single Source of Truth)
+  getMultiplayerGame(id: string): Promise<MultiplayerGame | undefined>;
+  getMultiplayerGameByKey(key: string): Promise<MultiplayerGame | undefined>;
+  listMultiplayerGames(activeOnly?: boolean): Promise<MultiplayerGame[]>;
+  createMultiplayerGame(game: InsertMultiplayerGame): Promise<MultiplayerGame>;
+  updateMultiplayerGame(id: string, data: Partial<InsertMultiplayerGame>): Promise<MultiplayerGame | undefined>;
+  deleteMultiplayerGame(id: string): Promise<boolean>;
+  incrementMultiplayerGameStats(key: string, volume: string): Promise<void>;
+  validateGameConfig(gameKey: string, stakeAmount: string): Promise<{ valid: boolean; error?: string; game?: MultiplayerGame }>;
+
+  // System Config
+  getSystemConfig(key: string): Promise<SystemConfig | undefined>;
+  setSystemConfig(key: string, value: string, updatedBy?: string): Promise<SystemConfig>;
+  getConfigVersion(key: string): Promise<number>;
+  
+  // Admin Audit Logging
+  createAdminAuditLog(log: { adminId: string; action: string; entityType: string; entityId?: string; oldValue?: any; newValue?: any; ipAddress?: string; userAgent?: string }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1942,6 +1963,253 @@ export class DatabaseStorage implements IStorage {
       return { success: true, trade: updatedTrade };
     });
   }
+
+  // ==================== MULTIPLAYER GAMES (Single Source of Truth) ====================
+
+  async getMultiplayerGame(id: string): Promise<MultiplayerGame | undefined> {
+    const [game] = await db.select().from(multiplayerGames).where(eq(multiplayerGames.id, id));
+    return game || undefined;
+  }
+
+  async getMultiplayerGameByKey(key: string): Promise<MultiplayerGame | undefined> {
+    const [game] = await db.select().from(multiplayerGames).where(eq(multiplayerGames.key, key));
+    return game || undefined;
+  }
+
+  async listMultiplayerGames(activeOnly: boolean = false): Promise<MultiplayerGame[]> {
+    if (activeOnly) {
+      return db.select().from(multiplayerGames)
+        .where(eq(multiplayerGames.isActive, true))
+        .orderBy(asc(multiplayerGames.sortOrder), asc(multiplayerGames.key));
+    }
+    return db.select().from(multiplayerGames).orderBy(asc(multiplayerGames.sortOrder), asc(multiplayerGames.key));
+  }
+
+  async createMultiplayerGame(game: InsertMultiplayerGame): Promise<MultiplayerGame> {
+    const [created] = await db.insert(multiplayerGames).values(game).returning();
+    return created;
+  }
+
+  async updateMultiplayerGame(id: string, data: Partial<InsertMultiplayerGame>): Promise<MultiplayerGame | undefined> {
+    const [updated] = await db.update(multiplayerGames)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(multiplayerGames.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteMultiplayerGame(id: string): Promise<boolean> {
+    const result = await db.delete(multiplayerGames).where(eq(multiplayerGames.id, id));
+    return true;
+  }
+
+  async incrementMultiplayerGameStats(key: string, volume: string): Promise<void> {
+    await db.update(multiplayerGames)
+      .set({
+        totalGamesPlayed: sql`${multiplayerGames.totalGamesPlayed} + 1`,
+        totalVolume: sql`${multiplayerGames.totalVolume} + ${parseFloat(volume)}`,
+        updatedAt: new Date()
+      })
+      .where(eq(multiplayerGames.key, key));
+  }
+
+  async validateGameConfig(gameKey: string, stakeAmount: string): Promise<{ valid: boolean; error?: string; game?: MultiplayerGame }> {
+    const game = await this.getMultiplayerGameByKey(gameKey);
+    
+    if (!game) {
+      return { valid: false, error: `Game '${gameKey}' does not exist` };
+    }
+    
+    if (!game.isActive) {
+      return { valid: false, error: `Game '${gameKey}' is currently inactive` };
+    }
+    
+    const stake = parseFloat(stakeAmount);
+    const minStake = parseFloat(game.minStake);
+    const maxStake = parseFloat(game.maxStake);
+    
+    if (stake < minStake) {
+      return { valid: false, error: `Stake ${stake} is below minimum ${minStake}`, game };
+    }
+    
+    if (stake > maxStake) {
+      return { valid: false, error: `Stake ${stake} exceeds maximum ${maxStake}`, game };
+    }
+    
+    return { valid: true, game };
+  }
+
+  // ==================== SYSTEM CONFIG ====================
+
+  async getSystemConfig(key: string): Promise<SystemConfig | undefined> {
+    const [config] = await db.select().from(systemConfig).where(eq(systemConfig.key, key));
+    return config || undefined;
+  }
+
+  async setSystemConfig(key: string, value: string, updatedBy?: string): Promise<SystemConfig> {
+    const existing = await this.getSystemConfig(key);
+    
+    if (existing) {
+      const [updated] = await db.update(systemConfig)
+        .set({
+          value,
+          version: sql`${systemConfig.version} + 1`,
+          updatedAt: new Date(),
+          updatedBy: updatedBy || null
+        })
+        .where(eq(systemConfig.key, key))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(systemConfig).values({
+        key,
+        value,
+        version: 1,
+        updatedBy
+      }).returning();
+      return created;
+    }
+  }
+
+  async getConfigVersion(key: string): Promise<number> {
+    const config = await this.getSystemConfig(key);
+    return config?.version || 0;
+  }
+
+  // ==================== ADMIN AUDIT LOGGING ====================
+
+  async createAdminAuditLog(log: { adminId: string; action: string; entityType: string; entityId?: string; oldValue?: any; newValue?: any; ipAddress?: string; userAgent?: string }): Promise<void> {
+    await db.insert(adminAuditLogs).values({
+      adminId: log.adminId,
+      action: log.action,
+      entityType: log.entityType,
+      entityId: log.entityId || null,
+      oldValue: log.oldValue ? JSON.stringify(log.oldValue) : null,
+      newValue: log.newValue ? JSON.stringify(log.newValue) : null,
+      ipAddress: log.ipAddress || null,
+      userAgent: log.userAgent || null,
+    });
+  }
 }
 
 export const storage = new DatabaseStorage();
+
+// ==================== SEED MULTIPLAYER GAMES ====================
+
+async function seedMultiplayerGames() {
+  const existingGames = await storage.listMultiplayerGames();
+  if (existingGames.length > 0) {
+    console.log('Multiplayer games already seeded');
+    return;
+  }
+
+  const defaultGames: InsertMultiplayerGame[] = [
+    {
+      key: 'chess',
+      nameEn: 'Chess',
+      nameAr: 'شطرنج',
+      descriptionEn: 'The classic game of strategy',
+      descriptionAr: 'لعبة الإستراتيجية الكلاسيكية',
+      iconName: 'Crown',
+      colorClass: 'bg-amber-500/20 text-amber-500 border-amber-500/30',
+      gradientClass: 'from-amber-500/20 to-amber-600/10',
+      isActive: true,
+      minStake: '1.00',
+      maxStake: '1000.00',
+      houseFee: '0.05',
+      minPlayers: 2,
+      maxPlayers: 2,
+      defaultTimeLimit: 600,
+      isFeatured: true,
+      sortOrder: 1,
+    },
+    {
+      key: 'backgammon',
+      nameEn: 'Backgammon',
+      nameAr: 'طاولة',
+      descriptionEn: 'Ancient game of dice and strategy',
+      descriptionAr: 'لعبة النرد والإستراتيجية القديمة',
+      iconName: 'Shuffle',
+      colorClass: 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30',
+      gradientClass: 'from-emerald-500/20 to-emerald-600/10',
+      isActive: true,
+      minStake: '1.00',
+      maxStake: '1000.00',
+      houseFee: '0.05',
+      minPlayers: 2,
+      maxPlayers: 2,
+      defaultTimeLimit: 600,
+      isFeatured: true,
+      sortOrder: 2,
+    },
+    {
+      key: 'domino',
+      nameEn: 'Domino',
+      nameAr: 'دومينو',
+      descriptionEn: 'Classic tile matching game',
+      descriptionAr: 'لعبة مطابقة البلاط الكلاسيكية',
+      iconName: 'Target',
+      colorClass: 'bg-blue-500/20 text-blue-500 border-blue-500/30',
+      gradientClass: 'from-blue-500/20 to-blue-600/10',
+      isActive: true,
+      minStake: '1.00',
+      maxStake: '1000.00',
+      houseFee: '0.05',
+      minPlayers: 2,
+      maxPlayers: 4,
+      defaultTimeLimit: 600,
+      isFeatured: false,
+      sortOrder: 3,
+    },
+    {
+      key: 'tarneeb',
+      nameEn: 'Tarneeb',
+      nameAr: 'طرنيب',
+      descriptionEn: 'Popular Middle Eastern trick-taking card game',
+      descriptionAr: 'لعبة الورق الشرق أوسطية الشهيرة',
+      iconName: 'Gem',
+      colorClass: 'bg-purple-500/20 text-purple-500 border-purple-500/30',
+      gradientClass: 'from-purple-500/20 to-purple-600/10',
+      isActive: true,
+      minStake: '1.00',
+      maxStake: '1000.00',
+      houseFee: '0.05',
+      minPlayers: 4,
+      maxPlayers: 4,
+      defaultTimeLimit: 900,
+      isFeatured: false,
+      sortOrder: 4,
+    },
+    {
+      key: 'baloot',
+      nameEn: 'Baloot',
+      nameAr: 'بلوت',
+      descriptionEn: 'Traditional Saudi Arabian card game',
+      descriptionAr: 'لعبة الورق السعودية التقليدية',
+      iconName: 'Gem',
+      colorClass: 'bg-rose-500/20 text-rose-500 border-rose-500/30',
+      gradientClass: 'from-rose-500/20 to-rose-600/10',
+      isActive: true,
+      minStake: '1.00',
+      maxStake: '1000.00',
+      houseFee: '0.05',
+      minPlayers: 4,
+      maxPlayers: 4,
+      defaultTimeLimit: 900,
+      isFeatured: false,
+      sortOrder: 5,
+    },
+  ];
+
+  for (const game of defaultGames) {
+    await storage.createMultiplayerGame(game);
+  }
+
+  // Set initial config version for multiplayer games
+  await storage.setSystemConfig('multiplayer_games_version', '1');
+  
+  console.log('Seeded multiplayer games successfully');
+}
+
+// Run seed on module load
+seedMultiplayerGames().catch(console.error);

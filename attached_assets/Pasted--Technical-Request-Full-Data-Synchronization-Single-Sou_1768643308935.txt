@@ -1,0 +1,225 @@
+🔧 Technical Request: Full Data Synchronization & Single Source of Truth
+Objective
+
+Ensure 100% synchronization between:
+
+User-facing platform (games, lobbies, challenges)
+
+Admin panel (configuration, activation, limits)
+
+Backend game engines and financial systems
+
+with automatic updates, transactional safety, and production-grade consistency.
+
+🔴 Current Problem
+
+The platform currently exposes certain entities (e.g. games) on the user-facing side that are not registered or managed in the admin panel.
+
+This indicates:
+
+Multiple data sources (hardcoded enums vs database records)
+
+Lack of a single source of truth
+
+Risk of configuration drift, financial misconfiguration, and admin blind spots
+
+✅ Required Architecture Changes
+1️⃣ Single Source of Truth (Mandatory)
+
+All dynamic entities must originate from the database, not from frontend constants or backend enums.
+
+Affected entities include (but are not limited to):
+
+Games
+
+Stakes / limits
+
+Fees / penalties
+
+Gifts
+
+P2P offers
+
+Achievements
+
+Seasonal configs
+
+No entity should be rendered or usable unless it exists in the database.
+
+2️⃣ Centralized games Table (Example)
+games (
+  id UUID PRIMARY KEY,
+  key VARCHAR UNIQUE NOT NULL,        -- chess, backgammon, baloot...
+  name_en VARCHAR NOT NULL,
+  name_ar VARCHAR NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  min_stake DECIMAL,
+  max_stake DECIMAL,
+  house_fee DECIMAL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+)
+
+Rules:
+
+Frontend displays only is_active = true
+
+Admin panel controls activation, limits, and visibility
+
+Backend validates game existence before:
+
+Session creation
+
+Challenge creation
+
+Financial operations
+
+3️⃣ Automatic Synchronization Flow
+
+No manual syncing, no redeploy required.
+
+Flow:
+
+Admin Panel Update
+   ↓
+Database Transaction (ACID)
+   ↓
+Backend Cache Invalidation
+   ↓
+WebSocket Broadcast (optional)
+   ↓
+Frontend Auto Refresh
+
+
+Recommended:
+
+Short-lived in-memory cache (30–60s TTL)
+
+OR Redis with pub/sub invalidation
+
+OR DB-triggered versioning (config_version)
+
+4️⃣ Strict Backend Validation (Security)
+
+Backend must enforce:
+
+❌ No hardcoded game keys
+
+❌ No fallback defaults
+
+❌ No silent failure
+
+Required checks:
+
+Game exists
+
+Game is active
+
+Stakes within configured limits
+
+Fees pulled from DB only
+
+If validation fails → operation must be rejected
+
+5️⃣ Atomic Operations & Financial Safety
+
+All operations involving money must be:
+
+Wrapped in database transactions
+
+Use SELECT … FOR UPDATE for balances
+
+Fail-safe (rollback on any error)
+
+Fully auditable
+
+This includes:
+
+Game entry fees
+
+P2P escrow
+
+Gifts
+
+Rewards
+
+Penalties
+
+6️⃣ Admin Panel as Control Plane
+
+Admin panel should be the only place where:
+
+Games are added or removed
+
+Limits are changed
+
+Fees are adjusted
+
+Features are toggled
+
+Frontend and backend must react automatically to admin changes.
+
+🛡️ Security Guarantees Required
+
+JWT authentication for all admin APIs
+
+Role-based access control (RBAC)
+
+Input validation (Zod / schema validation)
+
+Idempotent financial operations
+
+Full transaction audit logs
+
+🚀 Recommended Enhancements (Optional but Strongly Advised)
+A) Configuration Versioning
+system_config (
+  key VARCHAR PRIMARY KEY,
+  version INTEGER,
+  updated_at TIMESTAMP
+)
+
+
+Frontend/backend reload config only when version changes
+
+Prevents unnecessary reloads
+
+B) Feature Flags
+
+Allow safe rollout:
+
+Enable/disable games without redeploy
+
+Gradual exposure of new features
+
+C) Admin Activity Audit Log
+
+Track:
+
+Who changed what
+
+When
+
+Old vs new values
+
+Critical for compliance and debugging.
+
+🎯 Final Goal
+
+A system where:
+
+Admin panel is the brain
+
+Database is the source of truth
+
+Frontend is a live reflection
+
+Backend is the enforcer
+
+Financial data is never at risk
+
+No duplication, no desync, no hidden state.
+
+📌 Summary (One-Line)
+
+Make the database the single source of truth, enforce strict backend validation, propagate admin changes automatically, and guarantee atomic, secure operations across the entire platform.

@@ -266,6 +266,62 @@ export const linkAnalyticsRelations = relations(linkAnalytics, ({ one }) => ({
   registeredUser: one(users, { fields: [linkAnalytics.registeredUserId], references: [users.id] }),
 }));
 
+// ==================== MULTIPLAYER GAMES (Single Source of Truth) ====================
+
+export const multiplayerGames = pgTable("multiplayer_games", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(), // chess, backgammon, domino, tarneeb, baloot
+  nameEn: text("name_en").notNull(),
+  nameAr: text("name_ar").notNull(),
+  descriptionEn: text("description_en"),
+  descriptionAr: text("description_ar"),
+  iconName: text("icon_name").notNull().default("Gamepad2"), // Lucide icon name
+  colorClass: text("color_class").notNull().default("bg-primary/20 text-primary"), // Tailwind color classes
+  gradientClass: text("gradient_class").default("from-primary/20 to-primary/10"),
+  isActive: boolean("is_active").notNull().default(true),
+  minStake: decimal("min_stake", { precision: 15, scale: 2 }).notNull().default("1.00"),
+  maxStake: decimal("max_stake", { precision: 15, scale: 2 }).notNull().default("1000.00"),
+  houseFee: decimal("house_fee", { precision: 5, scale: 4 }).notNull().default("0.05"), // 5% = 0.05
+  minPlayers: integer("min_players").notNull().default(2),
+  maxPlayers: integer("max_players").notNull().default(2),
+  defaultTimeLimit: integer("default_time_limit").notNull().default(300), // seconds
+  isFeatured: boolean("is_featured").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  totalGamesPlayed: integer("total_games_played").notNull().default(0),
+  totalVolume: decimal("total_volume", { precision: 20, scale: 2 }).notNull().default("0.00"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_multiplayer_games_key").on(table.key),
+  index("idx_multiplayer_games_is_active").on(table.isActive),
+  index("idx_multiplayer_games_sort_order").on(table.sortOrder),
+]);
+
+export const insertMultiplayerGameSchema = createInsertSchema(multiplayerGames).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  totalGamesPlayed: true,
+  totalVolume: true,
+});
+
+export type InsertMultiplayerGame = z.infer<typeof insertMultiplayerGameSchema>;
+export type MultiplayerGame = typeof multiplayerGames.$inferSelect;
+
+// ==================== SYSTEM CONFIG (Configuration Versioning) ====================
+
+export const systemConfig = pgTable("system_config", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  version: integer("version").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+});
+
+export const insertSystemConfigSchema = createInsertSchema(systemConfig);
+export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
+export type SystemConfig = typeof systemConfig.$inferSelect;
+
 // ==================== GAMES ====================
 
 export const games = pgTable("games", {
