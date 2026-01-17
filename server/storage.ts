@@ -7,6 +7,7 @@ import {
   userRelationships, socialPlatforms,
   liveGameSessions, gameMoves, gameSpectators, giftItems, spectatorGifts, gameChatMessages,
   achievements, userAchievements, seasons, seasonalStats, seasonRewards,
+  p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -179,6 +180,20 @@ export interface IStorage {
   getUserFollowers(userId: string): Promise<UserRelationship[]>;
   getUserBlocked(userId: string): Promise<UserRelationship[]>;
   searchUsers(query: string, excludeUserId: string): Promise<User[]>;
+
+  // P2P Trading
+  createP2PTrade(trade: any): Promise<any>;
+  getP2PTrade(id: string): Promise<any | undefined>;
+  updateP2PTrade(id: string, data: any): Promise<any | undefined>;
+  getUserP2PTrades(userId: string): Promise<any[]>;
+  createP2PTradeMessage(message: any): Promise<any>;
+  getP2PTradeMessages(tradeId: string): Promise<any[]>;
+  createP2PTraderRating(rating: any): Promise<any>;
+  getP2PTraderRatings(userId: string): Promise<any[]>;
+  updateP2PTraderMetrics(userId: string, data: any): Promise<any>;
+  getP2PTraderMetrics(userId: string): Promise<any | undefined>;
+  getP2POffer(id: string): Promise<any | undefined>;
+  updateP2POffer(id: string, data: any): Promise<any | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1574,6 +1589,89 @@ export class DatabaseStorage implements IStorage {
   async createSeasonReward(reward: InsertSeasonReward): Promise<SeasonReward> {
     const [created] = await db.insert(seasonRewards).values(reward).returning();
     return created;
+  }
+
+  // ==================== P2P TRADING ====================
+
+  async createP2PTrade(trade: any): Promise<any> {
+    const [created] = await db.insert(p2pTrades).values(trade).returning();
+    return created;
+  }
+
+  async getP2PTrade(id: string): Promise<any | undefined> {
+    const [trade] = await db.select().from(p2pTrades).where(eq(p2pTrades.id, id));
+    return trade || undefined;
+  }
+
+  async updateP2PTrade(id: string, data: any): Promise<any | undefined> {
+    const [updated] = await db.update(p2pTrades)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(p2pTrades.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getUserP2PTrades(userId: string): Promise<any[]> {
+    return db.select().from(p2pTrades)
+      .where(or(eq(p2pTrades.buyerId, userId), eq(p2pTrades.sellerId, userId)))
+      .orderBy(desc(p2pTrades.createdAt));
+  }
+
+  async createP2PTradeMessage(message: any): Promise<any> {
+    const [created] = await db.insert(p2pTradeMessages).values(message).returning();
+    return created;
+  }
+
+  async getP2PTradeMessages(tradeId: string): Promise<any[]> {
+    return db.select().from(p2pTradeMessages)
+      .where(eq(p2pTradeMessages.tradeId, tradeId))
+      .orderBy(asc(p2pTradeMessages.createdAt));
+  }
+
+  async createP2PTraderRating(rating: any): Promise<any> {
+    const [created] = await db.insert(p2pTraderRatings).values(rating).returning();
+    return created;
+  }
+
+  async getP2PTraderRatings(userId: string): Promise<any[]> {
+    return db.select().from(p2pTraderRatings)
+      .where(eq(p2pTraderRatings.ratedUserId, userId))
+      .orderBy(desc(p2pTraderRatings.createdAt));
+  }
+
+  async updateP2PTraderMetrics(userId: string, data: any): Promise<any> {
+    const existing = await this.getP2PTraderMetrics(userId);
+    if (existing) {
+      const [updated] = await db.update(p2pTraderMetrics)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(p2pTraderMetrics.userId, userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(p2pTraderMetrics)
+        .values({ userId, ...data })
+        .returning();
+      return created;
+    }
+  }
+
+  async getP2PTraderMetrics(userId: string): Promise<any | undefined> {
+    const [metrics] = await db.select().from(p2pTraderMetrics)
+      .where(eq(p2pTraderMetrics.userId, userId));
+    return metrics || undefined;
+  }
+
+  async getP2POffer(id: string): Promise<any | undefined> {
+    const [offer] = await db.select().from(p2pOffers).where(eq(p2pOffers.id, id));
+    return offer || undefined;
+  }
+
+  async updateP2POffer(id: string, data: any): Promise<any | undefined> {
+    const [updated] = await db.update(p2pOffers)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(p2pOffers.id, id))
+      .returning();
+    return updated || undefined;
   }
 }
 
