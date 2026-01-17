@@ -33,7 +33,8 @@ import {
   Sparkles,
   Flame,
   User,
-  X
+  X,
+  Gift
 } from "lucide-react";
 
 interface Challenge {
@@ -291,6 +292,7 @@ interface GameCardProps {
   isSelected: boolean;
   waitingCount: number;
   liveCount: number;
+  isTrending: boolean;
   language: string;
   onSelect: (gameType: string) => void;
   onQuickMatch: (gameType: string) => void;
@@ -303,6 +305,7 @@ const GameCard = memo(function GameCard({
   isSelected, 
   waitingCount, 
   liveCount, 
+  isTrending,
   language,
   onSelect,
   onQuickMatch,
@@ -323,15 +326,23 @@ const GameCard = memo(function GameCard({
             <Icon className="w-6 h-6" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold">{language === 'ar' ? config.nameAr : config.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold">{language === 'ar' ? config.nameAr : config.name}</h3>
+              {isTrending && (
+                <Badge variant="secondary" className="text-xs" data-testid={`badge-trending-${gameType}`}>
+                  <Flame className="w-3 h-3 mr-1" />
+                  {t('lobby.trending')}
+                </Badge>
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <Badge variant="outline" className="text-xs">
                 <Users className="w-3 h-3 mr-1" />
                 {waitingCount}
               </Badge>
               {liveCount > 0 && (
-                <Badge className="text-xs bg-red-500/20 text-red-500 border-red-500/30">
-                  <div className="w-2 h-2 rounded-full bg-red-500 mr-1 animate-pulse" />
+                <Badge variant="destructive" className="text-xs">
+                  <div className="w-2 h-2 rounded-full bg-destructive-foreground mr-1 animate-pulse" />
                   {liveCount} {t('lobby.live')}
                 </Badge>
               )}
@@ -572,7 +583,13 @@ export default function GameLobbyPage() {
             <p className="text-muted-foreground text-sm">{t('lobby.subtitle')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {(user?.freePlayCount ?? 0) > 0 && (
+            <Badge variant="default" className="text-sm py-1.5 px-3" data-testid="badge-free-plays">
+              <Gift className="w-4 h-4 mr-1.5" />
+              {user?.freePlayCount} {t('lobby.freePlays')}
+            </Badge>
+          )}
           <Button 
             variant="outline" 
             size="icon"
@@ -589,20 +606,26 @@ export default function GameLobbyPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {Object.entries(GAME_CONFIG).map(([gameType, config]) => (
-          <GameCard 
-            key={gameType} 
-            gameType={gameType} 
-            config={config}
-            isSelected={selectedGame === gameType}
-            waitingCount={gameStats[gameType]?.waiting || 0}
-            liveCount={gameStats[gameType]?.live || 0}
-            language={language}
-            onSelect={handleGameSelect}
-            onQuickMatch={handleQuickMatch}
-            t={t}
-          />
-        ))}
+        {Object.entries(GAME_CONFIG).map(([gameType, config]) => {
+          const waitingCount = gameStats[gameType]?.waiting || 0;
+          const liveCount = gameStats[gameType]?.live || 0;
+          const isTrending = liveCount >= 2 || waitingCount >= 3 || (waitingCount + liveCount) >= 4;
+          return (
+            <GameCard 
+              key={gameType} 
+              gameType={gameType} 
+              config={config}
+              isSelected={selectedGame === gameType}
+              waitingCount={waitingCount}
+              liveCount={liveCount}
+              isTrending={isTrending}
+              language={language}
+              onSelect={handleGameSelect}
+              onQuickMatch={handleQuickMatch}
+              t={t}
+            />
+          );
+        })}
       </div>
 
       <Card className="p-4">

@@ -990,15 +990,28 @@ export const p2pDisputeRules = pgTable("p2p_dispute_rules", {
   index("idx_p2p_dispute_rules_category").on(table.category),
 ]);
 
+// ==================== P2P FEE TYPE ENUM ====================
+
+export const p2pFeeTypeEnum = pgEnum("p2p_fee_type", ["percentage", "fixed", "hybrid"]);
+
 // ==================== P2P SETTINGS ====================
 
 export const p2pSettings = pgTable("p2p_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Fee configuration
+  feeType: p2pFeeTypeEnum("fee_type").notNull().default("percentage"),
   platformFeePercentage: decimal("platform_fee_percentage", { precision: 5, scale: 4 }).notNull().default("0.005"),
+  platformFeeFixed: decimal("platform_fee_fixed", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  minFee: decimal("min_fee", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  maxFee: decimal("max_fee", { precision: 15, scale: 2 }),
+  // Trade limits
   minTradeAmount: decimal("min_trade_amount", { precision: 15, scale: 2 }).notNull().default("10.00"),
   maxTradeAmount: decimal("max_trade_amount", { precision: 15, scale: 2 }).notNull().default("100000.00"),
+  // Timeouts
   escrowTimeoutHours: integer("escrow_timeout_hours").notNull().default(24),
   paymentTimeoutMinutes: integer("payment_timeout_minutes").notNull().default(15),
+  autoExpireEnabled: boolean("auto_expire_enabled").notNull().default(true),
+  // Status
   isEnabled: boolean("is_enabled").notNull().default(true),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

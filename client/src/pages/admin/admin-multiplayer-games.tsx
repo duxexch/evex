@@ -64,6 +64,7 @@ const gameFormSchema = z.object({
   minPlayers: z.string().min(1, "Minimum players is required"),
   maxPlayers: z.string().min(1, "Maximum players is required"),
   isActive: z.boolean(),
+  isFeatured: z.boolean(),
 });
 
 type GameFormData = z.infer<typeof gameFormSchema>;
@@ -80,6 +81,9 @@ interface MultiplayerGame {
   minPlayers: number;
   maxPlayers: number;
   isActive: boolean;
+  isFeatured: boolean;
+  totalGamesPlayed: number;
+  totalVolume: string;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -132,6 +136,7 @@ function GameForm({
       minPlayers: game?.minPlayers?.toString() || "2",
       maxPlayers: game?.maxPlayers?.toString() || "2",
       isActive: game?.isActive ?? true,
+      isFeatured: game?.isFeatured ?? false,
     },
   });
 
@@ -238,6 +243,26 @@ function GameForm({
             )}
           />
         </div>
+
+        <FormField
+          control={form.control}
+          name="isFeatured"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <FormLabel>Featured Game</FormLabel>
+                <FormDescription>Show prominently on the lobby and dashboard</FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  data-testid="switch-game-featured"
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
 
         <div className="grid grid-cols-2 gap-4">
           <FormField
@@ -872,7 +897,8 @@ export default function AdminMultiplayerGames() {
                 <TableHead>Stake Range</TableHead>
                 <TableHead>House Fee</TableHead>
                 <TableHead>Players</TableHead>
-                <TableHead>Time Limit</TableHead>
+                <TableHead className="text-right">Games Played</TableHead>
+                <TableHead className="text-right">Volume</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -880,7 +906,7 @@ export default function AdminMultiplayerGames() {
             <TableBody>
               {games.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     No games configured. Click "Add Game" to create one.
                   </TableCell>
                 </TableRow>
@@ -892,9 +918,16 @@ export default function AdminMultiplayerGames() {
                     className={liveUpdateHighlight === game.id ? "bg-primary/10 transition-colors duration-1000" : ""}
                   >
                     <TableCell>
-                      <div>
-                        <div className="font-medium" data-testid={`text-game-name-${game.key}`}>{game.nameEn}</div>
-                        <div className="text-sm text-muted-foreground" dir="rtl">{game.nameAr}</div>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-medium" data-testid={`text-game-name-${game.key}`}>{game.nameEn}</div>
+                          <div className="text-sm text-muted-foreground" dir="rtl">{game.nameAr}</div>
+                        </div>
+                        {game.isFeatured && (
+                          <Badge variant="default" className="text-xs" data-testid={`badge-featured-${game.key}`}>
+                            Featured
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -913,8 +946,11 @@ export default function AdminMultiplayerGames() {
                         ? game.minPlayers 
                         : `${game.minPlayers}-${game.maxPlayers}`}
                     </TableCell>
-                    <TableCell>
-                      {game.defaultTimeLimit ? `${Math.floor(game.defaultTimeLimit / 60)}m` : "-"}
+                    <TableCell className="text-right font-medium" data-testid={`text-plays-${game.key}`}>
+                      {(game.totalGamesPlayed || 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-medium" data-testid={`text-volume-${game.key}`}>
+                      {formatCurrency(game.totalVolume || "0")}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

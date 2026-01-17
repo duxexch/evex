@@ -37,7 +37,12 @@ import {
   Users,
   Clock,
   Shield,
+  Settings,
+  DollarSign,
+  Percent,
+  Calculator,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,6 +67,359 @@ async function adminFetch(url: string, options?: RequestInit) {
   });
   if (!res.ok) throw new Error("Failed to fetch");
   return res.json();
+}
+
+interface P2PSettings {
+  id: string;
+  feeType: "percentage" | "fixed" | "hybrid";
+  platformFeePercentage: string;
+  platformFeeFixed: string;
+  minFee: string;
+  maxFee: string | null;
+  minTradeAmount: string;
+  maxTradeAmount: string;
+  escrowTimeoutHours: number;
+  paymentTimeoutMinutes: number;
+  autoExpireEnabled: boolean;
+  isEnabled: boolean;
+  updatedAt: string;
+}
+
+function P2PSettingsPanel({ toast }: { toast: ReturnType<typeof useToast>["toast"] }) {
+  const [testAmount, setTestAmount] = useState("");
+  const [calculatedFee, setCalculatedFee] = useState<{ fee: string; breakdown?: any } | null>(null);
+
+  const { data: settings, isLoading } = useQuery<P2PSettings>({
+    queryKey: ["/api/admin/p2p/settings"],
+    queryFn: () => adminFetch("/api/admin/p2p/settings"),
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ["/api/admin/p2p/analytics"],
+    queryFn: () => adminFetch("/api/admin/p2p/analytics"),
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: async (data: Partial<P2PSettings>) => {
+      return adminFetch("/api/admin/p2p/settings", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/p2p/settings"] });
+      toast({ title: "Settings Updated", description: "P2P settings have been saved" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update settings", variant: "destructive" });
+    },
+  });
+
+  const calculateFeeMutation = useMutation({
+    mutationFn: async (amount: string) => {
+      return adminFetch("/api/admin/p2p/calculate-fee", {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      });
+    },
+    onSuccess: (data) => {
+      setCalculatedFee(data);
+    },
+  });
+
+  const handleUpdateSetting = (key: keyof P2PSettings, value: any) => {
+    updateSettingsMutation.mutate({ [key]: value });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-40" />
+        <Skeleton className="h-40" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-green-500/10">
+                <DollarSign className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Fees Collected</p>
+                <p className="text-2xl font-bold" data-testid="text-total-fees">${parseFloat(analytics?.allTime?.totalFees || "0").toFixed(2)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-blue-500/10">
+                <ArrowLeftRight className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Trade Volume</p>
+                <p className="text-2xl font-bold" data-testid="text-total-volume">${parseFloat(analytics?.allTime?.totalVolume || "0").toFixed(2)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-purple-500/10">
+                <TrendingUp className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">30-Day Fees</p>
+                <p className="text-2xl font-bold" data-testid="text-30day-fees">${parseFloat(analytics?.last30Days?.totalFees || "0").toFixed(2)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-orange-500/10">
+                <Users className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Completed Trades</p>
+                <p className="text-2xl font-bold" data-testid="text-total-trades">{analytics?.allTime?.totalTrades || 0}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {analytics?.byStatus && analytics.byStatus.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Trades by Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4">
+              {analytics.byStatus.map((item: { status: string; count: number }) => (
+                <div key={item.status} className="flex items-center gap-2">
+                  <Badge
+                    variant={
+                      item.status === "completed" ? "default" :
+                      item.status === "cancelled" ? "destructive" :
+                      item.status === "disputed" ? "destructive" :
+                      "secondary"
+                    }
+                    data-testid={`badge-status-${item.status}`}
+                  >
+                    {item.status}
+                  </Badge>
+                  <span className="text-sm font-medium">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Percent className="h-5 w-5" />
+              Fee Configuration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Fee Type</Label>
+              <Select
+                value={settings?.feeType || "percentage"}
+                onValueChange={(value) => handleUpdateSetting("feeType", value)}
+              >
+                <SelectTrigger data-testid="select-fee-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">Percentage Only</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount Only</SelectItem>
+                  <SelectItem value="hybrid">Percentage + Fixed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Percentage Fee (%)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={parseFloat(settings?.platformFeePercentage || "0") * 100}
+                  onChange={(e) => handleUpdateSetting("platformFeePercentage", (parseFloat(e.target.value) / 100).toFixed(4))}
+                  disabled={settings?.feeType === "fixed"}
+                  data-testid="input-fee-percentage"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {(parseFloat(settings?.platformFeePercentage || "0") * 100).toFixed(2)}% per trade
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Fixed Fee ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={settings?.platformFeeFixed || "0"}
+                  onChange={(e) => handleUpdateSetting("platformFeeFixed", e.target.value)}
+                  disabled={settings?.feeType === "percentage"}
+                  data-testid="input-fee-fixed"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Minimum Fee ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={settings?.minFee || "0"}
+                  onChange={(e) => handleUpdateSetting("minFee", e.target.value)}
+                  data-testid="input-min-fee"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Maximum Fee ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={settings?.maxFee || ""}
+                  placeholder="No limit"
+                  onChange={(e) => handleUpdateSetting("maxFee", e.target.value || null)}
+                  data-testid="input-max-fee"
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 border-t">
+              <Label className="flex items-center gap-2 mb-3">
+                <Calculator className="h-4 w-4" />
+                Fee Calculator
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="Enter trade amount"
+                  value={testAmount}
+                  onChange={(e) => setTestAmount(e.target.value)}
+                  data-testid="input-test-amount"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => calculateFeeMutation.mutate(testAmount)}
+                  disabled={!testAmount}
+                  data-testid="button-calculate-fee"
+                >
+                  Calculate
+                </Button>
+              </div>
+              {calculatedFee && (
+                <div className="mt-2 p-2 bg-muted rounded-md">
+                  <p className="text-sm">
+                    Fee: <span className="font-bold">${calculatedFee.fee}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Trade Limits & Timeouts
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Min Trade Amount ($)</Label>
+                <Input
+                  type="number"
+                  value={settings?.minTradeAmount || "10"}
+                  onChange={(e) => handleUpdateSetting("minTradeAmount", e.target.value)}
+                  data-testid="input-min-trade"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Max Trade Amount ($)</Label>
+                <Input
+                  type="number"
+                  value={settings?.maxTradeAmount || "100000"}
+                  onChange={(e) => handleUpdateSetting("maxTradeAmount", e.target.value)}
+                  data-testid="input-max-trade"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Escrow Timeout (hours)</Label>
+                <Input
+                  type="number"
+                  value={settings?.escrowTimeoutHours || 24}
+                  onChange={(e) => handleUpdateSetting("escrowTimeoutHours", parseInt(e.target.value))}
+                  data-testid="input-escrow-timeout"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Timeout (minutes)</Label>
+                <Input
+                  type="number"
+                  value={settings?.paymentTimeoutMinutes || 15}
+                  onChange={(e) => handleUpdateSetting("paymentTimeoutMinutes", parseInt(e.target.value))}
+                  data-testid="input-payment-timeout"
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 border-t space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Auto-Expire Trades</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically cancel expired trades
+                  </p>
+                </div>
+                <Switch
+                  checked={settings?.autoExpireEnabled ?? true}
+                  onCheckedChange={(checked) => handleUpdateSetting("autoExpireEnabled", checked)}
+                  data-testid="switch-auto-expire"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>P2P Trading Enabled</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable/disable all P2P trading
+                  </p>
+                </div>
+                <Switch
+                  checked={settings?.isEnabled ?? true}
+                  onCheckedChange={(checked) => handleUpdateSetting("isEnabled", checked)}
+                  data-testid="switch-p2p-enabled"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminP2PPage() {
@@ -377,6 +735,10 @@ export default function AdminP2PPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-settings">
+            <Settings className="h-4 w-4 mr-1" />
+            Settings
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="offers" className="space-y-4">
@@ -643,6 +1005,10 @@ export default function AdminP2PPage() {
               )}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-6">
+          <P2PSettingsPanel toast={toast} />
         </TabsContent>
       </Tabs>
 

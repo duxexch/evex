@@ -13,8 +13,43 @@ import {
   gameplayEmojis, gameplayMessages, gameSections, advertisements,
   insertGameSectionSchema, insertAdvertisementSchema,
   insertCountryPaymentMethodSchema, insertSocialPlatformSchema,
-  liveGameSessions
+  liveGameSessions, p2pSettings, p2pTrades
 } from "@shared/schema";
+
+// Helper function to calculate P2P platform fee based on settings
+async function calculateP2PFee(tradeAmount: number): Promise<number> {
+  const [settings] = await db.select().from(p2pSettings).limit(1);
+  if (!settings) {
+    // Default to 0.5% if no settings configured
+    return tradeAmount * 0.005;
+  }
+  
+  let fee = 0;
+  const percentageRate = parseFloat(settings.platformFeePercentage);
+  const fixedAmount = parseFloat(settings.platformFeeFixed);
+  const minFee = parseFloat(settings.minFee);
+  const maxFee = settings.maxFee ? parseFloat(settings.maxFee) : null;
+  
+  switch (settings.feeType) {
+    case "percentage":
+      fee = tradeAmount * percentageRate;
+      break;
+    case "fixed":
+      fee = fixedAmount;
+      break;
+    case "hybrid":
+      fee = (tradeAmount * percentageRate) + fixedAmount;
+      break;
+    default:
+      fee = tradeAmount * 0.005;
+  }
+  
+  // Apply min/max bounds
+  if (fee < minFee) fee = minFee;
+  if (maxFee !== null && fee > maxFee) fee = maxFee;
+  
+  return fee;
+}
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -2417,7 +2452,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const price = parseFloat(offer.price);
       const fiatAmount = tradeAmount * price;
-      const platformFee = tradeAmount * 0.005;
+      const platformFee = await calculateP2PFee(tradeAmount);
       
       const isBuyer = offer.type === "sell";
       const buyerId = isBuyer ? req.user!.id : offer.userId;
@@ -6055,6 +6090,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Start the scheduler
   setInterval(processScheduledChanges, SCHEDULER_INTERVAL);
   console.log(`[Scheduler] Started scheduled config changes processor (interval: ${SCHEDULER_INTERVAL / 1000}s)`);
+
+  // P2P Trade Expiry Scheduler - auto-cancels expired trades when enabled
+  const P2P_EXPIRY_INTERVAL = 60 * 1000; // 1 minute
+  
+  async function processExpiredTrades() {
+    try {
+      // Check if auto-expiry is enabled in settings
+      const [settings] = await db.select().from(p2pSettings).limit(1);
+      if (!settings?.autoExpireEnabled) {
+        return; // Auto-cancel is disabled
+      }
+      
+      // Get expired trades (pending or paid but past expiry time)
+      const now = new Date();
+      const expiredTrades = await db.select()
+        .from(p2pTrades)
+        .where(and(
+          or(eq(p2pTrades.status, "pending"), eq(p2pTrades.status, "paid")),
+          sql`${p2pTrades.expiresAt} <= ${now}`
+        ))
+        .limit(50); // Process in batches to avoid blocking
+      
+      for (const trade of expiredTrades) {
+        try {
+          // Cancel using atomic operation (credits seller back to escrow)
+          const result = await storage.cancelP2PTradeAtomic(trade.id, trade.sellerId, "Trade expired - auto-cancelled");
+          
+          if (result.success) {
+            console.log(`[P2P Scheduler] Auto-cancelled expired trade ${trade.id}`);
+            
+            // Send notifications to both parties
+            await storage.createNotification({
+              userId: trade.buyerId,
+              type: 'p2p',
+              title: 'Trade Expired',
+              message: `Your trade #${trade.id.slice(0, 8)} has expired and was auto-cancelled.`,
+              data: { tradeId: trade.id }
+            });
+            
+            await storage.createNotification({
+              userId: trade.sellerId,
+              type: 'p2p',
+              title: 'Trade Expired',
+              message: `Trade #${trade.id.slice(0, 8)} has expired and was auto-cancelled. Funds returned to your balance.`,
+              data: { tradeId: trade.id }
+            });
+          } else {
+            console.error(`[P2P Scheduler] Failed to auto-cancel trade ${trade.id}: ${result.error}`);
+          }
+        } catch (tradeError) {
+          console.error(`[P2P Scheduler] Error processing expired trade ${trade.id}:`, tradeError);
+        }
+      }
+      
+      if (expiredTrades.length > 0) {
+        console.log(`[P2P Scheduler] Processed ${expiredTrades.length} expired trades`);
+      }
+    } catch (error) {
+      console.error('[P2P Scheduler] Error processing expired trades:', error);
+    }
+  }
+  
+  // Start P2P expiry scheduler
+  setInterval(processExpiredTrades, P2P_EXPIRY_INTERVAL);
+  console.log(`[P2P Scheduler] Started expired trades processor (interval: ${P2P_EXPIRY_INTERVAL / 1000}s)`);
 
   return httpServer;
 }

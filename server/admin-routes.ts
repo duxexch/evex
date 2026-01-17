@@ -4,7 +4,7 @@ import { z } from "zod";
 import { 
   featureFlags, themes, adminAuditLogs, users, transactions, complaints,
   insertFeatureFlagSchema, insertAdminAuditLogSchema, supportContacts, insertSupportContactSchema,
-  p2pOffers, p2pTrades, p2pDisputes, p2pTransactionLogs,
+  p2pOffers, p2pTrades, p2pDisputes, p2pTransactionLogs, p2pSettings,
   appSettings, loginMethodConfigs, managedLanguages, badgeCatalog, broadcastNotifications, chatSettings, gameplaySettings,
   insertAppSettingSchema, insertLoginMethodConfigSchema, insertManagedLanguageSchema, insertBadgeCatalogSchema,
   insertBroadcastNotificationSchema, insertChatSettingSchema, insertGameplaySettingSchema,
@@ -2230,6 +2230,247 @@ export function registerAdminRoutes(app: Express) {
         return res.status(404).json({ error: "Alert not found" });
       }
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== P2P SETTINGS ====================
+
+  // Get P2P settings
+  app.get("/api/admin/p2p/settings", adminAuthMiddleware, async (_req: AdminRequest, res: Response) => {
+    try {
+      const [settings] = await db.select().from(p2pSettings).limit(1);
+      if (!settings) {
+        // Create default settings if none exist
+        const [newSettings] = await db.insert(p2pSettings).values({}).returning();
+        return res.json(newSettings);
+      }
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update P2P settings
+  const updateP2pSettingsSchema = z.object({
+    feeType: z.enum(["percentage", "fixed", "hybrid"]).optional(),
+    platformFeePercentage: z.string().optional(),
+    platformFeeFixed: z.string().optional(),
+    minFee: z.string().optional(),
+    maxFee: z.string().nullable().optional(),
+    minTradeAmount: z.string().optional(),
+    maxTradeAmount: z.string().optional(),
+    escrowTimeoutHours: z.number().int().positive().optional(),
+    paymentTimeoutMinutes: z.number().int().positive().optional(),
+    autoExpireEnabled: z.boolean().optional(),
+    isEnabled: z.boolean().optional(),
+  });
+
+  app.put("/api/admin/p2p/settings", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const data = updateP2pSettingsSchema.parse(req.body);
+      
+      // Get current settings or create if not exists
+      let [existing] = await db.select().from(p2pSettings).limit(1);
+      if (!existing) {
+        [existing] = await db.insert(p2pSettings).values({}).returning();
+      }
+      
+      const previousValue = JSON.stringify(existing);
+      
+      // Update settings
+      const [updated] = await db.update(p2pSettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(p2pSettings.id, existing.id))
+        .returning();
+      
+      // Log admin action
+      await logAdminAction(
+        req.admin!.id,
+        "update",
+        "p2p_settings",
+        existing.id,
+        { previousValue, newValue: JSON.stringify(updated) },
+        req
+      );
+      
+      // Broadcast settings change
+      broadcastSystemEvent({
+        type: "p2p_settings_changed",
+        data: updated,
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Calculate P2P fee for a given amount (utility endpoint)
+  app.post("/api/admin/p2p/calculate-fee", adminAuthMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { amount } = req.body;
+      if (!amount || isNaN(parseFloat(amount))) {
+        return res.status(400).json({ error: "Valid amount required" });
+      }
+      
+      const [settings] = await db.select().from(p2pSettings).limit(1);
+      if (!settings) {
+        return res.json({ fee: "0.00", feeType: "none" });
+      }
+      
+      const tradeAmount = parseFloat(amount);
+      let fee = 0;
+      
+      switch (settings.feeType) {
+        case "percentage":
+          fee = tradeAmount * parseFloat(settings.platformFeePercentage);
+          break;
+        case "fixed":
+          fee = parseFloat(settings.platformFeeFixed);
+          break;
+        case "hybrid":
+          // Percentage + fixed
+          fee = (tradeAmount * parseFloat(settings.platformFeePercentage)) + parseFloat(settings.platformFeeFixed);
+          break;
+      }
+      
+      // Apply min/max bounds
+      const minFee = parseFloat(settings.minFee);
+      const maxFee = settings.maxFee ? parseFloat(settings.maxFee) : null;
+      
+      if (fee < minFee) fee = minFee;
+      if (maxFee !== null && fee > maxFee) fee = maxFee;
+      
+      res.json({ 
+        fee: fee.toFixed(2), 
+        feeType: settings.feeType,
+        breakdown: {
+          percentageFee: (tradeAmount * parseFloat(settings.platformFeePercentage)).toFixed(2),
+          fixedFee: settings.platformFeeFixed,
+          minFee: settings.minFee,
+          maxFee: settings.maxFee,
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // P2P Analytics - Revenue summary
+  app.get("/api/admin/p2p/analytics", adminAuthMiddleware, async (_req: AdminRequest, res: Response) => {
+    try {
+      // Get total completed trades and fees collected
+      const completedTrades = await db.select({
+        totalTrades: sql<number>`count(*)`,
+        totalVolume: sql<string>`coalesce(sum(cast(${p2pTrades.fiatAmount} as decimal)), 0)`,
+        totalFees: sql<string>`coalesce(sum(cast(${p2pTrades.platformFee} as decimal)), 0)`,
+      })
+      .from(p2pTrades)
+      .where(eq(p2pTrades.status, "completed"));
+      
+      // Get trades by status
+      const tradesByStatus = await db.select({
+        status: p2pTrades.status,
+        count: sql<number>`count(*)`,
+      })
+      .from(p2pTrades)
+      .groupBy(p2pTrades.status);
+      
+      // Get recent 30-day stats
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const recentStats = await db.select({
+        totalTrades: sql<number>`count(*)`,
+        totalVolume: sql<string>`coalesce(sum(cast(${p2pTrades.fiatAmount} as decimal)), 0)`,
+        totalFees: sql<string>`coalesce(sum(cast(${p2pTrades.platformFee} as decimal)), 0)`,
+      })
+      .from(p2pTrades)
+      .where(and(
+        eq(p2pTrades.status, "completed"),
+        gte(p2pTrades.completedAt, thirtyDaysAgo)
+      ));
+      
+      res.json({
+        allTime: completedTrades[0],
+        last30Days: recentStats[0],
+        byStatus: tradesByStatus,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get expired trades (for auto-cancel processing)
+  app.get("/api/admin/p2p/expired-trades", adminAuthMiddleware, async (_req: AdminRequest, res: Response) => {
+    try {
+      const now = new Date();
+      const expiredTrades = await db.select()
+        .from(p2pTrades)
+        .where(and(
+          or(eq(p2pTrades.status, "pending"), eq(p2pTrades.status, "paid")),
+          lte(p2pTrades.expiresAt, now)
+        ))
+        .orderBy(desc(p2pTrades.expiresAt));
+      
+      res.json(expiredTrades);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Auto-cancel expired trade
+  app.post("/api/admin/p2p/trades/:id/auto-cancel", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      // Get trade
+      const [trade] = await db.select().from(p2pTrades).where(eq(p2pTrades.id, id));
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      // Check if trade is actually expired
+      if (!trade.expiresAt || new Date(trade.expiresAt) > new Date()) {
+        return res.status(400).json({ error: "Trade has not expired" });
+      }
+      
+      if (trade.status !== "pending" && trade.status !== "paid") {
+        return res.status(400).json({ error: "Trade cannot be cancelled" });
+      }
+      
+      // Use atomic cancel operation
+      const result = await storage.cancelP2PTradeAtomic(id, trade.sellerId, "Trade expired - auto-cancelled");
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      // Log admin action
+      await logAdminAction(
+        req.admin!.id,
+        "auto_cancel",
+        "p2p_trade",
+        id,
+        { reason: "Trade expired - auto-cancelled" },
+        req
+      );
+      
+      // Add transaction log
+      await db.insert(p2pTransactionLogs).values({
+        tradeId: id,
+        action: "trade_cancelled",
+        userId: req.admin!.id,
+        description: "Trade expired - auto-cancelled by system",
+        metadata: JSON.stringify({ reason: "auto_expire", cancelledBy: "system" }),
+      });
+      
+      res.json({ success: true, trade: result.trade });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

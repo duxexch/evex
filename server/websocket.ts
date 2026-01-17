@@ -1265,7 +1265,7 @@ export function getConnectedClients() {
 }
 
 export function broadcastSystemEvent(event: {
-  type: 'config_updated' | 'game_config_changed' | 'maintenance' | 'system_message';
+  type: 'config_updated' | 'game_config_changed' | 'maintenance' | 'system_message' | 'p2p_settings_changed';
   data?: any;
 }) {
   const message = JSON.stringify({ type: 'system_event', event });

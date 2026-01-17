@@ -1,0 +1,214 @@
+VEX Platform: P2P & Multiplayer Games Full Enhancement Plan
+1. P2P Trading System Enhancements
+Objective
+
+Make the P2P section fully functional, profitable, and safe.
+
+Provide admins full control over trades, commissions, disputes, and notifications.
+
+Ensure real-time interaction, auditability, and user engagement.
+
+Proposed Features
+A. Commission & Fee Management
+
+Flexible commission models:
+
+Fixed fee per transaction.
+
+Percentage fee based on trade amount.
+
+Admin panel controls for per-game or per-trade type commissions.
+
+Real-time update via WebSocket for any commission changes.
+
+B. Trade Flow Enhancements
+
+Atomic Escrow Operations:
+
+Hold buyer funds securely.
+
+Release to seller on completion or refund on cancellation.
+
+Trade Expiry / Auto-Cancel:
+
+Automatically cancel expired trades and refund escrow.
+
+Notify both parties.
+
+Trade Status Tracking:
+
+Real-time updates on trade status: pending, completed, cancelled, disputed.
+
+Dispute Resolution System:
+
+Escalation to admin for arbitration.
+
+Inline dispute actions: escalate, resolve, close, comment.
+
+Audit logs for each action.
+
+C. Notifications & Alerts
+
+Real-Time WebSocket Notifications:
+
+Notify admin and users of trade events, disputes, or cancellations.
+
+Clicking notifications should redirect to the relevant section (trade, dispute, or game).
+
+Admin Dashboard Alerts:
+
+Live alerts with toast notifications and visual highlighting for critical events.
+
+Filterable by severity, type, and game category.
+
+D. Analytics & Profit Tracking
+
+Track revenue per game, per trade, and per user.
+
+Display total commissions earned in admin dashboard.
+
+Exportable reports for revenue analysis.
+
+E. Security & Validation
+
+JWT authentication for all operations.
+
+Amount, limits, and balance checks server-side.
+
+Transaction atomicity with rollback on failure.
+
+Fraud detection triggers (e.g., repeated cancellations, abnormal trade patterns).
+
+2. Multiplayer Games Management Enhancements
+Objective
+
+Fully synchronize all multiplayer games in the admin panel.
+
+Ensure real-time updates, stable configurations, and visibility into game metrics.
+
+Allow dynamic updates for user engagement and monetization.
+
+Proposed Features
+A. Game Catalog Management
+
+Display all games added in the database (currently some added games do not appear in admin panel).
+
+Organize games by categories (e.g., Strategy, Board, Card).
+
+Allow admin to add, edit, activate/deactivate, or delete games.
+
+B. Game Settings Control
+
+Pricing configuration:
+
+Free plays vs. paid plays.
+
+Stake limits (min/max).
+
+Rewards or commissions per game.
+
+Player limits per game (2, 4, etc.).
+
+Game icon, description, rules, and metadata.
+
+Scheduling support (activate/deactivate games at certain times).
+
+C. Metrics & Analytics
+
+Track:
+
+Number of plays (free and paid separately).
+
+Earnings per game.
+
+Peak active players per game.
+
+Display leaderboard integration per game.
+
+D. Real-Time Sync
+
+When admin updates a game:
+
+All connected users see changes immediately (WebSocket).
+
+Config version and live update indicators visible to admins.
+
+Prevent stale configs on client side.
+
+E. UI/UX Enhancements
+
+Game sections visible in admin panel with sortable and filterable table views.
+
+Highlight new updates and recent activity.
+
+Inline editing for quick adjustments.
+
+Toast notifications for successful updates.
+
+3. User Engagement & Profit Strategy
+
+Monetization:
+
+Introduce game commissions for P2P trades.
+
+Offer premium access or limited free plays.
+
+Gamify free vs. paid plays (show “X free plays left”).
+
+Retention:
+
+Real-time notifications for trade offers, disputes, or game updates.
+
+Highlight new games or trending games on dashboard.
+
+Attractiveness:
+
+Show detailed metrics and stats for competitive games.
+
+Enable social or spectator features to engage users further.
+
+4. Technical Considerations
+
+Database as single source of truth for games and P2P trades.
+
+Admin panel fully integrated with real-time WebSocket updates.
+
+Storage layer methods for atomic operations and idempotency.
+
+Comprehensive audit logs for all admin and user actions.
+
+Validation with Zod or similar schema enforcement.
+
+Suggested Implementation Phases
+
+Phase 1: P2P Core Stability
+
+Atomic escrow operations.
+
+Commission configuration (fixed/percentage).
+
+Trade expiry auto-cancel.
+
+Phase 2: Multiplayer Game Integration
+
+Admin panel sync with database.
+
+Real-time WebSocket updates.
+
+Pricing, free/paid plays, icons, metadata.
+
+Phase 3: Engagement & Analytics
+
+Real-time notifications.
+
+Metrics dashboards.
+
+Leaderboards per game.
+
+Phase 4: Advanced Features
+
+A/B testing for game settings.
+
+Dynamic commissions per game type.
+
+Gamification features for retention.

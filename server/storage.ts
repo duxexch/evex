@@ -7,7 +7,7 @@ import {
   userRelationships, socialPlatforms,
   liveGameSessions, gameMoves, gameSpectators, giftItems, spectatorGifts, gameChatMessages,
   achievements, userAchievements, seasons, seasonalStats, seasonRewards,
-  p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics,
+  p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics, p2pSettings,
   multiplayerGames, systemConfig, adminAuditLogs,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
