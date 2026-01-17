@@ -29,8 +29,32 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Coins,
+  ArrowRightLeft,
+  Loader2
 } from "lucide-react";
+
+interface ProjectCurrencySettings {
+  currencyName: string;
+  currencySymbol: string;
+  exchangeRate: string;
+  minConversionAmount: string;
+  maxConversionAmount: string;
+  conversionCommissionRate: string;
+  useInGames: boolean;
+  useInP2P: boolean;
+  isActive: boolean;
+}
+
+interface ProjectCurrencyWallet {
+  id: string;
+  purchasedBalance: string;
+  earnedBalance: string;
+  totalBalance: string;
+  currencyName: string;
+  currencySymbol: string;
+}
 
 export default function WalletPage() {
   const { t, language } = useI18n();
@@ -39,8 +63,10 @@ export default function WalletPage() {
   
   const [showDeposit, setShowDeposit] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [convertAmount, setConvertAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [isBalanceHidden, setIsBalanceHidden] = useState(() => {
     return localStorage.getItem('hideBalance') === 'true';
@@ -52,6 +78,40 @@ export default function WalletPage() {
 
   const { data: walletStats } = useQuery<any>({
     queryKey: ['/api/wallet/stats'],
+  });
+
+  const { data: currencySettings } = useQuery<ProjectCurrencySettings>({
+    queryKey: ['/api/project-currency/settings'],
+    retry: false,
+  });
+
+  const { data: projectWallet, isLoading: walletLoading } = useQuery<ProjectCurrencyWallet>({
+    queryKey: ['/api/project-currency/wallet'],
+    enabled: !!currencySettings?.isActive,
+  });
+
+  const { data: currencyConversions } = useQuery<any[]>({
+    queryKey: ['/api/project-currency/conversions'],
+    enabled: !!currencySettings?.isActive,
+  });
+
+  const convertMutation = useMutation({
+    mutationFn: (data: { amount: string }) =>
+      apiRequest('POST', '/api/project-currency/convert', data),
+    onSuccess: (res: any) => {
+      const message = res.status === 'pending' 
+        ? 'Conversion submitted for approval' 
+        : `Converted to ${currencySettings?.currencySymbol || 'VXC'} successfully!`;
+      toast({ title: t('common.success'), description: message });
+      queryClient.invalidateQueries({ queryKey: ['/api/project-currency/wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/project-currency/conversions'] });
+      refreshUser?.();
+      setShowConvert(false);
+      setConvertAmount("");
+    },
+    onError: (err: any) => {
+      toast({ title: t('common.error'), description: err.message, variant: "destructive" });
+    }
   });
 
   const depositMutation = useMutation({
@@ -187,6 +247,93 @@ export default function WalletPage() {
           </CardContent>
         </Card>
       </div>
+
+      {currencySettings?.isActive && (
+        <Card className="border-primary/30">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <Coins className="h-5 w-5 text-primary" />
+                {currencySettings.currencyName || 'VEX Coin'}
+              </CardTitle>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={toggleBalanceVisibility}
+                data-testid="button-toggle-vxc-balance"
+              >
+                {isBalanceHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <CardDescription>
+              {currencySettings.useInGames && currencySettings.useInP2P 
+                ? 'Use for games and P2P trading'
+                : currencySettings.useInGames 
+                  ? 'Use for games'
+                  : currencySettings.useInP2P 
+                    ? 'Use for P2P trading' 
+                    : 'Platform currency'
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <div className="text-3xl font-bold text-primary balance-glow mb-2" data-testid="text-vxc-balance">
+                  {isBalanceHidden 
+                    ? '******' 
+                    : `${currencySettings.currencySymbol} ${parseFloat(projectWallet?.totalBalance || "0").toFixed(2)}`
+                  }
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <div className="flex justify-between">
+                    <span>Purchased:</span>
+                    <span>{currencySettings.currencySymbol} {parseFloat(projectWallet?.purchasedBalance || "0").toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Earned:</span>
+                    <span>{currencySettings.currencySymbol} {parseFloat(projectWallet?.earnedBalance || "0").toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col justify-center gap-3">
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium">Exchange Rate: </span>
+                  1 USD = {currencySettings.exchangeRate} {currencySettings.currencySymbol}
+                </div>
+                <Button onClick={() => setShowConvert(true)} data-testid="button-convert-to-vxc">
+                  <ArrowRightLeft className="h-4 w-4 me-2" />
+                  Convert USD to {currencySettings.currencySymbol}
+                </Button>
+              </div>
+            </div>
+            
+            {currencyConversions && currencyConversions.length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <h4 className="text-sm font-medium mb-2">Recent Conversions</h4>
+                <div className="space-y-2">
+                  {currencyConversions.slice(0, 3).map((conv: any) => (
+                    <div key={conv.id} className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded" data-testid={`row-conversion-${conv.id}`}>
+                      <div className="flex items-center gap-2">
+                        <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
+                        <span>${parseFloat(conv.baseCurrencyAmount).toFixed(2)}</span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="text-primary">{currencySettings.currencySymbol} {parseFloat(conv.netAmount).toFixed(2)}</span>
+                      </div>
+                      <Badge 
+                        variant={conv.status === 'completed' ? 'default' : conv.status === 'pending' ? 'secondary' : 'destructive'}
+                        className="text-xs"
+                      >
+                        {conv.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-2">
@@ -349,6 +496,94 @@ export default function WalletPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {currencySettings?.isActive && (
+        <Dialog open={showConvert} onOpenChange={setShowConvert}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Coins className="h-5 w-5 text-primary" />
+                Convert to {currencySettings.currencyName || 'VEX Coin'}
+              </DialogTitle>
+              <DialogDescription>
+                Convert your USD balance to {currencySettings.currencySymbol}. 
+                Rate: 1 USD = {currencySettings.exchangeRate} {currencySettings.currencySymbol}
+                {parseFloat(currencySettings.conversionCommissionRate) > 0 && (
+                  <> (Fee: {(parseFloat(currencySettings.conversionCommissionRate) * 100).toFixed(1)}%)</>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                <span className="text-muted-foreground">Available Balance: </span>
+                <span className="font-bold text-primary">${parseFloat(user?.balance || "0").toFixed(2)}</span>
+              </div>
+              <div>
+                <Label>Amount (USD)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={currencySettings.minConversionAmount}
+                  max={currencySettings.maxConversionAmount}
+                  value={convertAmount}
+                  onChange={(e) => setConvertAmount(e.target.value)}
+                  placeholder={`Min: $${currencySettings.minConversionAmount}`}
+                  className="mt-2"
+                  data-testid="input-convert-amount"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Min: ${currencySettings.minConversionAmount} | Max: ${currencySettings.maxConversionAmount}
+                </p>
+              </div>
+              {convertAmount && parseFloat(convertAmount) > 0 && (
+                <div className="p-3 bg-primary/10 rounded-lg border border-primary/30">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>You pay:</span>
+                    <span className="font-medium">${parseFloat(convertAmount).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Gross amount:</span>
+                    <span>{currencySettings.currencySymbol} {(parseFloat(convertAmount) * parseFloat(currencySettings.exchangeRate)).toFixed(2)}</span>
+                  </div>
+                  {parseFloat(currencySettings.conversionCommissionRate) > 0 && (
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Fee ({(parseFloat(currencySettings.conversionCommissionRate) * 100).toFixed(1)}%):</span>
+                      <span>-{currencySettings.currencySymbol} {(parseFloat(convertAmount) * parseFloat(currencySettings.exchangeRate) * parseFloat(currencySettings.conversionCommissionRate)).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <Separator className="my-2" />
+                  <div className="flex justify-between text-base font-bold text-primary">
+                    <span>You receive:</span>
+                    <span>
+                      {currencySettings.currencySymbol} {(
+                        parseFloat(convertAmount) * parseFloat(currencySettings.exchangeRate) * (1 - parseFloat(currencySettings.conversionCommissionRate))
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowConvert(false)}>{t('common.cancel')}</Button>
+              <Button 
+                onClick={() => convertMutation.mutate({ amount: convertAmount })}
+                disabled={
+                  !convertAmount || 
+                  parseFloat(convertAmount) <= 0 ||
+                  parseFloat(convertAmount) < parseFloat(currencySettings.minConversionAmount) ||
+                  parseFloat(convertAmount) > parseFloat(currencySettings.maxConversionAmount) ||
+                  parseFloat(convertAmount) > parseFloat(user?.balance || "0") ||
+                  convertMutation.isPending
+                }
+                data-testid="button-confirm-convert"
+              >
+                {convertMutation.isPending && <Loader2 className="h-4 w-4 me-2 animate-spin" />}
+                Convert to {currencySettings.currencySymbol}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
