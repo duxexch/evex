@@ -60,15 +60,61 @@ interface GameConfigItem {
   icon: typeof Crown;
   color: string;
   gradient: string;
+  minStake?: number;
+  maxStake?: number;
+  houseFee?: number;
 }
 
-const GAME_CONFIG: Record<string, GameConfigItem> = {
+interface MultiplayerGameFromAPI {
+  id: string;
+  key: string;
+  nameEn: string;
+  nameAr: string;
+  minStake: string;
+  maxStake: string;
+  houseFee: string;
+  isActive: boolean;
+}
+
+const GAME_ICONS: Record<string, { icon: typeof Crown; color: string; gradient: string }> = {
+  chess: { icon: Crown, color: 'bg-amber-500/20 text-amber-500 border-amber-500/30', gradient: 'from-amber-500/20 to-amber-600/10' },
+  domino: { icon: Target, color: 'bg-blue-500/20 text-blue-500 border-blue-500/30', gradient: 'from-blue-500/20 to-blue-600/10' },
+  backgammon: { icon: Shuffle, color: 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30', gradient: 'from-emerald-500/20 to-emerald-600/10' },
+  tarneeb: { icon: Gem, color: 'bg-purple-500/20 text-purple-500 border-purple-500/30', gradient: 'from-purple-500/20 to-purple-600/10' },
+  baloot: { icon: Gem, color: 'bg-rose-500/20 text-rose-500 border-rose-500/30', gradient: 'from-rose-500/20 to-rose-600/10' },
+};
+
+const DEFAULT_GAME_STYLE = { icon: Gamepad2, color: 'bg-gray-500/20 text-gray-500 border-gray-500/30', gradient: 'from-gray-500/20 to-gray-600/10' };
+
+const FALLBACK_GAME_CONFIG: Record<string, GameConfigItem> = {
   chess: { name: 'Chess', nameAr: 'شطرنج', icon: Crown, color: 'bg-amber-500/20 text-amber-500 border-amber-500/30', gradient: 'from-amber-500/20 to-amber-600/10' },
   domino: { name: 'Domino', nameAr: 'دومينو', icon: Target, color: 'bg-blue-500/20 text-blue-500 border-blue-500/30', gradient: 'from-blue-500/20 to-blue-600/10' },
   backgammon: { name: 'Backgammon', nameAr: 'طاولة', icon: Shuffle, color: 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30', gradient: 'from-emerald-500/20 to-emerald-600/10' },
   tarneeb: { name: 'Tarneeb', nameAr: 'طرنيب', icon: Gem, color: 'bg-purple-500/20 text-purple-500 border-purple-500/30', gradient: 'from-purple-500/20 to-purple-600/10' },
   baloot: { name: 'Baloot', nameAr: 'بلوت', icon: Gem, color: 'bg-rose-500/20 text-rose-500 border-rose-500/30', gradient: 'from-rose-500/20 to-rose-600/10' },
 };
+
+function buildGameConfig(apiGames: MultiplayerGameFromAPI[]): Record<string, GameConfigItem> {
+  if (!apiGames || apiGames.length === 0) {
+    return FALLBACK_GAME_CONFIG;
+  }
+  
+  const config: Record<string, GameConfigItem> = {};
+  for (const game of apiGames) {
+    const iconStyle = GAME_ICONS[game.key] || DEFAULT_GAME_STYLE;
+    config[game.key] = {
+      name: game.nameEn,
+      nameAr: game.nameAr,
+      icon: iconStyle.icon,
+      color: iconStyle.color,
+      gradient: iconStyle.gradient,
+      minStake: parseFloat(game.minStake),
+      maxStake: parseFloat(game.maxStake),
+      houseFee: parseFloat(game.houseFee),
+    };
+  }
+  return config;
+}
 
 const RANK_COLORS: Record<string, string> = {
   bronze: "bg-amber-700/20 text-amber-600 border-amber-700/30",
@@ -124,6 +170,7 @@ interface ChallengeRowProps {
   onResume: (id: string) => void;
   isJoining: boolean;
   t: (key: string) => string;
+  gameConfig: Record<string, GameConfigItem>;
 }
 
 const ChallengeRow = memo(function ChallengeRow({ 
@@ -135,9 +182,11 @@ const ChallengeRow = memo(function ChallengeRow({
   onWatch, 
   onResume,
   isJoining,
-  t 
+  t,
+  gameConfig
 }: ChallengeRowProps) {
-  const config = GAME_CONFIG[challenge.gameType] || GAME_CONFIG.chess;
+  const fallbackConfig = { name: challenge.gameType, nameAr: challenge.gameType, icon: Gamepad2, color: DEFAULT_GAME_STYLE.color, gradient: DEFAULT_GAME_STYLE.gradient };
+  const config = gameConfig[challenge.gameType] || fallbackConfig;
   const Icon = config.icon;
 
   return (
@@ -335,6 +384,13 @@ export default function GameLobbyPage() {
     refetchInterval: 5000,
     staleTime: 2000,
   });
+
+  const { data: apiGames = [] } = useQuery<MultiplayerGameFromAPI[]>({
+    queryKey: ['/api/multiplayer-games'],
+    staleTime: 60000, // Cache for 1 minute
+  });
+
+  const GAME_CONFIG = useMemo(() => buildGameConfig(apiGames), [apiGames]);
 
   useEffect(() => {
     const currentIds = availableChallenges.map(c => c.id);
@@ -682,6 +738,7 @@ export default function GameLobbyPage() {
                         onResume={handleResume}
                         isJoining={joinChallengeMutation.isPending}
                         t={t}
+                        gameConfig={GAME_CONFIG}
                       />
                     ))}
                   </div>
@@ -724,6 +781,7 @@ export default function GameLobbyPage() {
                         onResume={handleResume}
                         isJoining={joinChallengeMutation.isPending}
                         t={t}
+                        gameConfig={GAME_CONFIG}
                       />
                     ))}
                   </div>
@@ -769,6 +827,7 @@ export default function GameLobbyPage() {
                         onResume={handleResume}
                         isJoining={joinChallengeMutation.isPending}
                         t={t}
+                        gameConfig={GAME_CONFIG}
                       />
                     ))}
                   </div>
