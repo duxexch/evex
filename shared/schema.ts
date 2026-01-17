@@ -7,7 +7,7 @@ import { z } from "zod";
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "agent", "affiliate", "player"]);
 export const userStatusEnum = pgEnum("user_status", ["active", "inactive", "suspended", "banned"]);
-export const gameStatusEnum = pgEnum("game_status", ["active", "inactive", "maintenance"]);
+export const gameStatusEnum = pgEnum("game_status", ["active", "listed", "inactive", "maintenance"]);
 export const gameVolatilityEnum = pgEnum("game_volatility", ["low", "medium", "high"]);
 export const transactionTypeEnum = pgEnum("transaction_type", ["deposit", "withdrawal", "stake", "win", "bonus", "commission", "refund", "gift_sent", "gift_received"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "approved", "rejected", "completed", "cancelled"]);
@@ -269,6 +269,8 @@ export const linkAnalyticsRelations = relations(linkAnalytics, ({ one }) => ({
 
 // ==================== MULTIPLAYER GAMES (Single Source of Truth) ====================
 
+export const freePlayPeriodEnum = pgEnum("free_play_period", ["daily", "weekly", "monthly"]);
+
 export const multiplayerGames = pgTable("multiplayer_games", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   key: text("key").notNull().unique(), // chess, backgammon, domino, tarneeb, baloot
@@ -279,13 +281,19 @@ export const multiplayerGames = pgTable("multiplayer_games", {
   iconName: text("icon_name").notNull().default("Gamepad2"), // Lucide icon name
   colorClass: text("color_class").notNull().default("bg-primary/20 text-primary"), // Tailwind color classes
   gradientClass: text("gradient_class").default("from-primary/20 to-primary/10"),
+  category: text("category").notNull().default("multiplayer"), // multiplayer, crash, dice, wheel, slots, jackpot
+  status: gameStatusEnum("status").notNull().default("active"), // active, listed, inactive
   isActive: boolean("is_active").notNull().default(true),
   minStake: decimal("min_stake", { precision: 15, scale: 2 }).notNull().default("1.00"),
   maxStake: decimal("max_stake", { precision: 15, scale: 2 }).notNull().default("1000.00"),
+  priceVex: decimal("price_vex", { precision: 15, scale: 2 }).notNull().default("0.00"), // Price in VEX coins
   houseFee: decimal("house_fee", { precision: 5, scale: 4 }).notNull().default("0.05"), // 5% = 0.05
   minPlayers: integer("min_players").notNull().default(2),
   maxPlayers: integer("max_players").notNull().default(2),
   defaultTimeLimit: integer("default_time_limit").notNull().default(300), // seconds
+  freePlayLimit: integer("free_play_limit").notNull().default(0), // Number of free plays allowed
+  freePlayPeriod: freePlayPeriodEnum("free_play_period").default("daily"), // Period for free play reset
+  displayLocations: text("display_locations").array().notNull().default(sql`ARRAY['games']::text[]`), // home, games, challenges, featured
   isFeatured: boolean("is_featured").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   totalGamesPlayed: integer("total_games_played").notNull().default(0),
@@ -296,6 +304,8 @@ export const multiplayerGames = pgTable("multiplayer_games", {
   index("idx_multiplayer_games_key").on(table.key),
   index("idx_multiplayer_games_is_active").on(table.isActive),
   index("idx_multiplayer_games_sort_order").on(table.sortOrder),
+  index("idx_multiplayer_games_category").on(table.category),
+  index("idx_multiplayer_games_status").on(table.status),
 ]);
 
 export const insertMultiplayerGameSchema = createInsertSchema(multiplayerGames).omit({
