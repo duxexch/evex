@@ -3975,6 +3975,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "Cannot block yourself" });
       }
       
+      const [targetUser] = await db.select({ id: users.id })
+        .from(users).where(eq(users.id, targetUserId));
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
       const [user] = await db.select({ blockedUsers: users.blockedUsers })
         .from(users).where(eq(users.id, userId));
       
@@ -3983,8 +3989,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "User already blocked" });
       }
       
+      const newBlockedUsers = [...new Set([...blockedUsers, targetUserId])];
+      
       await db.update(users)
-        .set({ blockedUsers: [...blockedUsers, targetUserId] })
+        .set({ blockedUsers: newBlockedUsers })
         .where(eq(users.id, userId));
       
       res.json({ success: true, message: "User blocked" });
@@ -4025,6 +4033,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "Cannot mute yourself" });
       }
       
+      const [targetUser] = await db.select({ id: users.id })
+        .from(users).where(eq(users.id, targetUserId));
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
       const [user] = await db.select({ mutedUsers: users.mutedUsers })
         .from(users).where(eq(users.id, userId));
       
@@ -4033,8 +4047,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "User already muted" });
       }
       
+      const newMutedUsers = [...new Set([...mutedUsers, targetUserId])];
+      
       await db.update(users)
-        .set({ mutedUsers: [...mutedUsers, targetUserId] })
+        .set({ mutedUsers: newMutedUsers })
         .where(eq(users.id, userId));
       
       res.json({ success: true, message: "User muted" });
