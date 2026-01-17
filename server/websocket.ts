@@ -11,6 +11,8 @@ import * as ChessEngine from "./game-engines/chess-engine";
 import * as DominoEngine from "./game-engines/domino-engine";
 import { backgammonEngine } from "./game-engines/backgammon";
 import * as CardGameEngine from "./game-engines/card-game-engine";
+import { chatRateLimiter } from "./lib/rate-limiter";
+import { filterMessage } from "./lib/word-filter";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "pwm-secret-key-change-in-production";
 
@@ -96,6 +98,18 @@ export function setupWebSocket(server: Server) {
         if (data.type === "chat_message" && ws.userId) {
           const { receiverId, content, messageType = "text", attachmentUrl, isDisappearing = false, disappearAfterRead = false } = data;
           
+          // Rate limiting
+          const rateLimitResult = chatRateLimiter.check(ws.userId);
+          if (!rateLimitResult.allowed) {
+            ws.send(JSON.stringify({ 
+              type: "chat_error", 
+              error: "Too many messages, please wait",
+              code: "rate_limit",
+              retryAfterMs: rateLimitResult.retryAfterMs 
+            }));
+            return;
+          }
+          
           // Check if chat is enabled
           const chatEnabledSetting = await db.select().from(chatSettings).where(eq(chatSettings.key, "isEnabled")).limit(1);
           if (chatEnabledSetting.length > 0 && chatEnabledSetting[0].value === "false") {
@@ -103,11 +117,36 @@ export function setupWebSocket(server: Server) {
             return;
           }
           
+          // Check if sender has blocked recipient or vice versa
+          const [senderUser] = await db.select({
+            blockedUsers: users.blockedUsers,
+            mutedUsers: users.mutedUsers
+          }).from(users).where(eq(users.id, ws.userId));
+          
+          const [recipientUser] = await db.select({
+            blockedUsers: users.blockedUsers,
+            mutedUsers: users.mutedUsers
+          }).from(users).where(eq(users.id, receiverId));
+          
+          if (senderUser?.blockedUsers?.includes(receiverId)) {
+            ws.send(JSON.stringify({ type: "chat_error", error: "You have blocked this user" }));
+            return;
+          }
+          
+          if (recipientUser?.blockedUsers?.includes(ws.userId)) {
+            ws.send(JSON.stringify({ type: "chat_error", error: "Cannot send message to this user" }));
+            return;
+          }
+          
+          // Filter message content
+          const filterResult = filterMessage(content);
+          const filteredContent = filterResult.filteredMessage;
+          
           // Save message to database
           const [message] = await db.insert(chatMessages).values({
             senderId: ws.userId,
             receiverId,
-            content,
+            content: filteredContent,
             messageType,
             attachmentUrl,
             isDisappearing: Boolean(isDisappearing),
@@ -123,17 +162,23 @@ export function setupWebSocket(server: Server) {
             avatarUrl: users.avatarUrl,
           }).from(users).where(eq(users.id, ws.userId));
           
-          const messageWithSender = { ...message, sender };
+          const messageWithSender = { 
+            ...message, 
+            sender,
+            wasFiltered: !filterResult.isClean 
+          };
           
-          // Send to recipient if online
-          const recipientSockets = clients.get(receiverId);
-          if (recipientSockets) {
-            const outgoing = JSON.stringify({ type: "new_chat_message", data: messageWithSender });
-            recipientSockets.forEach(socket => {
-              if (socket.readyState === WebSocket.OPEN) {
-                socket.send(outgoing);
-              }
-            });
+          // Send to recipient if online (and not muted)
+          if (!recipientUser?.mutedUsers?.includes(ws.userId)) {
+            const recipientSockets = clients.get(receiverId);
+            if (recipientSockets) {
+              const outgoing = JSON.stringify({ type: "new_chat_message", data: messageWithSender });
+              recipientSockets.forEach(socket => {
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(outgoing);
+                }
+              });
+            }
           }
           
           // Confirm to sender
