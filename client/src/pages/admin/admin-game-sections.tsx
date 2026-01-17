@@ -26,7 +26,7 @@ async function adminFetch(url: string, options?: RequestInit) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      "x-admin-token": token || "",
       ...options?.headers,
     },
   });

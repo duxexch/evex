@@ -68,6 +68,11 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
 }
 const JWT_SIGNING_KEY = JWT_SECRET || 'dev-only-insecure-key';
 
+// Admin JWT secret (same as in admin-routes.ts)
+const ADMIN_JWT_SECRET = process.env.SESSION_SECRET ? 
+  `admin_${process.env.SESSION_SECRET}_secure` : 
+  "admin-secret-key-change-in-production-secure";
+
 // Rate limiting for authentication endpoints (brute-force protection)
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -153,6 +158,24 @@ const adminMiddleware = async (req: AuthRequest, res: Response, next: NextFuncti
     return res.status(403).json({ error: "Admin access required" });
   }
   next();
+};
+
+// Admin token middleware that accepts x-admin-token header (for admin panel pages)
+const adminTokenMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const token = req.headers["x-admin-token"]?.toString();
+  if (!token) {
+    return res.status(401).json({ error: "Admin authentication required" });
+  }
+  try {
+    const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
+    if (decoded.role !== "admin") {
+      return res.status(403).json({ error: "Admin access only" });
+    }
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid admin token" });
+  }
 };
 
 const agentMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -5446,7 +5469,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Get all sections
-  app.get("/api/admin/game-sections", authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  app.get("/api/admin/game-sections", adminTokenMiddleware, async (_req: AuthRequest, res: Response) => {
     try {
       const sections = await db.select().from(gameSections).orderBy(gameSections.sortOrder);
       res.json(sections);
@@ -5456,7 +5479,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Create section
-  app.post("/api/admin/game-sections", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/admin/game-sections", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const data = insertGameSectionSchema.parse(req.body);
       const [section] = await db.insert(gameSections).values(data).returning();
@@ -5467,7 +5490,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Update section
-  app.patch("/api/admin/game-sections/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/admin/game-sections/:id", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const [section] = await db.update(gameSections)
@@ -5484,7 +5507,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Delete section
-  app.delete("/api/admin/game-sections/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/admin/game-sections/:id", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       await db.delete(gameSections).where(eq(gameSections.id, id));
@@ -5533,7 +5556,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Get all multiplayer games (including inactive)
-  app.get("/api/admin/multiplayer-games", authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  app.get("/api/admin/multiplayer-games", adminTokenMiddleware, async (_req: AuthRequest, res: Response) => {
     try {
       const games = await storage.listMultiplayerGames(false); // all games
       res.json(games);
@@ -5543,7 +5566,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Create multiplayer game
-  app.post("/api/admin/multiplayer-games", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/admin/multiplayer-games", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { key, nameEn, nameAr, ...rest } = req.body;
       
@@ -5581,7 +5604,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Update multiplayer game
-  app.patch("/api/admin/multiplayer-games/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.patch("/api/admin/multiplayer-games/:id", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const oldGame = await storage.getMultiplayerGame(id);
@@ -5615,7 +5638,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Toggle multiplayer game active status
-  app.post("/api/admin/multiplayer-games/:id/toggle", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/admin/multiplayer-games/:id/toggle", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const game = await storage.getMultiplayerGame(id);
@@ -5649,7 +5672,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Admin: Delete multiplayer game
-  app.delete("/api/admin/multiplayer-games/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.delete("/api/admin/multiplayer-games/:id", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const game = await storage.getMultiplayerGame(id);
