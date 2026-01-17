@@ -322,6 +322,45 @@ export const insertSystemConfigSchema = createInsertSchema(systemConfig);
 export type InsertSystemConfig = z.infer<typeof insertSystemConfigSchema>;
 export type SystemConfig = typeof systemConfig.$inferSelect;
 
+// ==================== SCHEDULED CONFIG CHANGES ====================
+
+export const scheduledChangeStatusEnum = pgEnum("scheduled_change_status", ["pending", "applied", "cancelled", "failed"]);
+export const scheduledChangeActionEnum = pgEnum("scheduled_change_action", ["activate", "deactivate", "update_settings"]);
+
+export const scheduledConfigChanges = pgTable("scheduled_config_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  gameId: varchar("game_id").notNull().references(() => multiplayerGames.id, { onDelete: "cascade" }),
+  action: scheduledChangeActionEnum("action").notNull(),
+  scheduledAt: timestamp("scheduled_at").notNull(),
+  status: scheduledChangeStatusEnum("status").notNull().default("pending"),
+  changes: text("changes"), // JSON string of field changes for update_settings action
+  description: text("description"), // Admin note about this change
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  appliedAt: timestamp("applied_at"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_scheduled_changes_game_id").on(table.gameId),
+  index("idx_scheduled_changes_status").on(table.status),
+  index("idx_scheduled_changes_scheduled_at").on(table.scheduledAt),
+]);
+
+export const scheduledConfigChangesRelations = relations(scheduledConfigChanges, ({ one }) => ({
+  game: one(multiplayerGames, { fields: [scheduledConfigChanges.gameId], references: [multiplayerGames.id] }),
+  creator: one(users, { fields: [scheduledConfigChanges.createdBy], references: [users.id] }),
+}));
+
+export const insertScheduledConfigChangeSchema = createInsertSchema(scheduledConfigChanges).omit({
+  id: true,
+  status: true,
+  appliedAt: true,
+  failureReason: true,
+  createdAt: true,
+});
+
+export type InsertScheduledConfigChange = z.infer<typeof insertScheduledConfigChangeSchema>;
+export type ScheduledConfigChange = typeof scheduledConfigChanges.$inferSelect;
+
 // ==================== GAMES ====================
 
 export const games = pgTable("games", {

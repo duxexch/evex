@@ -39,6 +39,8 @@ import {
   type SeasonReward, type InsertSeasonReward,
   type MultiplayerGame, type InsertMultiplayerGame,
   type SystemConfig, type InsertSystemConfig,
+  type ScheduledConfigChange, type InsertScheduledConfigChange,
+  scheduledConfigChanges,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, asc, or, like, ne } from "drizzle-orm";
@@ -215,6 +217,15 @@ export interface IStorage {
   
   // Admin Audit Logging
   createAdminAuditLog(log: { adminId: string; action: string; entityType: string; entityId?: string; oldValue?: any; newValue?: any; ipAddress?: string; userAgent?: string }): Promise<void>;
+
+  // Scheduled Config Changes
+  createScheduledConfigChange(change: InsertScheduledConfigChange): Promise<ScheduledConfigChange>;
+  getScheduledConfigChange(id: string): Promise<ScheduledConfigChange | undefined>;
+  listScheduledConfigChanges(gameId?: string, status?: string): Promise<ScheduledConfigChange[]>;
+  getPendingScheduledChanges(): Promise<ScheduledConfigChange[]>;
+  updateScheduledConfigChange(id: string, data: Partial<ScheduledConfigChange>): Promise<ScheduledConfigChange | undefined>;
+  cancelScheduledConfigChange(id: string): Promise<boolean>;
+  applyScheduledConfigChange(id: string): Promise<{ success: boolean; error?: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2089,6 +2100,105 @@ export class DatabaseStorage implements IStorage {
       ipAddress: log.ipAddress || null,
       userAgent: log.userAgent || null,
     });
+  }
+
+  // ==================== SCHEDULED CONFIG CHANGES ====================
+
+  async createScheduledConfigChange(change: InsertScheduledConfigChange): Promise<ScheduledConfigChange> {
+    const [created] = await db.insert(scheduledConfigChanges).values(change).returning();
+    return created;
+  }
+
+  async getScheduledConfigChange(id: string): Promise<ScheduledConfigChange | undefined> {
+    const [change] = await db.select().from(scheduledConfigChanges).where(eq(scheduledConfigChanges.id, id));
+    return change || undefined;
+  }
+
+  async listScheduledConfigChanges(gameId?: string, status?: string): Promise<ScheduledConfigChange[]> {
+    const conditions = [];
+    if (gameId) conditions.push(eq(scheduledConfigChanges.gameId, gameId));
+    if (status) conditions.push(eq(scheduledConfigChanges.status, status as any));
+
+    if (conditions.length > 0) {
+      return db.select().from(scheduledConfigChanges)
+        .where(and(...conditions))
+        .orderBy(desc(scheduledConfigChanges.scheduledAt));
+    }
+    return db.select().from(scheduledConfigChanges).orderBy(desc(scheduledConfigChanges.scheduledAt));
+  }
+
+  async getPendingScheduledChanges(): Promise<ScheduledConfigChange[]> {
+    const now = new Date();
+    return db.select().from(scheduledConfigChanges)
+      .where(and(
+        eq(scheduledConfigChanges.status, 'pending'),
+        lte(scheduledConfigChanges.scheduledAt, now)
+      ))
+      .orderBy(asc(scheduledConfigChanges.scheduledAt));
+  }
+
+  async updateScheduledConfigChange(id: string, data: Partial<ScheduledConfigChange>): Promise<ScheduledConfigChange | undefined> {
+    const [updated] = await db.update(scheduledConfigChanges)
+      .set(data)
+      .where(eq(scheduledConfigChanges.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async cancelScheduledConfigChange(id: string): Promise<boolean> {
+    const change = await this.getScheduledConfigChange(id);
+    if (!change || change.status !== 'pending') {
+      return false;
+    }
+    await db.update(scheduledConfigChanges)
+      .set({ status: 'cancelled' })
+      .where(eq(scheduledConfigChanges.id, id));
+    return true;
+  }
+
+  async applyScheduledConfigChange(id: string): Promise<{ success: boolean; error?: string }> {
+    const change = await this.getScheduledConfigChange(id);
+    if (!change) {
+      return { success: false, error: 'Scheduled change not found' };
+    }
+    if (change.status !== 'pending') {
+      return { success: false, error: `Change is not pending (status: ${change.status})` };
+    }
+
+    try {
+      const game = await this.getMultiplayerGame(change.gameId);
+      if (!game) {
+        await this.updateScheduledConfigChange(id, { status: 'failed', failureReason: 'Game not found', appliedAt: new Date() });
+        return { success: false, error: 'Game not found' };
+      }
+
+      // Apply the change based on action type
+      switch (change.action) {
+        case 'activate':
+          await this.updateMultiplayerGame(change.gameId, { isActive: true });
+          break;
+        case 'deactivate':
+          await this.updateMultiplayerGame(change.gameId, { isActive: false });
+          break;
+        case 'update_settings':
+          if (change.changes) {
+            const settings = JSON.parse(change.changes);
+            await this.updateMultiplayerGame(change.gameId, settings);
+          }
+          break;
+      }
+
+      // Mark as applied
+      await this.updateScheduledConfigChange(id, { status: 'applied', appliedAt: new Date() });
+
+      // Update config version to trigger real-time sync
+      await this.setSystemConfig('multiplayer_games_version', Date.now().toString());
+
+      return { success: true };
+    } catch (error: any) {
+      await this.updateScheduledConfigChange(id, { status: 'failed', failureReason: error.message, appliedAt: new Date() });
+      return { success: false, error: error.message };
+    }
   }
 }
 
