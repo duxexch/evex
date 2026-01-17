@@ -64,6 +64,9 @@ interface CurrencyStats {
   totalConverted: string;
   pendingConversions: number;
   totalCirculating: string;
+  totalCommissions: string;
+  baseCurrencyConverted: string;
+  totalConversionsCount: number;
   dailyConversionTotal: string;
 }
 
@@ -218,7 +221,7 @@ export default function AdminCurrencyPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">Total Wallets</CardTitle>
@@ -234,6 +237,19 @@ export default function AdminCurrencyPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardTitle className="text-sm font-medium">USD Converted</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-base-converted">
+              ${parseFloat(stats?.baseCurrencyConverted || "0").toFixed(2)}
+            </div>
+            <p className="text-xs text-muted-foreground">{stats?.totalConversionsCount || 0} total conversions</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">Total Converted</CardTitle>
             <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -241,7 +257,20 @@ export default function AdminCurrencyPage() {
             <div className="text-2xl font-bold" data-testid="text-total-converted">
               {settings?.currencySymbol || "VXC"} {parseFloat(stats?.totalConverted || "0").toFixed(2)}
             </div>
-            <p className="text-xs text-muted-foreground">All-time conversions</p>
+            <p className="text-xs text-muted-foreground">All-time issued</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-green-500/30 bg-green-500/5">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardTitle className="text-sm font-medium text-green-600">Total Commissions</CardTitle>
+            <DollarSign className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600" data-testid="text-total-commissions">
+              ${parseFloat(stats?.totalCommissions || "0").toFixed(2)}
+            </div>
+            <p className="text-xs text-muted-foreground">Revenue from conversions</p>
           </CardContent>
         </Card>
 

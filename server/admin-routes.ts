@@ -2598,33 +2598,60 @@ export function registerAdminRoutes(app: Express) {
 
   app.get("/api/admin/project-currency/stats", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
     try {
-      const [totalWallets] = await db.execute(sql`
+      const totalWalletsRes = await db.execute(sql`
         SELECT COUNT(*) as count FROM project_currency_wallets
       `);
+      const totalWallets = (totalWalletsRes as any).rows?.[0] || (totalWalletsRes as any)[0];
       
-      const [totalConverted] = await db.execute(sql`
+      const totalConvertedRes = await db.execute(sql`
         SELECT COALESCE(SUM(CAST(net_amount AS DECIMAL)), 0) as total
         FROM project_currency_conversions
         WHERE status = 'completed'
       `);
+      const totalConverted = (totalConvertedRes as any).rows?.[0] || (totalConvertedRes as any)[0];
       
-      const [pendingConversions] = await db.execute(sql`
+      const pendingConversionsRes = await db.execute(sql`
         SELECT COUNT(*) as count FROM project_currency_conversions
         WHERE status = 'pending'
       `);
+      const pendingConversions = (pendingConversionsRes as any).rows?.[0] || (pendingConversionsRes as any)[0];
       
-      const [totalCirculating] = await db.execute(sql`
+      const totalCirculatingRes = await db.execute(sql`
         SELECT COALESCE(SUM(CAST(total_balance AS DECIMAL)), 0) as total
         FROM project_currency_wallets
       `);
+      const totalCirculating = (totalCirculatingRes as any).rows?.[0] || (totalCirculatingRes as any)[0];
+
+      const totalCommissionsRes = await db.execute(sql`
+        SELECT COALESCE(SUM(CAST(commission_amount AS DECIMAL)), 0) as total
+        FROM project_currency_conversions
+        WHERE status = 'completed'
+      `);
+      const totalCommissions = (totalCommissionsRes as any).rows?.[0] || (totalCommissionsRes as any)[0];
+
+      const baseCurrencyConvertedRes = await db.execute(sql`
+        SELECT COALESCE(SUM(CAST(base_currency_amount AS DECIMAL)), 0) as total
+        FROM project_currency_conversions
+        WHERE status = 'completed'
+      `);
+      const baseCurrencyConverted = (baseCurrencyConvertedRes as any).rows?.[0] || (baseCurrencyConvertedRes as any)[0];
+
+      const totalConversionsCountRes = await db.execute(sql`
+        SELECT COUNT(*) as count FROM project_currency_conversions
+        WHERE status = 'completed'
+      `);
+      const totalConversionsCount = (totalConversionsCountRes as any).rows?.[0] || (totalConversionsCountRes as any)[0];
 
       const dailyTotal = await storage.getPlatformDailyConversionTotal();
 
       res.json({
-        totalWallets: Number((totalWallets as any)?.count || 0),
-        totalConverted: (totalConverted as any)?.total?.toString() || "0",
-        pendingConversions: Number((pendingConversions as any)?.count || 0),
-        totalCirculating: (totalCirculating as any)?.total?.toString() || "0",
+        totalWallets: Number(totalWallets?.count || 0),
+        totalConverted: totalConverted?.total?.toString() || "0",
+        pendingConversions: Number(pendingConversions?.count || 0),
+        totalCirculating: totalCirculating?.total?.toString() || "0",
+        totalCommissions: totalCommissions?.total?.toString() || "0",
+        baseCurrencyConverted: baseCurrencyConverted?.total?.toString() || "0",
+        totalConversionsCount: Number(totalConversionsCount?.count || 0),
         dailyConversionTotal: dailyTotal,
       });
     } catch (error: any) {

@@ -249,13 +249,29 @@ export default function WalletPage() {
       </div>
 
       {currencySettings?.isActive && (
-        <Card className="border-primary/30">
+        <Card className="border-2 border-primary/50 bg-gradient-to-br from-primary/5 to-transparent">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2">
-                <Coins className="h-5 w-5 text-primary" />
-                {currencySettings.currencyName || 'VEX Coin'}
-              </CardTitle>
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-full bg-primary/10">
+                  <Coins className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl">
+                    {currencySettings.currencyName || 'VEX Coin'}
+                  </CardTitle>
+                  <CardDescription>
+                    {currencySettings.useInGames && currencySettings.useInP2P 
+                      ? t('wallet.vexUsageGamesAndP2P') || 'Use for games and P2P trading'
+                      : currencySettings.useInGames 
+                        ? t('wallet.vexUsageGames') || 'Use for games'
+                        : currencySettings.useInP2P 
+                          ? t('wallet.vexUsageP2P') || 'Use for P2P trading' 
+                          : t('wallet.vexUsagePlatform') || 'Platform currency'
+                    }
+                  </CardDescription>
+                </div>
+              </div>
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -265,65 +281,88 @@ export default function WalletPage() {
                 {isBalanceHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-            <CardDescription>
-              {currencySettings.useInGames && currencySettings.useInP2P 
-                ? 'Use for games and P2P trading'
-                : currencySettings.useInGames 
-                  ? 'Use for games'
-                  : currencySettings.useInP2P 
-                    ? 'Use for P2P trading' 
-                    : 'Platform currency'
-              }
-            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <div className="text-3xl font-bold text-primary balance-glow mb-2" data-testid="text-vxc-balance">
+            <div className="grid gap-6 md:grid-cols-3">
+              <div className="md:col-span-2">
+                <div className="text-4xl font-bold text-primary balance-glow mb-4" data-testid="text-vxc-balance">
                   {isBalanceHidden 
                     ? '******' 
                     : `${currencySettings.currencySymbol} ${parseFloat(projectWallet?.totalBalance || "0").toFixed(2)}`
                   }
                 </div>
-                <div className="text-sm text-muted-foreground space-y-1">
-                  <div className="flex justify-between">
-                    <span>Purchased:</span>
-                    <span>{currencySettings.currencySymbol} {parseFloat(projectWallet?.purchasedBalance || "0").toFixed(2)}</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="text-xs text-muted-foreground mb-1">{t('wallet.purchased') || 'Purchased'}</div>
+                    <div className="text-lg font-semibold">
+                      {isBalanceHidden ? '***' : `${currencySettings.currencySymbol} ${parseFloat(projectWallet?.purchasedBalance || "0").toFixed(2)}`}
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Earned:</span>
-                    <span>{currencySettings.currencySymbol} {parseFloat(projectWallet?.earnedBalance || "0").toFixed(2)}</span>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="text-xs text-muted-foreground mb-1">{t('wallet.earned') || 'Earned'}</div>
+                    <div className="text-lg font-semibold text-green-500">
+                      {isBalanceHidden ? '***' : `${currencySettings.currencySymbol} ${parseFloat(projectWallet?.earnedBalance || "0").toFixed(2)}`}
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col justify-center gap-3">
-                <div className="text-sm text-muted-foreground">
-                  <span className="font-medium">Exchange Rate: </span>
-                  1 USD = {currencySettings.exchangeRate} {currencySettings.currencySymbol}
+              <div className="flex flex-col justify-center gap-4 p-4 bg-muted/30 rounded-lg">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{t('wallet.exchangeRate') || 'Exchange Rate'}</div>
+                  <div className="text-lg font-bold">
+                    1 USD = {currencySettings.exchangeRate} {currencySettings.currencySymbol}
+                  </div>
                 </div>
-                <Button onClick={() => setShowConvert(true)} data-testid="button-convert-to-vxc">
-                  <ArrowRightLeft className="h-4 w-4 me-2" />
-                  Convert USD to {currencySettings.currencySymbol}
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{t('wallet.commission') || 'Commission'}</div>
+                  <div className="text-sm font-medium">
+                    {parseFloat(currencySettings.conversionCommissionRate || "0")}%
+                  </div>
+                </div>
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={() => setShowConvert(true)} 
+                  data-testid="button-convert-to-vxc"
+                >
+                  <ArrowRightLeft className="h-5 w-5 me-2" />
+                  {t('wallet.convertNow') || 'Convert Now'}
                 </Button>
               </div>
             </div>
             
             {currencyConversions && currencyConversions.length > 0 && (
-              <div className="mt-4 pt-4 border-t">
-                <h4 className="text-sm font-medium mb-2">Recent Conversions</h4>
+              <div className="mt-6 pt-4 border-t">
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  {t('wallet.recentConversions') || 'Recent Conversions'}
+                </h4>
                 <div className="space-y-2">
-                  {currencyConversions.slice(0, 3).map((conv: any) => (
-                    <div key={conv.id} className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded" data-testid={`row-conversion-${conv.id}`}>
-                      <div className="flex items-center gap-2">
-                        <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
-                        <span>${parseFloat(conv.baseCurrencyAmount).toFixed(2)}</span>
-                        <span className="text-muted-foreground">→</span>
-                        <span className="text-primary">{currencySettings.currencySymbol} {parseFloat(conv.netAmount).toFixed(2)}</span>
+                  {currencyConversions.slice(0, 5).map((conv: any) => (
+                    <div key={conv.id} className="flex items-center justify-between text-sm p-3 bg-muted/50 rounded-lg" data-testid={`row-conversion-${conv.id}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-full bg-background">
+                          <ArrowRightLeft className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <div className="font-medium">
+                            ${parseFloat(conv.baseCurrencyAmount).toFixed(2)} → {currencySettings.currencySymbol} {parseFloat(conv.netAmount).toFixed(2)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(conv.createdAt).toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US', { 
+                              month: 'short', 
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
                       </div>
                       <Badge 
                         variant={conv.status === 'completed' ? 'default' : conv.status === 'pending' ? 'secondary' : 'destructive'}
-                        className="text-xs"
                       >
+                        {conv.status === 'completed' && <CheckCircle className="h-3 w-3 me-1" />}
+                        {conv.status === 'pending' && <Clock className="h-3 w-3 me-1" />}
                         {conv.status}
                       </Badge>
                     </div>
