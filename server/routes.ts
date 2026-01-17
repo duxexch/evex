@@ -13,7 +13,8 @@ import {
   gameplayEmojis, gameplayMessages, gameSections, advertisements,
   insertGameSectionSchema, insertAdvertisementSchema,
   insertCountryPaymentMethodSchema, insertSocialPlatformSchema,
-  liveGameSessions, p2pSettings, p2pTrades
+  liveGameSessions, p2pSettings, p2pTrades,
+  projectCurrencyWallets, projectCurrencyLedger
 } from "@shared/schema";
 
 // Helper function to calculate P2P platform fee based on settings
@@ -3665,12 +3666,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/challenges", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { gameType, betAmount, opponentType, friendAccountId, visibility = 'public' } = req.body;
+      const { gameType, betAmount, opponentType, friendAccountId, visibility = 'public', currencyType = 'usd' } = req.body;
       
       // VALIDATION: Verify game exists and is active in database (Single Source of Truth)
       const validation = await storage.validateGameConfig(gameType, String(betAmount || 0));
       if (!validation.valid) {
         return res.status(400).json({ error: validation.error });
+      }
+      
+      // Check if project currency is enabled for games when using project currency
+      if (currencyType === 'project') {
+        const settings = await storage.getProjectCurrencySettings();
+        if (!settings?.isActive || !settings?.useInGames) {
+          return res.status(400).json({ error: "Project currency is not available for games" });
+        }
+        
+        // Check user's project currency balance
+        const wallet = await storage.getProjectCurrencyWallet(req.user!.id);
+        const totalBalance = parseFloat(wallet?.purchasedBalance || '0') + parseFloat(wallet?.earnedBalance || '0');
+        if (totalBalance < parseFloat(String(betAmount || 0))) {
+          return res.status(400).json({ error: "Insufficient project currency balance" });
+        }
       }
       
       const gameConfig = validation.game!;
@@ -3680,6 +3696,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         id: `challenge-${Date.now()}`,
         gameType,
         betAmount,
+        currencyType, // Track currency type: 'usd' or 'project'
         visibility,
         status: 'waiting',
         player1Id: req.user!.id,
@@ -3732,34 +3749,87 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Financial safety: Check and deduct balance using transaction with row-level locking
       const betAmount = parseFloat(String(challenge.betAmount));
       const userId = req.user!.id;
+      const currencyType = (challenge as any).currencyType || 'usd';
       
       await db.transaction(async (tx) => {
-        // Lock user row and check balance
-        const [userRecord] = await tx.select()
-          .from(users)
-          .where(eq(users.id, userId))
-          .for('update');
-        
-        if (!userRecord) {
-          throw new Error('User not found');
+        if (currencyType === 'project') {
+          // Handle project currency stake
+          const [wallet] = await tx.select()
+            .from(projectCurrencyWallets)
+            .where(eq(projectCurrencyWallets.userId, userId))
+            .for('update');
+          
+          if (!wallet) {
+            throw new Error('Project currency wallet not found');
+          }
+          
+          // Deduct from earned first, then purchased
+          let earnedBalance = parseFloat(wallet.earnedBalance);
+          let purchasedBalance = parseFloat(wallet.purchasedBalance);
+          const totalBalance = earnedBalance + purchasedBalance;
+          
+          if (totalBalance < betAmount) {
+            throw new Error('Insufficient project currency balance to join this challenge');
+          }
+          
+          // Deduct from earned first, then purchased
+          let remaining = betAmount;
+          if (earnedBalance >= remaining) {
+            earnedBalance -= remaining;
+            remaining = 0;
+          } else {
+            remaining -= earnedBalance;
+            earnedBalance = 0;
+            purchasedBalance -= remaining;
+          }
+          
+          await tx.update(projectCurrencyWallets)
+            .set({ 
+              earnedBalance: earnedBalance.toFixed(8),
+              purchasedBalance: purchasedBalance.toFixed(8),
+              updatedAt: new Date()
+            })
+            .where(eq(projectCurrencyWallets.userId, userId));
+          
+          await tx.insert(projectCurrencyLedger).values({
+            walletId: wallet.id,
+            userId: userId,
+            transactionType: 'game_stake',
+            amount: (-betAmount).toFixed(8),
+            balanceType: 'earned',
+            balanceBefore: (parseFloat(wallet.earnedBalance) + parseFloat(wallet.purchasedBalance)).toFixed(8),
+            balanceAfter: (earnedBalance + purchasedBalance).toFixed(8),
+            description: `Game stake for challenge ${challengeId}`,
+            referenceId: challengeId
+          });
+        } else {
+          // Handle USD stake (original logic)
+          const [userRecord] = await tx.select()
+            .from(users)
+            .where(eq(users.id, userId))
+            .for('update');
+          
+          if (!userRecord) {
+            throw new Error('User not found');
+          }
+          
+          const currentBalance = parseFloat(userRecord.balance);
+          if (currentBalance < betAmount) {
+            throw new Error('Insufficient balance to join this challenge');
+          }
+          
+          // Deduct balance
+          await tx.update(users)
+            .set({ balance: (currentBalance - betAmount).toString() })
+            .where(eq(users.id, userId));
         }
-        
-        const currentBalance = parseFloat(userRecord.balance);
-        if (currentBalance < betAmount) {
-          throw new Error('Insufficient balance to join this challenge');
-        }
-        
-        // Deduct balance
-        await tx.update(users)
-          .set({ balance: (currentBalance - betAmount).toString() })
-          .where(eq(users.id, userId));
         
         // Update challenge atomically within the lock
         challenge.player2Id = userId;
         challenge.player2Name = req.user!.username;
         challenge.player2Rating = { wins: 0, losses: 0, winRate: 0, rank: "bronze" };
         challenge.status = 'active';
-        challenge.startedAt = new Date().toISOString();
+        (challenge as any).startedAt = new Date().toISOString();
       });
       
       // Release lock after success (challenge is now 'active', so future joins will fail on status check)
@@ -3768,7 +3838,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(challenge);
     } catch (error: any) {
       challengeJoinLocks.delete(challengeId);
-      if (error.message.includes('Insufficient balance')) {
+      if (error.message.includes('Insufficient')) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: error.message });

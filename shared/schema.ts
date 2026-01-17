@@ -1311,6 +1311,7 @@ export const challenges = pgTable("challenges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   gameType: text("game_type").notNull(),
   betAmount: decimal("bet_amount", { precision: 20, scale: 8 }).notNull().default("0"),
+  currencyType: text("currency_type").notNull().default("usd"), // usd, project (VEX Coin)
   visibility: text("visibility").notNull().default("public"), // public, private
   status: text("status").notNull().default("waiting"), // waiting, active, completed, cancelled
   player1Id: varchar("player1_id").notNull().references(() => users.id),
@@ -1338,6 +1339,7 @@ export const challengeSpectatorBets = pgTable("challenge_spectator_bets", {
   spectatorId: varchar("spectator_id").notNull().references(() => users.id),
   backedPlayerId: varchar("backed_player_id").notNull().references(() => users.id),
   betAmount: decimal("bet_amount", { precision: 20, scale: 8 }).notNull(),
+  currencyType: text("currency_type").notNull().default("usd"), // usd, project
   potentialWinnings: decimal("potential_winnings", { precision: 20, scale: 8 }).notNull(),
   status: text("status").notNull().default("pending"), // pending, won, lost, refunded
   settledAt: timestamp("settled_at"),

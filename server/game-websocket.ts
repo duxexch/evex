@@ -493,20 +493,35 @@ async function handleGameOver(room: GameRoom, status: any) {
       const [challenge] = await db.select().from(challenges).where(eq(challenges.id, session.challengeId));
       
       if (challenge && parseFloat(challenge.betAmount) > 0) {
-        const payoutResult = await storage.settleGamePayout(
-          room.sessionId,
-          winnerId,
-          loserId,
-          challenge.betAmount,
-          0,
-          gameType
-        );
+        let payoutResult;
+        
+        // Use appropriate payout method based on currency type
+        if (challenge.currencyType === 'project') {
+          payoutResult = await storage.settleProjectCurrencyGamePayout(
+            room.sessionId,
+            winnerId,
+            loserId,
+            challenge.betAmount,
+            0,
+            gameType
+          );
+          console.log(`[WS] Using project currency payout for game ${room.sessionId}`);
+        } else {
+          payoutResult = await storage.settleGamePayout(
+            room.sessionId,
+            winnerId,
+            loserId,
+            challenge.betAmount,
+            0,
+            gameType
+          );
+        }
 
         if (!payoutResult.success) {
           console.error('[WS] Payout failed:', payoutResult.error);
         } else {
           statsUpdatedInPayout = true;
-          console.log(`[WS] Game payout and stats settled: winner=${winnerId}, stake=${challenge.betAmount}`);
+          console.log(`[WS] Game payout and stats settled: winner=${winnerId}, stake=${challenge.betAmount}, currency=${challenge.currencyType || 'usd'}`);
         }
       }
     }
