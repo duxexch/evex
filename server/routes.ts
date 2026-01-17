@@ -6386,14 +6386,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             console.log("========================================");
           }
         } else {
-          // List available admin usernames for easier troubleshooting
+          // No admin exists with this username - check if ANY admin exists
           const allAdmins = await db.select({ username: users.username }).from(users).where(eq(users.role, "admin"));
-          console.log("⚠️  ADMIN_RESET_PASSWORD set but no admin found with username:", resetUsername);
           if (allAdmins.length > 0) {
+            console.log("⚠️  ADMIN_RESET_PASSWORD set but no admin found with username:", resetUsername);
             console.log("   Available admin usernames:", allAdmins.map(a => a.username).join(", "));
             console.log("   Set ADMIN_RESET_USERNAME to one of these.");
           } else {
-            console.log("   No admin users exist. Use ADMIN_BOOTSTRAP_PASSWORD to create one.");
+            // No admin exists at all - CREATE one with the provided password
+            const hashedPassword = await bcrypt.hash(resetPassword, 12);
+            await storage.createUser({
+              username: resetUsername,
+              password: hashedPassword,
+              email: process.env.ADMIN_RESET_EMAIL || "admin@vex.local",
+              firstName: "Admin",
+              lastName: "User",
+              role: "admin",
+              status: "active",
+              accountId: "100000000",
+              mustChangePassword: false,
+            });
+            console.log("========================================");
+            console.log("🔐 ADMIN USER CREATED SUCCESSFULLY");
+            console.log(`   Username: ${resetUsername}`);
+            console.log("   Password: (from ADMIN_RESET_PASSWORD)");
+            console.log("   ⚠️  IMPORTANT: Remove ADMIN_RESET_PASSWORD from secrets NOW!");
+            console.log("========================================");
           }
         }
       }
