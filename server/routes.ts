@@ -14,7 +14,8 @@ import {
   insertGameSectionSchema, insertAdvertisementSchema,
   insertCountryPaymentMethodSchema, insertSocialPlatformSchema,
   liveGameSessions, p2pSettings, p2pTrades,
-  projectCurrencyWallets, projectCurrencyLedger
+  projectCurrencyWallets, projectCurrencyLedger,
+  themes, featureFlags
 } from "@shared/schema";
 
 // Helper function to calculate P2P platform fee based on settings
@@ -6280,6 +6281,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     } catch (error) {
       console.error("Failed to seed social platforms:", error);
+    }
+  })();
+
+  // Seed default themes if none exist
+  (async () => {
+    try {
+      const existingThemes = await db.select().from(themes).limit(1);
+      if (existingThemes.length === 0) {
+        await db.insert(themes).values([
+          {
+            name: "vex-dark",
+            displayName: "VEX Dark (Default)",
+            primaryColor: "#00c853",
+            secondaryColor: "#ff9800",
+            accentColor: "#00e676",
+            backgroundColor: "#0f1419",
+            foregroundColor: "#ffffff",
+            cardColor: "#1a1f2e",
+            mutedColor: "#6b7280",
+            borderColor: "#2d3748",
+            isDefault: true,
+          },
+          {
+            name: "vex-royal",
+            displayName: "VEX Royal",
+            primaryColor: "#6366f1",
+            secondaryColor: "#f59e0b",
+            accentColor: "#8b5cf6",
+            backgroundColor: "#0c0a1d",
+            foregroundColor: "#ffffff",
+            cardColor: "#1e1b4b",
+            mutedColor: "#9ca3af",
+            borderColor: "#312e81",
+            isDefault: false,
+          },
+        ]);
+        console.log("Default themes seeded");
+      }
+    } catch (error) {
+      console.error("Failed to seed themes:", error);
+    }
+  })();
+
+  // Seed default feature flags if none exist
+  (async () => {
+    try {
+      const existingFlags = await db.select().from(featureFlags).limit(1);
+      if (existingFlags.length === 0) {
+        await db.insert(featureFlags).values([
+          { key: "dashboard", isEnabled: true, description: "Enable dashboard section" },
+          { key: "wallet", isEnabled: true, description: "Enable wallet section" },
+          { key: "challenges", isEnabled: true, description: "Enable challenges section" },
+          { key: "p2p", isEnabled: true, description: "Enable P2P trading section" },
+          { key: "free", isEnabled: true, description: "Enable free games section" },
+          { key: "transactions", isEnabled: true, description: "Enable transactions section" },
+          { key: "complaints", isEnabled: true, description: "Enable complaints section" },
+          { key: "settings", isEnabled: true, description: "Enable settings section" },
+          { key: "support", isEnabled: true, description: "Enable support section" },
+          { key: "play", isEnabled: true, description: "Enable play section" },
+        ]);
+        console.log("Default feature flags seeded");
+      }
+    } catch (error) {
+      console.error("Failed to seed feature flags:", error);
     }
   })();
 
