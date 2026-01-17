@@ -1,11 +1,21 @@
 import { useState, useRef, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { Send, MessageCircle, Zap } from "lucide-react";
+import { Send, MessageCircle, Zap, MoreVertical, Ban, VolumeX } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 
 interface Message {
   id: string;
@@ -31,6 +41,7 @@ interface GameChatProps {
   quickMessages: QuickMessage[];
   language: string;
   disabled?: boolean;
+  currentUserId?: string;
 }
 
 export function GameChat({
@@ -39,10 +50,35 @@ export function GameChat({
   quickMessages,
   language,
   disabled = false,
+  currentUserId,
 }: GameChatProps) {
   const [messageInput, setMessageInput] = useState("");
   const [activeTab, setActiveTab] = useState<"chat" | "quick">("quick");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const { user, refreshUser } = useAuth();
+
+  const blockMutation = useMutation({
+    mutationFn: (userId: string) => apiRequest('POST', `/api/users/${userId}/block`),
+    onSuccess: () => {
+      toast({ title: language === 'ar' ? 'تم حظر المستخدم بنجاح' : 'User blocked successfully' });
+      refreshUser();
+    },
+    onError: (err: any) => {
+      toast({ title: language === 'ar' ? 'خطأ' : 'Error', description: err.message, variant: 'destructive' });
+    }
+  });
+
+  const muteMutation = useMutation({
+    mutationFn: (userId: string) => apiRequest('POST', `/api/users/${userId}/mute`),
+    onSuccess: () => {
+      toast({ title: language === 'ar' ? 'تم كتم المستخدم بنجاح' : 'User muted successfully' });
+      refreshUser();
+    },
+    onError: (err: any) => {
+      toast({ title: language === 'ar' ? 'خطأ' : 'Error', description: err.message, variant: 'destructive' });
+    }
+  });
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -120,43 +156,85 @@ export function GameChat({
                   {language === "ar" ? "لا توجد رسائل بعد" : "No messages yet"}
                 </p>
               ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      "flex gap-2",
-                      msg.isSpectator && "opacity-70"
-                    )}
-                  >
-                    <Avatar className="h-6 w-6 shrink-0">
-                      <AvatarImage src={msg.senderAvatar} />
-                      <AvatarFallback className="text-xs">
-                        {msg.senderName?.[0]?.toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium truncate">
-                          {msg.senderName}
-                        </span>
-                        {msg.isSpectator && (
-                          <span className="text-[10px] text-muted-foreground">
-                            ({language === "ar" ? "مشاهد" : "spectator"})
+                messages.map((msg) => {
+                  const isOwnMessage = msg.senderId === (currentUserId || user?.id);
+                  const isAlreadyBlocked = user?.blockedUsers?.includes(msg.senderId);
+                  const isAlreadyMuted = user?.mutedUsers?.includes(msg.senderId);
+                  
+                  return (
+                    <div
+                      key={msg.id}
+                      className={cn(
+                        "flex gap-2 group",
+                        msg.isSpectator && "opacity-70"
+                      )}
+                    >
+                      <Avatar className="h-6 w-6 shrink-0">
+                        <AvatarImage src={msg.senderAvatar} />
+                        <AvatarFallback className="text-xs">
+                          {msg.senderName?.[0]?.toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium truncate">
+                            {msg.senderName}
                           </span>
-                        )}
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatTime(msg.createdAt)}
-                        </span>
+                          {msg.isSpectator && (
+                            <span className="text-[10px] text-muted-foreground">
+                              ({language === "ar" ? "مشاهد" : "spectator"})
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            {formatTime(msg.createdAt)}
+                          </span>
+                          {!isOwnMessage && user && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  data-testid={`button-message-menu-${msg.id}`}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {!isAlreadyBlocked && (
+                                  <DropdownMenuItem
+                                    onClick={() => blockMutation.mutate(msg.senderId)}
+                                    disabled={blockMutation.isPending}
+                                    data-testid={`menu-block-${msg.senderId}`}
+                                  >
+                                    <Ban className="h-4 w-4 me-2" />
+                                    {language === "ar" ? "حظر المستخدم" : "Block User"}
+                                  </DropdownMenuItem>
+                                )}
+                                {!isAlreadyMuted && (
+                                  <DropdownMenuItem
+                                    onClick={() => muteMutation.mutate(msg.senderId)}
+                                    disabled={muteMutation.isPending}
+                                    data-testid={`menu-mute-${msg.senderId}`}
+                                  >
+                                    <VolumeX className="h-4 w-4 me-2" />
+                                    {language === "ar" ? "كتم المستخدم" : "Mute User"}
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                        <p className={cn(
+                          "text-sm break-words",
+                          msg.isQuickMessage && "text-primary font-medium"
+                        )}>
+                          {msg.message}
+                        </p>
                       </div>
-                      <p className={cn(
-                        "text-sm break-words",
-                        msg.isQuickMessage && "text-primary font-medium"
-                      )}>
-                        {msg.message}
-                      </p>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </ScrollArea>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 import { BackButton } from "@/components/BackButton";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Trophy,
   Target,
@@ -28,7 +30,11 @@ import {
   Calendar,
   User,
   ChevronRight,
-  Award
+  Award,
+  Ban,
+  VolumeX,
+  Volume2,
+  UserCheck
 } from "lucide-react";
 
 interface GameStats {
@@ -92,7 +98,8 @@ const VIP_COLORS = [
 
 export default function PlayerProfilePage() {
   const { t, language, dir } = useI18n();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { toast } = useToast();
   const [, params] = useRoute('/player/:userId');
   const [, navigate] = useLocation();
   
@@ -112,6 +119,43 @@ export default function PlayerProfilePage() {
   const { data: rankData } = useQuery<{ rank: number; sortBy: string }>({
     queryKey: ['/api/me/rank'],
     enabled: isOwnProfile,
+  });
+
+  const isBlocked = user?.blockedUsers?.includes(userId || '') || false;
+  const isMuted = user?.mutedUsers?.includes(userId || '') || false;
+
+  const blockMutation = useMutation({
+    mutationFn: (action: 'block' | 'unblock') =>
+      apiRequest(
+        action === 'block' ? 'POST' : 'DELETE',
+        `/api/users/${userId}/block`
+      ),
+    onSuccess: (_, action) => {
+      toast({
+        title: t(action === 'block' ? 'chat.blockSuccess' : 'chat.unblockSuccess'),
+      });
+      refreshUser();
+    },
+    onError: (err: any) => {
+      toast({ title: t('common.error'), description: err.message, variant: 'destructive' });
+    }
+  });
+
+  const muteMutation = useMutation({
+    mutationFn: (action: 'mute' | 'unmute') =>
+      apiRequest(
+        action === 'mute' ? 'POST' : 'DELETE',
+        `/api/users/${userId}/mute`
+      ),
+    onSuccess: (_, action) => {
+      toast({
+        title: t(action === 'mute' ? 'chat.muteSuccess' : 'chat.unmuteSuccess'),
+      });
+      refreshUser();
+    },
+    onError: (err: any) => {
+      toast({ title: t('common.error'), description: err.message, variant: 'destructive' });
+    }
   });
 
   if (statsLoading) {
@@ -204,14 +248,54 @@ export default function PlayerProfilePage() {
               </p>
             </div>
 
-            {!isOwnProfile && (
-              <Button 
-                variant="outline" 
-                onClick={() => navigate('/leaderboard')}
-                data-testid="button-view-leaderboard"
-              >
-                {t('profile.viewOnLeaderboard')}
-              </Button>
+            {!isOwnProfile && user && (
+              <div className="flex gap-2 flex-wrap">
+                <Button 
+                  variant="outline" 
+                  onClick={() => navigate('/leaderboard')}
+                  data-testid="button-view-leaderboard"
+                >
+                  {t('profile.viewOnLeaderboard')}
+                </Button>
+                <Button
+                  variant={isBlocked ? "default" : "outline"}
+                  size="default"
+                  onClick={() => blockMutation.mutate(isBlocked ? 'unblock' : 'block')}
+                  disabled={blockMutation.isPending}
+                  data-testid="button-block-user"
+                >
+                  {isBlocked ? (
+                    <>
+                      <UserCheck className="w-4 h-4 me-2" />
+                      {t('profile.unblockUser')}
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="w-4 h-4 me-2" />
+                      {t('profile.blockUser')}
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant={isMuted ? "default" : "outline"}
+                  size="default"
+                  onClick={() => muteMutation.mutate(isMuted ? 'unmute' : 'mute')}
+                  disabled={muteMutation.isPending}
+                  data-testid="button-mute-user"
+                >
+                  {isMuted ? (
+                    <>
+                      <Volume2 className="w-4 h-4 me-2" />
+                      {t('profile.unmuteUser')}
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX className="w-4 h-4 me-2" />
+                      {t('profile.muteUser')}
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
           </div>
         </CardContent>

@@ -3602,6 +3602,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/users/batch", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { userIds } = req.body;
+      
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        return res.json([]);
+      }
+      
+      const limitedIds = userIds.slice(0, 50);
+      
+      const users = await Promise.all(
+        limitedIds.map(async (userId: string) => {
+          const user = await storage.getUser(userId);
+          if (user) {
+            return {
+              id: user.id,
+              username: user.username,
+              nickname: user.nickname,
+              profilePicture: user.profilePicture,
+            };
+          }
+          return null;
+        })
+      );
+      
+      res.json(users.filter(Boolean));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/users/follow/:userId", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const targetUserId = req.params.userId;

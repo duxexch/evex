@@ -18,7 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Shield, Settings2, Loader2, Monitor, Smartphone, Globe, Trash2, LogOut, CheckCircle, KeyRound, Camera } from "lucide-react";
+import { User, Shield, Settings2, Loader2, Monitor, Smartphone, Globe, Trash2, LogOut, CheckCircle, KeyRound, Camera, Users } from "lucide-react";
+import { BlockedMutedSettings } from "@/components/BlockedMutedSettings";
 import { format } from "date-fns";
 
 const profileSchema = z.object({
@@ -151,7 +152,7 @@ function ProfileSection() {
         <div className="flex flex-col items-center gap-4 mb-6">
           <div className="relative">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={user?.profilePicture} alt={user?.firstName || "Profile"} />
+              <AvatarImage src={user?.profilePicture || undefined} alt={user?.firstName || "Profile"} />
               <AvatarFallback className="text-2xl bg-primary/10">{getUserInitials()}</AvatarFallback>
             </Avatar>
             <input
@@ -1025,7 +1026,10 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="privacy">
-          <PrivacySection />
+          <div className="space-y-6">
+            <PrivacySection />
+            <BlockedMutedSettings />
+          </div>
         </TabsContent>
 
         <TabsContent value="security">
