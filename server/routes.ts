@@ -3475,6 +3475,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/challenges", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { gameType, betAmount, opponentType, friendAccountId, visibility = 'public' } = req.body;
+      
+      // VALIDATION: Verify game exists and is active in database (Single Source of Truth)
+      const validation = await storage.validateGameConfig(gameType, String(betAmount || 0));
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+      
+      const gameConfig = validation.game!;
+      const timeLimit = gameConfig.defaultTimeLimit || 300;
+      
       const challenge = {
         id: `challenge-${Date.now()}`,
         gameType,
@@ -3488,10 +3498,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         player2Name: null,
         player1Score: 0,
         player2Score: 0,
-        timeLimit: 60,
+        timeLimit,
         spectatorCount: 0,
         totalBets: 0,
         createdAt: new Date().toISOString(),
+        houseFee: gameConfig.houseFee, // Store house fee from DB
       };
       challenges.push(challenge);
       res.json(challenge);
@@ -5168,6 +5179,181 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { id } = req.params;
       await db.delete(gameSections).where(eq(gameSections.id, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== MULTIPLAYER GAMES API (Single Source of Truth) ====================
+
+  // Public: Get active multiplayer games
+  app.get("/api/multiplayer-games", async (_req: Request, res: Response) => {
+    try {
+      const games = await storage.listMultiplayerGames(true); // activeOnly = true
+      res.json(games);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Public: Get multiplayer game by key
+  app.get("/api/multiplayer-games/:key", async (req: Request, res: Response) => {
+    try {
+      const game = await storage.getMultiplayerGameByKey(req.params.key);
+      if (!game) {
+        return res.status(404).json({ error: "Game not found" });
+      }
+      if (!game.isActive) {
+        return res.status(404).json({ error: "Game is not available" });
+      }
+      res.json(game);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Public: Get config version for cache invalidation
+  app.get("/api/config-version/:key", async (req: Request, res: Response) => {
+    try {
+      const version = await storage.getConfigVersion(req.params.key);
+      res.json({ version });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Get all multiplayer games (including inactive)
+  app.get("/api/admin/multiplayer-games", authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
+    try {
+      const games = await storage.listMultiplayerGames(false); // all games
+      res.json(games);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Create multiplayer game
+  app.post("/api/admin/multiplayer-games", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { key, nameEn, nameAr, ...rest } = req.body;
+      
+      if (!key || !nameEn || !nameAr) {
+        return res.status(400).json({ error: "key, nameEn, and nameAr are required" });
+      }
+
+      // Check if game with key already exists
+      const existing = await storage.getMultiplayerGameByKey(key);
+      if (existing) {
+        return res.status(400).json({ error: `Game with key '${key}' already exists` });
+      }
+
+      const game = await storage.createMultiplayerGame({ key, nameEn, nameAr, ...rest });
+
+      // Log admin action
+      await storage.createAdminAuditLog({
+        adminId: req.user!.id,
+        action: 'create',
+        entityType: 'multiplayer_game',
+        entityId: game.id,
+        newValue: game,
+      });
+
+      // Increment config version
+      await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
+
+      res.status(201).json(game);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Admin: Update multiplayer game
+  app.patch("/api/admin/multiplayer-games/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const oldGame = await storage.getMultiplayerGame(id);
+      
+      if (!oldGame) {
+        return res.status(404).json({ error: "Game not found" });
+      }
+
+      const updated = await storage.updateMultiplayerGame(id, req.body);
+
+      // Log admin action
+      await storage.createAdminAuditLog({
+        adminId: req.user!.id,
+        action: 'update',
+        entityType: 'multiplayer_game',
+        entityId: id,
+        oldValue: oldGame,
+        newValue: updated,
+      });
+
+      // Increment config version
+      await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Admin: Toggle multiplayer game active status
+  app.post("/api/admin/multiplayer-games/:id/toggle", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const game = await storage.getMultiplayerGame(id);
+      
+      if (!game) {
+        return res.status(404).json({ error: "Game not found" });
+      }
+
+      const updated = await storage.updateMultiplayerGame(id, { isActive: !game.isActive });
+
+      // Log admin action
+      await storage.createAdminAuditLog({
+        adminId: req.user!.id,
+        action: 'toggle',
+        entityType: 'multiplayer_game',
+        entityId: id,
+        oldValue: { isActive: game.isActive },
+        newValue: { isActive: updated?.isActive },
+      });
+
+      // Increment config version
+      await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Admin: Delete multiplayer game
+  app.delete("/api/admin/multiplayer-games/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const game = await storage.getMultiplayerGame(id);
+      
+      if (!game) {
+        return res.status(404).json({ error: "Game not found" });
+      }
+
+      await storage.deleteMultiplayerGame(id);
+
+      // Log admin action
+      await storage.createAdminAuditLog({
+        adminId: req.user!.id,
+        action: 'delete',
+        entityType: 'multiplayer_game',
+        entityId: id,
+        oldValue: game,
+      });
+
+      // Increment config version
+      await storage.setSystemConfig('multiplayer_games_version', Date.now().toString(), req.user!.id);
+
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
