@@ -2379,6 +2379,476 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // POST /api/p2p/trades - Start a trade from an offer
+  app.post("/api/p2p/trades", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { offerId, amount, paymentMethod } = req.body;
+      
+      if (!offerId || typeof offerId !== 'string') {
+        return res.status(400).json({ error: "Valid offer ID is required" });
+      }
+      
+      if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        return res.status(400).json({ error: "Valid positive amount is required" });
+      }
+      
+      if (!paymentMethod || typeof paymentMethod !== 'string') {
+        return res.status(400).json({ error: "Payment method is required" });
+      }
+      
+      const offer = await storage.getP2POffer(offerId);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+      
+      if (offer.status !== "active") {
+        return res.status(400).json({ error: "Offer is not active" });
+      }
+      
+      if (offer.userId === req.user!.id) {
+        return res.status(400).json({ error: "Cannot trade with your own offer" });
+      }
+      
+      const tradeAmount = parseFloat(amount);
+      const availableAmount = parseFloat(offer.availableAmount);
+      
+      if (tradeAmount > availableAmount) {
+        return res.status(400).json({ error: `Insufficient available amount. Maximum: ${availableAmount}` });
+      }
+      
+      const minLimit = parseFloat(offer.minLimit);
+      const maxLimit = parseFloat(offer.maxLimit);
+      
+      if (tradeAmount < minLimit || tradeAmount > maxLimit) {
+        return res.status(400).json({ error: `Amount must be between ${minLimit} and ${maxLimit}` });
+      }
+      
+      const price = parseFloat(offer.price);
+      const fiatAmount = tradeAmount * price;
+      const platformFee = tradeAmount * 0.005;
+      
+      const isBuyer = offer.type === "sell";
+      const buyerId = isBuyer ? req.user!.id : offer.userId;
+      const sellerId = isBuyer ? offer.userId : req.user!.id;
+      
+      const escrowDebitResult = await storage.updateUserBalanceWithCheck(
+        sellerId,
+        amount.toString(),
+        'subtract'
+      );
+      
+      if (!escrowDebitResult.success) {
+        return res.status(400).json({ error: "Seller has insufficient balance for escrow" });
+      }
+      
+      const trade = await storage.createP2PTrade({
+        offerId,
+        buyerId,
+        sellerId,
+        status: "pending",
+        amount: amount.toString(),
+        fiatAmount: fiatAmount.toFixed(2),
+        price: offer.price,
+        paymentMethod,
+        escrowAmount: amount.toString(),
+        platformFee: platformFee.toFixed(8),
+        expiresAt: new Date(Date.now() + (offer.paymentTimeLimit * 60 * 1000)),
+      });
+      
+      await storage.createP2PTradeMessage({
+        tradeId: trade.id,
+        senderId: req.user!.id,
+        message: "Trade started",
+        isSystemMessage: true,
+      });
+      
+      const newAvailable = (availableAmount - tradeAmount).toFixed(8);
+      await storage.updateP2POffer(offerId, {
+        availableAmount: newAvailable,
+        status: parseFloat(newAvailable) <= 0 ? "completed" : "active",
+      });
+      
+      res.status(201).json(trade);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /api/p2p/trades/:id - Get trade details
+  app.get("/api/p2p/trades/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized to view this trade" });
+      }
+      
+      const buyer = await storage.getUser(trade.buyerId);
+      const seller = await storage.getUser(trade.sellerId);
+      
+      res.json({
+        ...trade,
+        buyer: buyer ? { id: buyer.id, username: buyer.username, nickname: buyer.nickname } : null,
+        seller: seller ? { id: seller.id, username: seller.username, nickname: seller.nickname } : null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/pay - Mark payment as sent
+  app.post("/api/p2p/trades/:id/pay", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.buyerId !== req.user!.id) {
+        return res.status(403).json({ error: "Only the buyer can mark payment" });
+      }
+      
+      if (trade.status !== "pending") {
+        return res.status(400).json({ error: "Trade is not in pending status" });
+      }
+      
+      const { paymentReference } = req.body;
+      
+      const updated = await storage.updateP2PTrade(trade.id, {
+        status: "paid",
+        paymentReference,
+        paidAt: new Date(),
+      });
+      
+      await storage.createP2PTradeMessage({
+        tradeId: trade.id,
+        senderId: req.user!.id,
+        message: "Payment marked as sent",
+        isSystemMessage: true,
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/confirm - Confirm payment received
+  app.post("/api/p2p/trades/:id/confirm", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Only the seller can confirm payment" });
+      }
+      
+      if (trade.status !== "paid") {
+        return res.status(400).json({ error: "Trade payment not marked yet" });
+      }
+      
+      const updated = await storage.updateP2PTrade(trade.id, {
+        status: "confirmed",
+        confirmedAt: new Date(),
+      });
+      
+      await storage.createP2PTradeMessage({
+        tradeId: trade.id,
+        senderId: req.user!.id,
+        message: "Payment confirmed",
+        isSystemMessage: true,
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/complete - Complete the trade and release funds
+  app.post("/api/p2p/trades/:id/complete", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Only the seller can complete the trade" });
+      }
+      
+      if (trade.status !== "confirmed") {
+        return res.status(400).json({ error: "Trade payment not confirmed yet" });
+      }
+      
+      if (trade.status === "completed") {
+        return res.status(400).json({ error: "Trade already completed" });
+      }
+      
+      const escrowAmount = parseFloat(trade.escrowAmount);
+      const platformFee = parseFloat(trade.platformFee || "0");
+      const releaseAmount = (escrowAmount - platformFee).toFixed(8);
+      
+      const releaseResult = await storage.updateUserBalanceWithCheck(
+        trade.buyerId,
+        releaseAmount,
+        'add'
+      );
+      
+      if (!releaseResult.success) {
+        return res.status(500).json({ error: "Failed to release funds to buyer" });
+      }
+      
+      await storage.createTransaction({
+        userId: trade.buyerId,
+        type: 'deposit',
+        status: 'completed',
+        amount: releaseAmount,
+        currency: 'USD',
+        description: `P2P trade ${trade.id} - funds received`,
+      });
+      
+      const updated = await storage.updateP2PTrade(trade.id, {
+        status: "completed",
+        completedAt: new Date(),
+      });
+      
+      await storage.createP2PTradeMessage({
+        tradeId: trade.id,
+        senderId: req.user!.id,
+        message: "Trade completed, funds released",
+        isSystemMessage: true,
+      });
+      
+      const metrics = await storage.getP2PTraderMetrics(trade.buyerId);
+      await storage.updateP2PTraderMetrics(trade.buyerId, {
+        totalTrades: (metrics?.totalTrades || 0) + 1,
+        completedTrades: (metrics?.completedTrades || 0) + 1,
+        totalBuyTrades: (metrics?.totalBuyTrades || 0) + 1,
+        lastTradeAt: new Date(),
+      });
+      
+      const sellerMetrics = await storage.getP2PTraderMetrics(trade.sellerId);
+      await storage.updateP2PTraderMetrics(trade.sellerId, {
+        totalTrades: (sellerMetrics?.totalTrades || 0) + 1,
+        completedTrades: (sellerMetrics?.completedTrades || 0) + 1,
+        totalSellTrades: (sellerMetrics?.totalSellTrades || 0) + 1,
+        lastTradeAt: new Date(),
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/cancel - Cancel the trade
+  app.post("/api/p2p/trades/:id/cancel", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized to cancel this trade" });
+      }
+      
+      if (trade.status === "completed" || trade.status === "cancelled") {
+        return res.status(400).json({ error: "Cannot cancel this trade" });
+      }
+      
+      const { reason } = req.body;
+      
+      if (trade.status === "confirmed" || trade.status === "paid") {
+        const escrowAmount = parseFloat(trade.escrowAmount);
+        if (escrowAmount > 0) {
+          const refundResult = await storage.updateUserBalanceWithCheck(
+            trade.sellerId,
+            trade.escrowAmount,
+            'add'
+          );
+          
+          if (!refundResult.success) {
+            console.error(`P2P trade ${trade.id} escrow refund failed:`, refundResult.error);
+          }
+        }
+      }
+      
+      const updated = await storage.updateP2PTrade(trade.id, {
+        status: "cancelled",
+        cancelReason: reason || "Cancelled by user",
+        cancelledAt: new Date(),
+      });
+      
+      await storage.createP2PTradeMessage({
+        tradeId: trade.id,
+        senderId: req.user!.id,
+        message: `Trade cancelled: ${reason || "No reason provided"}`,
+        isSystemMessage: true,
+      });
+      
+      const buyerMetrics = await storage.getP2PTraderMetrics(trade.buyerId);
+      await storage.updateP2PTraderMetrics(trade.buyerId, {
+        totalTrades: (buyerMetrics?.totalTrades || 0) + 1,
+        cancelledTrades: (buyerMetrics?.cancelledTrades || 0) + 1,
+      });
+      
+      const sellerMetrics = await storage.getP2PTraderMetrics(trade.sellerId);
+      await storage.updateP2PTraderMetrics(trade.sellerId, {
+        totalTrades: (sellerMetrics?.totalTrades || 0) + 1,
+        cancelledTrades: (sellerMetrics?.cancelledTrades || 0) + 1,
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/rate - Rate the trade partner
+  app.post("/api/p2p/trades/:id/rate", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized to rate this trade" });
+      }
+      
+      if (trade.status !== "completed") {
+        return res.status(400).json({ error: "Can only rate completed trades" });
+      }
+      
+      const { rating, comment } = req.body;
+      
+      if (rating === undefined || rating === null || typeof rating !== 'number') {
+        return res.status(400).json({ error: "Rating is required" });
+      }
+      
+      if (rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+        return res.status(400).json({ error: "Rating must be an integer between 1 and 5" });
+      }
+      
+      if (comment && (typeof comment !== 'string' || comment.length > 500)) {
+        return res.status(400).json({ error: "Comment must be a string under 500 characters" });
+      }
+      
+      const ratedUserId = trade.buyerId === req.user!.id ? trade.sellerId : trade.buyerId;
+      
+      const existingRatings = await storage.getP2PTraderRatings(ratedUserId);
+      const alreadyRated = existingRatings.find(r => r.tradeId === trade.id && r.raterId === req.user!.id);
+      
+      if (alreadyRated) {
+        return res.status(400).json({ error: "Already rated this trade" });
+      }
+      
+      const newRating = await storage.createP2PTraderRating({
+        tradeId: trade.id,
+        raterId: req.user!.id,
+        ratedUserId,
+        rating,
+        comment: comment || null,
+      });
+      
+      const allRatings = await storage.getP2PTraderRatings(ratedUserId);
+      const totalRatings = allRatings.length;
+      const positiveRatings = allRatings.filter(r => r.rating >= 4).length;
+      const negativeRatings = allRatings.filter(r => r.rating <= 2).length;
+      const avgRating = allRatings.reduce((sum, r) => sum + r.rating, 0) / totalRatings;
+      
+      await storage.updateP2PTraderMetrics(ratedUserId, {
+        positiveRatings,
+        negativeRatings,
+        overallRating: avgRating.toFixed(2),
+      });
+      
+      res.status(201).json(newRating);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /api/p2p/trades/:id/messages - Get trade chat messages
+  app.get("/api/p2p/trades/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized to view trade messages" });
+      }
+      
+      const messages = await storage.getP2PTradeMessages(req.params.id);
+      
+      const messagesWithSender = await Promise.all(messages.map(async (msg: any) => {
+        const sender = await storage.getUser(msg.senderId);
+        return {
+          ...msg,
+          sender: sender ? { id: sender.id, username: sender.username, nickname: sender.nickname } : null,
+        };
+      }));
+      
+      res.json(messagesWithSender);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/p2p/trades/:id/messages - Send a message in trade chat
+  app.post("/api/p2p/trades/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const trade = await storage.getP2PTrade(req.params.id);
+      if (!trade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
+        return res.status(403).json({ error: "Not authorized to message in this trade" });
+      }
+      
+      if (trade.status === "completed" || trade.status === "cancelled") {
+        return res.status(400).json({ error: "Cannot message in closed trades" });
+      }
+      
+      const { message, isPrewritten } = req.body;
+      
+      if (!message || message.trim().length === 0) {
+        return res.status(400).json({ error: "Message cannot be empty" });
+      }
+      
+      if (message.length > 1000) {
+        return res.status(400).json({ error: "Message too long" });
+      }
+      
+      const newMessage = await storage.createP2PTradeMessage({
+        tradeId: req.params.id,
+        senderId: req.user!.id,
+        message: message.trim(),
+        isPrewritten: isPrewritten || false,
+        isSystemMessage: false,
+      });
+      
+      const sender = await storage.getUser(req.user!.id);
+      
+      res.status(201).json({
+        ...newMessage,
+        sender: sender ? { id: sender.id, username: sender.username, nickname: sender.nickname } : null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== P2P DISPUTES ====================
 
   // Mock data for disputes
