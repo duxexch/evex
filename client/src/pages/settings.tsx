@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Shield, Settings2, Loader2, Monitor, Smartphone, Globe, Trash2, LogOut, CheckCircle, KeyRound, Camera, Users } from "lucide-react";
+import { User, Shield, Settings2, Loader2, Monitor, Smartphone, Globe, Trash2, LogOut, CheckCircle, KeyRound, Camera, Users, ImageIcon } from "lucide-react";
 import { BlockedMutedSettings } from "@/components/BlockedMutedSettings";
 import { format } from "date-fns";
 
@@ -75,7 +75,9 @@ function ProfileSection() {
   const headers = useAuthHeaders();
   
   const [isUploadingPicture, setIsUploadingPicture] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -107,29 +109,76 @@ function ProfileSection() {
     },
   });
 
+  const convertToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+    });
+  };
+
   const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    setIsUploadingPicture(true);
-    const formData = new FormData();
-    formData.append('profilePicture', file);
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: t("common.error"), description: t("settings.fileTooLarge") || "File size must be less than 5MB", variant: "destructive" });
+      return;
+    }
     
+    setIsUploadingPicture(true);
     try {
+      const base64 = await convertToBase64(file);
       const res = await fetch("/api/user/profile-picture", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ profilePicture: base64 }),
       });
       if (!res.ok) throw new Error("Failed to upload");
       const data = await res.json();
       updateUser(data.user);
-      toast({ title: t("common.success"), description: "Profile picture updated" });
+      toast({ title: t("common.success"), description: t("settings.profilePictureUpdated") || "Profile picture updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     } catch {
-      toast({ title: t("common.error"), description: "Failed to upload profile picture", variant: "destructive" });
+      toast({ title: t("common.error"), description: t("settings.uploadFailed") || "Failed to upload profile picture", variant: "destructive" });
     } finally {
       setIsUploadingPicture(false);
+    }
+  };
+
+  const handleCoverPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: t("common.error"), description: t("settings.fileTooLarge") || "File size must be less than 10MB", variant: "destructive" });
+      return;
+    }
+    
+    setIsUploadingCover(true);
+    try {
+      const base64 = await convertToBase64(file);
+      const res = await fetch("/api/user/cover-photo", {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ coverPhoto: base64 }),
+      });
+      if (!res.ok) throw new Error("Failed to upload");
+      const data = await res.json();
+      updateUser(data.user);
+      toast({ title: t("common.success"), description: t("settings.coverPhotoUpdated") || "Cover photo updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    } catch {
+      toast({ title: t("common.error"), description: t("settings.uploadFailed") || "Failed to upload cover photo", variant: "destructive" });
+    } finally {
+      setIsUploadingCover(false);
     }
   };
 
@@ -149,37 +198,74 @@ function ProfileSection() {
         <CardDescription>{t("settings.profileDescription")}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col items-center gap-4 mb-6">
-          <div className="relative">
-            <Avatar className="h-24 w-24">
-              <AvatarImage src={user?.profilePicture || undefined} alt={user?.firstName || "Profile"} />
-              <AvatarFallback className="text-2xl bg-primary/10">{getUserInitials()}</AvatarFallback>
-            </Avatar>
+        <div className="relative mb-16">
+          <div 
+            className="h-32 rounded-lg bg-gradient-to-r from-primary/20 to-primary/40 relative overflow-hidden cursor-pointer group"
+            onClick={() => coverInputRef.current?.click()}
+            data-testid="button-cover-photo"
+          >
+            {user?.coverPhoto ? (
+              <img 
+                src={user.coverPhoto} 
+                alt="Cover" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <ImageIcon className="h-8 w-8 text-muted-foreground/50" />
+              </div>
+            )}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              {isUploadingCover ? (
+                <Loader2 className="h-6 w-6 text-white animate-spin" />
+              ) : (
+                <div className="text-white flex items-center gap-2">
+                  <Camera className="h-5 w-5" />
+                  <span className="text-sm">{t("settings.changeCover") || "Change Cover"}</span>
+                </div>
+              )}
+            </div>
             <input
               type="file"
-              ref={fileInputRef}
+              ref={coverInputRef}
               accept="image/*"
               className="hidden"
-              onChange={handleProfilePictureUpload}
-              data-testid="input-profile-picture"
+              onChange={handleCoverPhotoUpload}
+              data-testid="input-cover-photo"
             />
-            <Button
-              type="button"
-              size="icon"
-              variant="secondary"
-              className="absolute bottom-0 right-0 h-8 w-8 rounded-full"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploadingPicture}
-              data-testid="button-upload-picture"
-            >
-              {isUploadingPicture ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Camera className="h-4 w-4" />
-              )}
-            </Button>
           </div>
-          <p className="text-sm text-muted-foreground">{t("settings.clickToUpload") || "Click the camera icon to upload a profile picture"}</p>
+          
+          <div className="absolute -bottom-12 left-4">
+            <div className="relative">
+              <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
+                <AvatarImage src={user?.profilePicture || undefined} alt={user?.firstName || "Profile"} />
+                <AvatarFallback className="text-2xl bg-primary/10">{getUserInitials()}</AvatarFallback>
+              </Avatar>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleProfilePictureUpload}
+                data-testid="input-profile-picture"
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="secondary"
+                className="absolute bottom-0 right-0 h-8 w-8 rounded-full shadow-md"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingPicture}
+                data-testid="button-upload-picture"
+              >
+                {isUploadingPicture ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => updateProfileMutation.mutate(data))} className="space-y-4">

@@ -1746,6 +1746,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         username: users.username,
         nickname: users.nickname,
         profilePicture: users.profilePicture,
+        coverPhoto: users.coverPhoto,
         vipLevel: users.vipLevel,
         gamesPlayed: users.gamesPlayed,
         gamesWon: users.gamesWon,
@@ -1808,6 +1809,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         username: users.username,
         nickname: users.nickname,
         profilePicture: users.profilePicture,
+        coverPhoto: users.coverPhoto,
         vipLevel: users.vipLevel,
         gamesPlayed: users.gamesPlayed,
         gamesWon: users.gamesWon,
@@ -6016,7 +6018,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .set({ profilePicture, updatedAt: new Date() })
         .where(eq(users.id, req.user!.id));
       
-      res.json({ success: true });
+      const [updatedUser] = await db.select().from(users).where(eq(users.id, req.user!.id));
+      res.json({ success: true, user: updatedUser });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update cover photo
+  app.post("/api/user/cover-photo", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { coverPhoto } = req.body;
+      if (!coverPhoto) {
+        return res.status(400).json({ error: "Cover photo is required" });
+      }
+      
+      await db.update(users)
+        .set({ coverPhoto, updatedAt: new Date() })
+        .where(eq(users.id, req.user!.id));
+      
+      const [updatedUser] = await db.select().from(users).where(eq(users.id, req.user!.id));
+      res.json({ success: true, user: updatedUser });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -49,6 +49,7 @@ interface PlayerStats {
   username: string;
   nickname?: string;
   profilePicture?: string;
+  coverPhoto?: string;
   vipLevel: number;
   gamesPlayed: number;
   gamesWon: number;
@@ -260,12 +261,23 @@ export default function PlayerProfilePage() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className={`h-24 bg-gradient-to-r ${VIP_COLORS[Math.min(stats.vipLevel, VIP_COLORS.length - 1)]}`} />
+        <div 
+          className="h-48 relative"
+          style={{
+            background: stats.coverPhoto 
+              ? `url(${stats.coverPhoto}) center/cover no-repeat`
+              : `linear-gradient(to right, ${VIP_COLORS[Math.min(stats.vipLevel, VIP_COLORS.length - 1)].replace('from-', '').replace(' to-', ', ')})`
+          }}
+        >
+          {!stats.coverPhoto && (
+            <div className={`absolute inset-0 bg-gradient-to-r ${VIP_COLORS[Math.min(stats.vipLevel, VIP_COLORS.length - 1)]}`} />
+          )}
+        </div>
         <CardContent className="relative pt-0 pb-6 px-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-12">
-            <Avatar className="w-24 h-24 border-4 border-background shadow-lg">
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-16">
+            <Avatar className="w-32 h-32 border-4 border-background shadow-lg">
               <AvatarImage src={stats.profilePicture} />
-              <AvatarFallback className="text-2xl bg-muted">
+              <AvatarFallback className="text-3xl bg-muted">
                 {stats.nickname?.[0] || stats.username[0]}
               </AvatarFallback>
             </Avatar>

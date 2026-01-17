@@ -30,6 +30,7 @@ export const users = pgTable("users", {
   email: text("email").unique(),
   password: text("password").notNull(),
   profilePicture: text("profile_picture"),
+  coverPhoto: text("cover_photo"),
   role: userRoleEnum("role").notNull().default("player"),
   status: userStatusEnum("status").notNull().default("active"),
   firstName: text("first_name"),
