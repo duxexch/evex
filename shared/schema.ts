@@ -2622,3 +2622,119 @@ export const seasonRewardsRelations = relations(seasonRewards, ({ one }) => ({
 export const insertSeasonRewardSchema = createInsertSchema(seasonRewards).omit({ id: true, createdAt: true });
 export type InsertSeasonReward = z.infer<typeof insertSeasonRewardSchema>;
 export type SeasonReward = typeof seasonRewards.$inferSelect;
+
+// ==================== PROJECT CURRENCY ====================
+
+export const currencyApprovalModeEnum = pgEnum("currency_approval_mode", ["automatic", "manual"]);
+export const currencyConversionStatusEnum = pgEnum("currency_conversion_status", ["pending", "approved", "rejected", "completed"]);
+export const currencyLedgerTypeEnum = pgEnum("currency_ledger_type", ["conversion", "game_stake", "game_win", "p2p_send", "p2p_receive", "bonus", "refund", "admin_adjustment"]);
+
+// Project Currency Settings - Admin configuration
+export const projectCurrencySettings = pgTable("project_currency_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  currencyName: text("currency_name").notNull().default("VEX Coin"),
+  currencySymbol: text("currency_symbol").notNull().default("VEX"),
+  baseCurrencyCode: text("base_currency_code").notNull().default("USD"),
+  exchangeRate: decimal("exchange_rate", { precision: 15, scale: 6 }).notNull().default("100"),
+  minConversionAmount: decimal("min_conversion_amount", { precision: 15, scale: 2 }).notNull().default("1.00"),
+  maxConversionAmount: decimal("max_conversion_amount", { precision: 15, scale: 2 }).notNull().default("10000.00"),
+  dailyConversionLimitPerUser: decimal("daily_conversion_limit_per_user", { precision: 15, scale: 2 }).notNull().default("5000.00"),
+  totalPlatformDailyLimit: decimal("total_platform_daily_limit", { precision: 15, scale: 2 }).notNull().default("1000000.00"),
+  conversionCommissionRate: decimal("conversion_commission_rate", { precision: 5, scale: 4 }).notNull().default("0.01"),
+  approvalMode: currencyApprovalModeEnum("approval_mode").notNull().default("automatic"),
+  isActive: boolean("is_active").notNull().default(true),
+  allowPointsConversion: boolean("allow_points_conversion").notNull().default(false),
+  pointsExchangeRate: decimal("points_exchange_rate", { precision: 15, scale: 6 }).default("10"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertProjectCurrencySettingsSchema = createInsertSchema(projectCurrencySettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProjectCurrencySettings = z.infer<typeof insertProjectCurrencySettingsSchema>;
+export type ProjectCurrencySettings = typeof projectCurrencySettings.$inferSelect;
+
+// Project Currency Wallets - User balances
+export const projectCurrencyWallets = pgTable("project_currency_wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  purchasedBalance: decimal("purchased_balance", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  earnedBalance: decimal("earned_balance", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  totalBalance: decimal("total_balance", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  totalConverted: decimal("total_converted", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  totalSpent: decimal("total_spent", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  totalEarned: decimal("total_earned", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  lockedBalance: decimal("locked_balance", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_currency_wallets_user").on(table.userId),
+]);
+
+export const projectCurrencyWalletsRelations = relations(projectCurrencyWallets, ({ one }) => ({
+  user: one(users, { fields: [projectCurrencyWallets.userId], references: [users.id] }),
+}));
+
+export const insertProjectCurrencyWalletSchema = createInsertSchema(projectCurrencyWallets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProjectCurrencyWallet = z.infer<typeof insertProjectCurrencyWalletSchema>;
+export type ProjectCurrencyWallet = typeof projectCurrencyWallets.$inferSelect;
+
+// Project Currency Conversions - Conversion requests with approval
+export const projectCurrencyConversions = pgTable("project_currency_conversions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  baseCurrencyAmount: decimal("base_currency_amount", { precision: 15, scale: 2 }).notNull(),
+  projectCurrencyAmount: decimal("project_currency_amount", { precision: 15, scale: 2 }).notNull(),
+  exchangeRateUsed: decimal("exchange_rate_used", { precision: 15, scale: 6 }).notNull(),
+  commissionAmount: decimal("commission_amount", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  netAmount: decimal("net_amount", { precision: 15, scale: 2 }).notNull(),
+  status: currencyConversionStatusEnum("status").notNull().default("pending"),
+  approvedById: varchar("approved_by_id").references(() => users.id),
+  rejectionReason: text("rejection_reason"),
+  approvedAt: timestamp("approved_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_currency_conversions_user").on(table.userId),
+  index("idx_currency_conversions_status").on(table.status),
+  index("idx_currency_conversions_date").on(table.createdAt),
+]);
+
+export const projectCurrencyConversionsRelations = relations(projectCurrencyConversions, ({ one }) => ({
+  user: one(users, { fields: [projectCurrencyConversions.userId], references: [users.id] }),
+  approvedBy: one(users, { fields: [projectCurrencyConversions.approvedById], references: [users.id] }),
+}));
+
+export const insertProjectCurrencyConversionSchema = createInsertSchema(projectCurrencyConversions).omit({ id: true, createdAt: true });
+export type InsertProjectCurrencyConversion = z.infer<typeof insertProjectCurrencyConversionSchema>;
+export type ProjectCurrencyConversion = typeof projectCurrencyConversions.$inferSelect;
+
+// Project Currency Ledger - Transaction history
+export const projectCurrencyLedger = pgTable("project_currency_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  walletId: varchar("wallet_id").notNull().references(() => projectCurrencyWallets.id),
+  type: currencyLedgerTypeEnum("type").notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  balanceBefore: decimal("balance_before", { precision: 15, scale: 2 }).notNull(),
+  balanceAfter: decimal("balance_after", { precision: 15, scale: 2 }).notNull(),
+  referenceId: varchar("reference_id"),
+  referenceType: text("reference_type"),
+  description: text("description"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_currency_ledger_user").on(table.userId),
+  index("idx_currency_ledger_wallet").on(table.walletId),
+  index("idx_currency_ledger_type").on(table.type),
+  index("idx_currency_ledger_date").on(table.createdAt),
+  index("idx_currency_ledger_reference").on(table.referenceId, table.referenceType),
+]);
+
+export const projectCurrencyLedgerRelations = relations(projectCurrencyLedger, ({ one }) => ({
+  user: one(users, { fields: [projectCurrencyLedger.userId], references: [users.id] }),
+  wallet: one(projectCurrencyWallets, { fields: [projectCurrencyLedger.walletId], references: [projectCurrencyWallets.id] }),
+}));
+
+export const insertProjectCurrencyLedgerSchema = createInsertSchema(projectCurrencyLedger).omit({ id: true, createdAt: true });
+export type InsertProjectCurrencyLedger = z.infer<typeof insertProjectCurrencyLedgerSchema>;
+export type ProjectCurrencyLedger = typeof projectCurrencyLedger.$inferSelect;

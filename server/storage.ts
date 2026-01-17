@@ -9,6 +9,7 @@ import {
   achievements, userAchievements, seasons, seasonalStats, seasonRewards,
   p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics, p2pSettings,
   multiplayerGames, systemConfig, adminAuditLogs,
+  projectCurrencySettings, projectCurrencyWallets, projectCurrencyConversions, projectCurrencyLedger,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -41,6 +42,10 @@ import {
   type SystemConfig, type InsertSystemConfig,
   type ScheduledConfigChange, type InsertScheduledConfigChange,
   type AdminAlert, type InsertAdminAlert,
+  type ProjectCurrencySettings, type InsertProjectCurrencySettings,
+  type ProjectCurrencyWallet, type InsertProjectCurrencyWallet,
+  type ProjectCurrencyConversion, type InsertProjectCurrencyConversion,
+  type ProjectCurrencyLedger, type InsertProjectCurrencyLedger,
   scheduledConfigChanges,
   adminAlerts,
 } from "@shared/schema";
@@ -237,6 +242,29 @@ export interface IStorage {
   markAllAdminAlertsAsRead(readBy: string): Promise<number>;
   getUnreadAdminAlertCount(): Promise<number>;
   deleteAdminAlert(id: string): Promise<boolean>;
+
+  // Project Currency
+  getProjectCurrencySettings(): Promise<ProjectCurrencySettings | undefined>;
+  updateProjectCurrencySettings(data: Partial<InsertProjectCurrencySettings>): Promise<ProjectCurrencySettings>;
+  getProjectCurrencyWallet(userId: string): Promise<ProjectCurrencyWallet | undefined>;
+  createProjectCurrencyWallet(userId: string): Promise<ProjectCurrencyWallet>;
+  getOrCreateProjectCurrencyWallet(userId: string): Promise<ProjectCurrencyWallet>;
+  updateProjectCurrencyWalletBalance(walletId: string, amount: string, operation: 'add' | 'subtract', balanceType: 'purchased' | 'earned'): Promise<{ success: boolean; wallet?: ProjectCurrencyWallet; error?: string }>;
+  lockProjectCurrencyBalance(walletId: string, amount: string): Promise<{ success: boolean; error?: string }>;
+  unlockProjectCurrencyBalance(walletId: string, amount: string): Promise<{ success: boolean; error?: string }>;
+  createProjectCurrencyConversion(conversion: InsertProjectCurrencyConversion): Promise<ProjectCurrencyConversion>;
+  getProjectCurrencyConversion(id: string): Promise<ProjectCurrencyConversion | undefined>;
+  listProjectCurrencyConversions(options?: { userId?: string; status?: string; limit?: number }): Promise<ProjectCurrencyConversion[]>;
+  updateProjectCurrencyConversion(id: string, data: Partial<ProjectCurrencyConversion>): Promise<ProjectCurrencyConversion | undefined>;
+  approveProjectCurrencyConversion(conversionId: string, adminId: string): Promise<{ success: boolean; error?: string }>;
+  rejectProjectCurrencyConversion(conversionId: string, adminId: string, reason: string): Promise<{ success: boolean; error?: string }>;
+  createProjectCurrencyLedgerEntry(entry: InsertProjectCurrencyLedger): Promise<ProjectCurrencyLedger>;
+  getProjectCurrencyLedger(options?: { userId?: string; walletId?: string; type?: string; limit?: number; offset?: number }): Promise<ProjectCurrencyLedger[]>;
+  convertToProjectCurrencyAtomic(userId: string, baseCurrencyAmount: string): Promise<{ success: boolean; conversion?: ProjectCurrencyConversion; error?: string }>;
+  spendProjectCurrencyAtomic(userId: string, amount: string, type: string, referenceId?: string, description?: string): Promise<{ success: boolean; error?: string }>;
+  earnProjectCurrencyAtomic(userId: string, amount: string, type: string, referenceId?: string, description?: string): Promise<{ success: boolean; error?: string }>;
+  getUserDailyConversionTotal(userId: string): Promise<string>;
+  getPlatformDailyConversionTotal(): Promise<string>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2272,6 +2300,481 @@ export class DatabaseStorage implements IStorage {
   async deleteAdminAlert(id: string): Promise<boolean> {
     const result = await db.delete(adminAlerts).where(eq(adminAlerts.id, id));
     return (result.rowCount || 0) > 0;
+  }
+
+  // ==================== PROJECT CURRENCY ====================
+
+  async getProjectCurrencySettings(): Promise<ProjectCurrencySettings | undefined> {
+    const [settings] = await db.select().from(projectCurrencySettings).limit(1);
+    return settings || undefined;
+  }
+
+  async updateProjectCurrencySettings(data: Partial<InsertProjectCurrencySettings>): Promise<ProjectCurrencySettings> {
+    const existing = await this.getProjectCurrencySettings();
+    if (existing) {
+      const [updated] = await db.update(projectCurrencySettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(projectCurrencySettings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(projectCurrencySettings).values(data as any).returning();
+    return created;
+  }
+
+  async getProjectCurrencyWallet(userId: string): Promise<ProjectCurrencyWallet | undefined> {
+    const [wallet] = await db.select().from(projectCurrencyWallets).where(eq(projectCurrencyWallets.userId, userId));
+    return wallet || undefined;
+  }
+
+  async createProjectCurrencyWallet(userId: string): Promise<ProjectCurrencyWallet> {
+    const [wallet] = await db.insert(projectCurrencyWallets).values({ userId }).returning();
+    return wallet;
+  }
+
+  async getOrCreateProjectCurrencyWallet(userId: string): Promise<ProjectCurrencyWallet> {
+    const existing = await this.getProjectCurrencyWallet(userId);
+    if (existing) return existing;
+    return this.createProjectCurrencyWallet(userId);
+  }
+
+  async updateProjectCurrencyWalletBalance(
+    walletId: string, 
+    amount: string, 
+    operation: 'add' | 'subtract', 
+    balanceType: 'purchased' | 'earned'
+  ): Promise<{ success: boolean; wallet?: ProjectCurrencyWallet; error?: string }> {
+    const changeAmount = parseFloat(amount);
+    if (isNaN(changeAmount) || changeAmount < 0) {
+      return { success: false, error: 'Invalid amount' };
+    }
+
+    try {
+      const balanceColumn = balanceType === 'purchased' ? 'purchased_balance' : 'earned_balance';
+      const sqlOp = operation === 'add' ? sql`+` : sql`-`;
+
+      if (operation === 'subtract') {
+        const [result] = await db.execute(sql`
+          UPDATE project_currency_wallets
+          SET 
+            ${sql.raw(balanceColumn)} = ${sql.raw(balanceColumn)} - ${changeAmount},
+            total_balance = total_balance - ${changeAmount},
+            total_spent = total_spent + ${changeAmount},
+            updated_at = NOW()
+          WHERE id = ${walletId}
+            AND ${sql.raw(balanceColumn)} >= ${changeAmount}
+          RETURNING *
+        `);
+        if (!result) {
+          return { success: false, error: 'Insufficient balance' };
+        }
+        return { success: true, wallet: result as unknown as ProjectCurrencyWallet };
+      } else {
+        const [result] = await db.execute(sql`
+          UPDATE project_currency_wallets
+          SET 
+            ${sql.raw(balanceColumn)} = ${sql.raw(balanceColumn)} + ${changeAmount},
+            total_balance = total_balance + ${changeAmount},
+            ${sql.raw(balanceType === 'purchased' ? 'total_converted' : 'total_earned')} = ${sql.raw(balanceType === 'purchased' ? 'total_converted' : 'total_earned')} + ${changeAmount},
+            updated_at = NOW()
+          WHERE id = ${walletId}
+          RETURNING *
+        `);
+        return { success: true, wallet: result as unknown as ProjectCurrencyWallet };
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async lockProjectCurrencyBalance(walletId: string, amount: string): Promise<{ success: boolean; error?: string }> {
+    const lockAmount = parseFloat(amount);
+    try {
+      const result = await db.execute(sql`
+        UPDATE project_currency_wallets
+        SET 
+          total_balance = total_balance - ${lockAmount},
+          locked_balance = locked_balance + ${lockAmount},
+          updated_at = NOW()
+        WHERE id = ${walletId}
+          AND total_balance >= ${lockAmount}
+        RETURNING id
+      `);
+      if ((result as any).length === 0) {
+        return { success: false, error: 'Insufficient balance to lock' };
+      }
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async unlockProjectCurrencyBalance(walletId: string, amount: string): Promise<{ success: boolean; error?: string }> {
+    const unlockAmount = parseFloat(amount);
+    try {
+      const result = await db.execute(sql`
+        UPDATE project_currency_wallets
+        SET 
+          total_balance = total_balance + ${unlockAmount},
+          locked_balance = locked_balance - ${unlockAmount},
+          updated_at = NOW()
+        WHERE id = ${walletId}
+          AND locked_balance >= ${unlockAmount}
+        RETURNING id
+      `);
+      if ((result as any).length === 0) {
+        return { success: false, error: 'Insufficient locked balance' };
+      }
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createProjectCurrencyConversion(conversion: InsertProjectCurrencyConversion): Promise<ProjectCurrencyConversion> {
+    const [created] = await db.insert(projectCurrencyConversions).values(conversion).returning();
+    return created;
+  }
+
+  async getProjectCurrencyConversion(id: string): Promise<ProjectCurrencyConversion | undefined> {
+    const [conversion] = await db.select().from(projectCurrencyConversions).where(eq(projectCurrencyConversions.id, id));
+    return conversion || undefined;
+  }
+
+  async listProjectCurrencyConversions(options?: { userId?: string; status?: string; limit?: number }): Promise<ProjectCurrencyConversion[]> {
+    let query = db.select().from(projectCurrencyConversions);
+    const conditions: any[] = [];
+    
+    if (options?.userId) conditions.push(eq(projectCurrencyConversions.userId, options.userId));
+    if (options?.status) conditions.push(eq(projectCurrencyConversions.status, options.status as any));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return query.orderBy(desc(projectCurrencyConversions.createdAt)).limit(options?.limit || 100);
+  }
+
+  async updateProjectCurrencyConversion(id: string, data: Partial<ProjectCurrencyConversion>): Promise<ProjectCurrencyConversion | undefined> {
+    const [updated] = await db.update(projectCurrencyConversions)
+      .set(data)
+      .where(eq(projectCurrencyConversions.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async approveProjectCurrencyConversion(conversionId: string, adminId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await db.transaction(async (tx) => {
+        const [conversion] = await tx.execute(sql`
+          SELECT * FROM project_currency_conversions 
+          WHERE id = ${conversionId} AND status = 'pending'
+          FOR UPDATE
+        `);
+        
+        if (!conversion) {
+          return { success: false, error: 'Conversion not found or already processed' };
+        }
+
+        const conv = conversion as unknown as ProjectCurrencyConversion;
+        const wallet = await this.getOrCreateProjectCurrencyWallet(conv.userId);
+
+        await tx.execute(sql`
+          UPDATE project_currency_wallets
+          SET 
+            purchased_balance = purchased_balance + ${parseFloat(conv.netAmount)},
+            total_balance = total_balance + ${parseFloat(conv.netAmount)},
+            total_converted = total_converted + ${parseFloat(conv.netAmount)},
+            updated_at = NOW()
+          WHERE id = ${wallet.id}
+        `);
+
+        await tx.execute(sql`
+          UPDATE project_currency_conversions
+          SET 
+            status = 'completed',
+            approved_by_id = ${adminId},
+            approved_at = NOW(),
+            completed_at = NOW()
+          WHERE id = ${conversionId}
+        `);
+
+        await tx.insert(projectCurrencyLedger).values({
+          userId: conv.userId,
+          walletId: wallet.id,
+          type: 'conversion',
+          amount: conv.netAmount,
+          balanceBefore: wallet.totalBalance,
+          balanceAfter: (parseFloat(wallet.totalBalance) + parseFloat(conv.netAmount)).toFixed(2),
+          referenceId: conversionId,
+          referenceType: 'conversion',
+          description: `Converted ${conv.baseCurrencyAmount} to project currency`,
+        });
+
+        return { success: true };
+      });
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async rejectProjectCurrencyConversion(conversionId: string, adminId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await db.transaction(async (tx) => {
+        const [conversion] = await tx.execute(sql`
+          SELECT * FROM project_currency_conversions 
+          WHERE id = ${conversionId} AND status = 'pending'
+          FOR UPDATE
+        `);
+        
+        if (!conversion) {
+          return { success: false, error: 'Conversion not found or already processed' };
+        }
+
+        const conv = conversion as unknown as ProjectCurrencyConversion;
+
+        await tx.execute(sql`
+          UPDATE users
+          SET balance = balance + ${parseFloat(conv.baseCurrencyAmount)}
+          WHERE id = ${conv.userId}
+        `);
+
+        await tx.execute(sql`
+          UPDATE project_currency_conversions
+          SET 
+            status = 'rejected',
+            approved_by_id = ${adminId},
+            rejection_reason = ${reason}
+          WHERE id = ${conversionId}
+        `);
+
+        return { success: true };
+      });
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createProjectCurrencyLedgerEntry(entry: InsertProjectCurrencyLedger): Promise<ProjectCurrencyLedger> {
+    const [created] = await db.insert(projectCurrencyLedger).values(entry).returning();
+    return created;
+  }
+
+  async getProjectCurrencyLedger(options?: { userId?: string; walletId?: string; type?: string; limit?: number; offset?: number }): Promise<ProjectCurrencyLedger[]> {
+    let query = db.select().from(projectCurrencyLedger);
+    const conditions: any[] = [];
+    
+    if (options?.userId) conditions.push(eq(projectCurrencyLedger.userId, options.userId));
+    if (options?.walletId) conditions.push(eq(projectCurrencyLedger.walletId, options.walletId));
+    if (options?.type) conditions.push(eq(projectCurrencyLedger.type, options.type as any));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return query
+      .orderBy(desc(projectCurrencyLedger.createdAt))
+      .limit(options?.limit || 100)
+      .offset(options?.offset || 0);
+  }
+
+  async convertToProjectCurrencyAtomic(userId: string, baseCurrencyAmount: string): Promise<{ success: boolean; conversion?: ProjectCurrencyConversion; error?: string }> {
+    try {
+      return await db.transaction(async (tx) => {
+        const settings = await this.getProjectCurrencySettings();
+        if (!settings || !settings.isActive) {
+          return { success: false, error: 'Project currency is not active' };
+        }
+
+        const amount = parseFloat(baseCurrencyAmount);
+        if (amount < parseFloat(settings.minConversionAmount)) {
+          return { success: false, error: `Minimum conversion is ${settings.minConversionAmount}` };
+        }
+        if (amount > parseFloat(settings.maxConversionAmount)) {
+          return { success: false, error: `Maximum conversion is ${settings.maxConversionAmount}` };
+        }
+
+        const dailyTotal = await this.getUserDailyConversionTotal(userId);
+        const newDailyTotal = parseFloat(dailyTotal) + amount;
+        if (newDailyTotal > parseFloat(settings.dailyConversionLimitPerUser)) {
+          return { success: false, error: 'Daily conversion limit exceeded' };
+        }
+
+        const [lockResult] = await tx.execute(sql`
+          UPDATE users
+          SET balance = balance - ${amount}
+          WHERE id = ${userId} AND balance >= ${amount}
+          RETURNING id
+        `);
+
+        if (!lockResult) {
+          return { success: false, error: 'Insufficient balance' };
+        }
+
+        const exchangeRate = parseFloat(settings.exchangeRate);
+        const commissionRate = parseFloat(settings.conversionCommissionRate);
+        const grossAmount = amount * exchangeRate;
+        const commissionAmount = grossAmount * commissionRate;
+        const netAmount = grossAmount - commissionAmount;
+
+        const [conversion] = await tx.insert(projectCurrencyConversions).values({
+          userId,
+          baseCurrencyAmount: amount.toFixed(2),
+          projectCurrencyAmount: grossAmount.toFixed(2),
+          exchangeRateUsed: settings.exchangeRate,
+          commissionAmount: commissionAmount.toFixed(2),
+          netAmount: netAmount.toFixed(2),
+          status: settings.approvalMode === 'automatic' ? 'completed' : 'pending',
+        }).returning();
+
+        if (settings.approvalMode === 'automatic') {
+          const wallet = await this.getOrCreateProjectCurrencyWallet(userId);
+          await tx.execute(sql`
+            UPDATE project_currency_wallets
+            SET 
+              purchased_balance = purchased_balance + ${netAmount},
+              total_balance = total_balance + ${netAmount},
+              total_converted = total_converted + ${netAmount},
+              updated_at = NOW()
+            WHERE id = ${wallet.id}
+          `);
+
+          await tx.insert(projectCurrencyLedger).values({
+            userId,
+            walletId: wallet.id,
+            type: 'conversion',
+            amount: netAmount.toFixed(2),
+            balanceBefore: wallet.totalBalance,
+            balanceAfter: (parseFloat(wallet.totalBalance) + netAmount).toFixed(2),
+            referenceId: conversion.id,
+            referenceType: 'conversion',
+            description: `Converted ${amount} to project currency`,
+          });
+
+          await tx.execute(sql`
+            UPDATE project_currency_conversions
+            SET completed_at = NOW()
+            WHERE id = ${conversion.id}
+          `);
+        }
+
+        return { success: true, conversion };
+      });
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async spendProjectCurrencyAtomic(userId: string, amount: string, type: string, referenceId?: string, description?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      return await db.transaction(async (tx) => {
+        const wallet = await this.getProjectCurrencyWallet(userId);
+        if (!wallet) {
+          return { success: false, error: 'Wallet not found' };
+        }
+
+        const spendAmount = parseFloat(amount);
+        if (spendAmount > parseFloat(wallet.totalBalance)) {
+          return { success: false, error: 'Insufficient project currency balance' };
+        }
+
+        const earnedBalance = parseFloat(wallet.earnedBalance);
+        const purchasedBalance = parseFloat(wallet.purchasedBalance);
+        
+        let fromEarned = Math.min(earnedBalance, spendAmount);
+        let fromPurchased = spendAmount - fromEarned;
+
+        await tx.execute(sql`
+          UPDATE project_currency_wallets
+          SET 
+            earned_balance = earned_balance - ${fromEarned},
+            purchased_balance = purchased_balance - ${fromPurchased},
+            total_balance = total_balance - ${spendAmount},
+            total_spent = total_spent + ${spendAmount},
+            updated_at = NOW()
+          WHERE id = ${wallet.id}
+            AND total_balance >= ${spendAmount}
+        `);
+
+        await tx.insert(projectCurrencyLedger).values({
+          userId,
+          walletId: wallet.id,
+          type: type as any,
+          amount: (-spendAmount).toFixed(2),
+          balanceBefore: wallet.totalBalance,
+          balanceAfter: (parseFloat(wallet.totalBalance) - spendAmount).toFixed(2),
+          referenceId,
+          referenceType: type,
+          description,
+        });
+
+        return { success: true };
+      });
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async earnProjectCurrencyAtomic(userId: string, amount: string, type: string, referenceId?: string, description?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const wallet = await this.getOrCreateProjectCurrencyWallet(userId);
+      const earnAmount = parseFloat(amount);
+
+      await db.execute(sql`
+        UPDATE project_currency_wallets
+        SET 
+          earned_balance = earned_balance + ${earnAmount},
+          total_balance = total_balance + ${earnAmount},
+          total_earned = total_earned + ${earnAmount},
+          updated_at = NOW()
+        WHERE id = ${wallet.id}
+      `);
+
+      await db.insert(projectCurrencyLedger).values({
+        userId,
+        walletId: wallet.id,
+        type: type as any,
+        amount: earnAmount.toFixed(2),
+        balanceBefore: wallet.totalBalance,
+        balanceAfter: (parseFloat(wallet.totalBalance) + earnAmount).toFixed(2),
+        referenceId,
+        referenceType: type,
+        description,
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getUserDailyConversionTotal(userId: string): Promise<string> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const [result] = await db.execute(sql`
+      SELECT COALESCE(SUM(CAST(base_currency_amount AS DECIMAL)), 0) as total
+      FROM project_currency_conversions
+      WHERE user_id = ${userId}
+        AND created_at >= ${today}
+        AND status != 'rejected'
+    `);
+    
+    return (result as any)?.total?.toString() || '0';
+  }
+
+  async getPlatformDailyConversionTotal(): Promise<string> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const [result] = await db.execute(sql`
+      SELECT COALESCE(SUM(CAST(base_currency_amount AS DECIMAL)), 0) as total
+      FROM project_currency_conversions
+      WHERE created_at >= ${today}
+        AND status = 'completed'
+    `);
+    
+    return (result as any)?.total?.toString() || '0';
   }
 }
 

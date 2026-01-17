@@ -1,0 +1,227 @@
+VEX Platform: Project Currency Integration & P2P Enhancement
+1. Project Currency System
+Objective
+
+Introduce a platform-specific currency (e.g., "VEX Coin") tied to a base currency unit chosen by the admin.
+
+Users can:
+
+Convert real money into the project currency.
+
+Play games and execute P2P trades using the project currency.
+
+Admin panel manages:
+
+Exchange rates
+
+Transaction approvals
+
+Total conversions and usage tracking
+
+Commission rates per currency
+
+Features
+A. Admin Configuration
+
+Admin panel allows:
+
+Setting project currency value per base unit (e.g., 1 USD = 100 VEX Coins, 1 EGP = 1 Project Unit).
+
+Defining transaction limits:
+
+Max/min conversion per user.
+
+Total platform-wide conversions.
+
+Enabling manual or automatic approval for conversions.
+
+Setting commission rates for each currency type.
+
+Monitoring all operations with audit logs.
+
+Real-time monitoring:
+
+WebSocket notifications for each conversion, trade, or high-value operation.
+
+Live update indicators on admin panel for instant awareness.
+
+B. User Experience
+
+Wallet:
+
+Users can see project currency balance and transaction history.
+
+Display separate balances for purchased vs. earned currency (e.g., from P2P trades).
+
+Conversion:
+
+Users can convert base currency into project currency with admin-defined limits.
+
+Optional real-time confirmation from admin (or automatic if enabled).
+
+Spending:
+
+Users can spend project currency in:
+
+Multiplayer games
+
+P2P marketplace (including points trading)
+
+Transaction History:
+
+Full ledger showing earned, spent, and converted project currency.
+
+Searchable by date, user, or transaction type.
+
+2. P2P & Game Integration
+A. Trading & Gameplay
+
+Project currency becomes the primary medium of exchange in:
+
+Multiplayer games
+
+P2P trades
+
+In-game purchases or points exchange
+
+Atomic Operations:
+
+Currency addition, deduction, and P2P trades are atomic.
+
+Escrow for trades ensures funds are secure until completion.
+
+Integration with existing points system:
+
+Optionally allow points ↔ project currency conversions.
+
+Admin can define exchange rates.
+
+B. Admin Oversight
+
+All conversions and transactions tracked in real-time.
+
+Admin can:
+
+Approve transactions manually or set automatic approvals.
+
+Define commission per transaction.
+
+Monitor active conversions and pending approvals.
+
+Audit logs are immutable, stored with timestamps, user info, transaction type, and currency value.
+
+3. Security & Reliability
+A. Atomicity
+
+Every currency operation is transactional:
+
+Convert → Add to wallet → Update ledger → Broadcast.
+
+P2P and game operations cannot double-spend.
+
+Escrow for trades ensures safe release/refund.
+
+B. Concurrency & Race Conditions
+
+Row-level locking (SELECT ... FOR UPDATE) for wallet and ledger operations.
+
+Idempotent transaction handling:
+
+Prevents duplicate credits during retries.
+
+Automatic rollback on network or server failure.
+
+C. Validation & Safety
+
+Server-side validation:
+
+Minimum/maximum conversion amounts.
+
+User wallet sufficiency.
+
+Transaction eligibility for games or P2P trades.
+
+JWT authentication for all currency operations.
+
+Rate limiting and monitoring to prevent abuse.
+
+Stress-tested for high user load and P2P concurrency.
+
+4. Testing & Verification
+A. Test Cases
+
+Currency Conversion
+
+Convert base currency to project currency.
+
+Admin approval flow: manual vs. automatic.
+
+Validate atomicity under concurrent conversions.
+
+Spend Currency
+
+Play games using project currency.
+
+Execute P2P trades using project currency.
+
+Fail gracefully if insufficient funds.
+
+P2P Integration
+
+Post offers using project currency.
+
+Complete trades with escrow and automatic balance updates.
+
+Cancel trades → funds refunded atomically.
+
+Security
+
+Attempt double-spend → fail.
+
+Attempt unauthorized conversion → rejected.
+
+Network or server failures → rollback ensures consistency.
+
+B. Monitoring & Alerts
+
+Admin dashboard:
+
+Real-time WebSocket notifications for conversions, trades, or disputes.
+
+Highlight suspicious activities (rapid conversion, high-value trades).
+
+Audit logs available with filtering (user, currency, transaction type).
+
+5. Implementation Notes
+
+Database:
+
+Add project_currency_balance and project_currency_ledger tables.
+
+Extend storage layer for atomic currency operations.
+
+WebSocket:
+
+project_currency_updated → broadcast user updates.
+
+currency_trade_alert → notify admin in real-time.
+
+Admin panel:
+
+Full control over currency rates, approvals, commissions, and reporting.
+
+Searchable ledger with filtering.
+
+Integration:
+
+Fully compatible with existing P2P points system and multiplayer games.
+
+Transactions are atomic and secure under high load.
+
+✅ Outcome:
+
+Users transact, play, and trade using project currency safely.
+
+Admin controls the system fully with configurable rates, commissions, and approvals.
+
+Real-time updates, WebSocket notifications, and immutable logs ensure transparency, accountability,
