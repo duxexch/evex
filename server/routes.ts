@@ -6358,6 +6358,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // In production, admins must be created via secure bootstrap CLI or migration
   (async () => {
     try {
+      // Check if admin password reset is requested via environment variable
+      // Uses a hash of the password to detect if this specific reset was already applied
+      const resetPassword = process.env.ADMIN_RESET_PASSWORD;
+      const resetUsername = process.env.ADMIN_RESET_USERNAME || "admin";
+      if (resetPassword && resetPassword.length >= 8) {
+        const existingAdmin = await db.select().from(users)
+          .where(and(eq(users.username, resetUsername), eq(users.role, "admin")))
+          .limit(1);
+        if (existingAdmin.length > 0) {
+          // Check if this password was already set (compare with current hash)
+          const currentHash = existingAdmin[0].password;
+          const alreadyApplied = currentHash ? await bcrypt.compare(resetPassword, currentHash) : false;
+          
+          if (alreadyApplied) {
+            console.log("⚠️  ADMIN_RESET_PASSWORD already applied. Remove it from secrets!");
+          } else {
+            const hashedPassword = await bcrypt.hash(resetPassword, 12);
+            await db.update(users)
+              .set({ password: hashedPassword })
+              .where(and(eq(users.username, resetUsername), eq(users.role, "admin")));
+            console.log("========================================");
+            console.log("🔐 ADMIN PASSWORD RESET SUCCESSFUL");
+            console.log(`   Username: ${resetUsername}`);
+            console.log("   Password: (from ADMIN_RESET_PASSWORD)");
+            console.log("   ⚠️  IMPORTANT: Remove ADMIN_RESET_PASSWORD from secrets NOW!");
+            console.log("========================================");
+          }
+        } else {
+          // List available admin usernames for easier troubleshooting
+          const allAdmins = await db.select({ username: users.username }).from(users).where(eq(users.role, "admin"));
+          console.log("⚠️  ADMIN_RESET_PASSWORD set but no admin found with username:", resetUsername);
+          if (allAdmins.length > 0) {
+            console.log("   Available admin usernames:", allAdmins.map(a => a.username).join(", "));
+            console.log("   Set ADMIN_RESET_USERNAME to one of these.");
+          } else {
+            console.log("   No admin users exist. Use ADMIN_BOOTSTRAP_PASSWORD to create one.");
+          }
+        }
+      }
+
       // Check if any admin exists
       const existingAdmins = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
       
