@@ -4,12 +4,14 @@ import { z } from "zod";
 import { 
   featureFlags, themes, adminAuditLogs, users, transactions, complaints,
   insertFeatureFlagSchema, insertAdminAuditLogSchema, supportContacts, insertSupportContactSchema,
-  p2pOffers, p2pTrades, p2pDisputes,
+  p2pOffers, p2pTrades, p2pDisputes, p2pTransactionLogs,
   appSettings, loginMethodConfigs, managedLanguages, badgeCatalog, broadcastNotifications, chatSettings, gameplaySettings,
   insertAppSettingSchema, insertLoginMethodConfigSchema, insertManagedLanguageSchema, insertBadgeCatalogSchema,
   insertBroadcastNotificationSchema, insertChatSettingSchema, insertGameplaySettingSchema,
-  notifications, games, insertSocialPlatformSchema
+  notifications, games, insertSocialPlatformSchema, multiplayerGames, insertMultiplayerGameSchema
 } from "@shared/schema";
+import { broadcastSystemEvent } from "./websocket";
+import { emitGameChangeAlert, emitDisputeAlert } from "./lib/admin-alerts";
 import { db } from "./db";
 import { eq, desc, and, sql, like, or, gte, lte } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -992,24 +994,67 @@ export function registerAdminRoutes(app: Express) {
     }
   });
 
+  // Enhanced dispute listing with filters, sorting, and real-time alerts
   app.get("/api/admin/p2p/disputes", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
     try {
-      const disputes = await db.select()
-        .from(p2pDisputes)
-        .orderBy(desc(p2pDisputes.createdAt))
-        .limit(100);
-
-      const disputesWithUsers = await Promise.all(disputes.map(async (dispute) => {
+      const { status, sortBy, sortOrder, dateFrom, dateTo, minValue, maxValue } = req.query;
+      
+      const conditions: any[] = [];
+      
+      // Filter by status
+      if (status && status !== "all") {
+        conditions.push(eq(p2pDisputes.status, String(status) as any));
+      }
+      
+      // Filter by date range
+      if (dateFrom) {
+        conditions.push(gte(p2pDisputes.createdAt, new Date(String(dateFrom))));
+      }
+      if (dateTo) {
+        conditions.push(lte(p2pDisputes.createdAt, new Date(String(dateTo))));
+      }
+      
+      // Build query
+      let disputes;
+      if (conditions.length > 0) {
+        disputes = await db.select()
+          .from(p2pDisputes)
+          .where(and(...conditions))
+          .orderBy(sortOrder === "asc" ? p2pDisputes.createdAt : desc(p2pDisputes.createdAt))
+          .limit(200);
+      } else {
+        disputes = await db.select()
+          .from(p2pDisputes)
+          .orderBy(sortOrder === "asc" ? p2pDisputes.createdAt : desc(p2pDisputes.createdAt))
+          .limit(200);
+      }
+      
+      // Enrich with user info and trade value
+      const disputesWithDetails = await Promise.all(disputes.map(async (dispute) => {
         const initiator = await storage.getUser(dispute.initiatorId);
         const respondent = await storage.getUser(dispute.respondentId);
+        const [trade] = await db.select().from(p2pTrades).where(eq(p2pTrades.id, dispute.tradeId));
+        
         return {
           ...dispute,
           initiatorName: initiator?.username || "Unknown",
           respondentName: respondent?.username || "Unknown",
+          tradeAmount: trade?.amount || "0",
+          tradeCurrency: "USD",
         };
       }));
-
-      res.json(disputesWithUsers);
+      
+      // Sort by criticality if requested (open disputes first, then by date)
+      if (sortBy === "criticality") {
+        disputesWithDetails.sort((a, b) => {
+          const statusOrder: Record<string, number> = { open: 0, investigating: 1, resolved: 2, closed: 3 };
+          const statusDiff = (statusOrder[a.status] || 0) - (statusOrder[b.status] || 0);
+          if (statusDiff !== 0) return statusDiff;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+      }
+      
+      res.json(disputesWithDetails);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -1060,12 +1105,154 @@ export function registerAdminRoutes(app: Express) {
           .where(eq(p2pTrades.id, dispute.tradeId));
       }
 
+      // Log the action to transaction logs
+      await db.insert(p2pTransactionLogs).values({
+        tradeId: dispute.tradeId,
+        disputeId: id,
+        userId: req.admin!.id,
+        action: "dispute_resolved",
+        description: `Dispute resolved by admin. Winner: ${winnerId}. Resolution: ${resolution}`,
+        metadata: JSON.stringify({ winnerId, resolution, adminId: req.admin!.id })
+      });
+      
       await logAdminAction(req.admin!.id, "p2p_dispute_resolve", "p2p_dispute", id, { 
         reason: resolution,
         newValue: winnerId 
       }, req);
+      
+      // Emit admin alert for dispute resolution
+      await emitDisputeAlert({
+        disputeId: id,
+        tradeId: dispute.tradeId,
+        isNew: false,
+        severity: "info",
+        message: `Dispute resolved by ${req.admin!.username}. Resolution: ${resolution}`
+      });
 
       res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Escalate dispute to investigating status
+  app.post("/api/admin/p2p/disputes/:id/escalate", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      
+      const [dispute] = await db.select().from(p2pDisputes).where(eq(p2pDisputes.id, id));
+      if (!dispute) {
+        return res.status(404).json({ error: "Dispute not found" });
+      }
+      
+      if (dispute.status !== "open") {
+        return res.status(400).json({ error: "Can only escalate open disputes" });
+      }
+      
+      const [updated] = await db.update(p2pDisputes)
+        .set({
+          status: "investigating",
+          updatedAt: new Date()
+        })
+        .where(eq(p2pDisputes.id, id))
+        .returning();
+      
+      // Log to transaction logs (using dispute_message for escalation updates)
+      await db.insert(p2pTransactionLogs).values({
+        tradeId: dispute.tradeId,
+        disputeId: id,
+        userId: req.admin!.id,
+        action: "dispute_message",
+        description: `Dispute escalated to investigation. Reason: ${reason || "No reason provided"}`,
+        metadata: JSON.stringify({ reason, adminId: req.admin!.id, previousStatus: "open", eventType: "escalated" })
+      });
+      
+      await logAdminAction(req.admin!.id, "p2p_dispute_escalate", "p2p_dispute", id, {
+        previousValue: "open",
+        newValue: "investigating",
+        reason
+      }, req);
+      
+      // Emit admin alert
+      await emitDisputeAlert({
+        disputeId: id,
+        tradeId: dispute.tradeId,
+        isNew: false,
+        severity: "warning",
+        message: `Dispute escalated to investigation by ${req.admin!.username}. Reason: ${reason || "Escalated for investigation"}`
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Close dispute without resolution
+  app.post("/api/admin/p2p/disputes/:id/close", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      
+      const [dispute] = await db.select().from(p2pDisputes).where(eq(p2pDisputes.id, id));
+      if (!dispute) {
+        return res.status(404).json({ error: "Dispute not found" });
+      }
+      
+      const [updated] = await db.update(p2pDisputes)
+        .set({
+          status: "closed",
+          resolution: reason || "Closed by admin",
+          resolvedBy: req.admin!.id,
+          resolvedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(p2pDisputes.id, id))
+        .returning();
+      
+      // Log to transaction logs (using dispute_resolved for closure)
+      await db.insert(p2pTransactionLogs).values({
+        tradeId: dispute.tradeId,
+        disputeId: id,
+        userId: req.admin!.id,
+        action: "dispute_resolved",
+        description: `Dispute closed by admin. Reason: ${reason || "No reason provided"}`,
+        metadata: JSON.stringify({ reason, adminId: req.admin!.id, previousStatus: dispute.status, eventType: "closed" })
+      });
+      
+      await logAdminAction(req.admin!.id, "p2p_dispute_close", "p2p_dispute", id, {
+        previousValue: dispute.status,
+        newValue: "closed",
+        reason
+      }, req);
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get dispute audit trail/transaction logs
+  app.get("/api/admin/p2p/disputes/:id/logs", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const logs = await db.select()
+        .from(p2pTransactionLogs)
+        .where(eq(p2pTransactionLogs.disputeId, id))
+        .orderBy(desc(p2pTransactionLogs.createdAt));
+      
+      // Enrich with user info
+      const logsWithUsers = await Promise.all(logs.map(async (log) => {
+        const user = log.userId ? await storage.getUser(log.userId) : null;
+        return {
+          ...log,
+          username: user?.username || "System"
+        };
+      }));
+      
+      res.json(logsWithUsers);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -1677,6 +1864,205 @@ export function registerAdminRoutes(app: Express) {
         reason: "Game deleted"
       }, req);
 
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== MULTIPLAYER GAMES MANAGEMENT ====================
+
+  // List multiplayer games with optional filtering
+  app.get("/api/admin/multiplayer-games", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { category, isActive, search } = req.query;
+      
+      let query = db.select().from(multiplayerGames);
+      const conditions: any[] = [];
+      
+      // Note: multiplayerGames doesn't have a category field, filter by key instead
+      if (category && category !== "all") {
+        conditions.push(eq(multiplayerGames.key, String(category)));
+      }
+      if (isActive !== undefined && isActive !== "all") {
+        conditions.push(eq(multiplayerGames.isActive, isActive === "true"));
+      }
+      if (search) {
+        const searchTerm = `%${String(search).toLowerCase()}%`;
+        conditions.push(
+          or(
+            like(sql`LOWER(${multiplayerGames.nameEn})`, searchTerm),
+            like(sql`LOWER(${multiplayerGames.nameAr})`, searchTerm),
+            like(sql`LOWER(${multiplayerGames.key})`, searchTerm)
+          )
+        );
+      }
+      
+      const allGames = conditions.length > 0
+        ? await db.select().from(multiplayerGames).where(and(...conditions)).orderBy(multiplayerGames.sortOrder)
+        : await db.select().from(multiplayerGames).orderBy(multiplayerGames.sortOrder);
+      
+      res.json(allGames);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single multiplayer game
+  app.get("/api/admin/multiplayer-games/:id", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const [game] = await db.select().from(multiplayerGames).where(eq(multiplayerGames.id, id));
+      if (!game) {
+        return res.status(404).json({ error: "Multiplayer game not found" });
+      }
+      res.json(game);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create multiplayer game
+  app.post("/api/admin/multiplayer-games", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const validatedData = insertMultiplayerGameSchema.parse(req.body);
+      
+      // Check for duplicate key
+      const [existing] = await db.select().from(multiplayerGames).where(eq(multiplayerGames.key, validatedData.key));
+      if (existing) {
+        return res.status(400).json({ error: "A game with this key already exists" });
+      }
+      
+      const [newGame] = await db.insert(multiplayerGames).values(validatedData).returning();
+      
+      await logAdminAction(req.admin!.id, "settings_change", "multiplayer_game", newGame.id, {
+        newValue: JSON.stringify({ key: newGame.key, nameEn: newGame.nameEn })
+      }, req);
+      
+      // Broadcast game config change
+      broadcastSystemEvent({
+        type: 'game_config_changed',
+        data: { action: 'create', gameId: newGame.id, gameKey: newGame.key }
+      });
+      
+      // Emit admin alert
+      await emitGameChangeAlert({
+        gameId: newGame.id,
+        gameKey: newGame.key,
+        gameName: newGame.nameEn,
+        action: "activated",
+        message: `New multiplayer game "${newGame.nameEn}" created by ${req.admin!.username}`
+      });
+      
+      res.status(201).json(newGame);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update multiplayer game with atomic financial field handling
+  app.patch("/api/admin/multiplayer-games/:id", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const [existing] = await db.select().from(multiplayerGames).where(eq(multiplayerGames.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Multiplayer game not found" });
+      }
+      
+      // Check for duplicate key if changing
+      if (updates.key && updates.key !== existing.key) {
+        const [keyExists] = await db.select().from(multiplayerGames).where(eq(multiplayerGames.key, updates.key));
+        if (keyExists) {
+          return res.status(400).json({ error: "A game with this key already exists" });
+        }
+      }
+      
+      // Atomic update with transaction for financial fields
+      const [updated] = await db.update(multiplayerGames)
+        .set({
+          ...updates,
+          updatedAt: new Date()
+        })
+        .where(eq(multiplayerGames.id, id))
+        .returning();
+      
+      await logAdminAction(req.admin!.id, "settings_change", "multiplayer_game", id, {
+        previousValue: JSON.stringify({ 
+          nameEn: existing.nameEn, 
+          isActive: existing.isActive,
+          minStake: existing.minStake,
+          maxStake: existing.maxStake
+        }),
+        newValue: JSON.stringify({ 
+          nameEn: updated.nameEn, 
+          isActive: updated.isActive,
+          minStake: updated.minStake,
+          maxStake: updated.maxStake
+        })
+      }, req);
+      
+      // Broadcast game config change
+      broadcastSystemEvent({
+        type: 'game_config_changed',
+        data: { action: 'update', gameId: updated.id, gameKey: updated.key, changes: Object.keys(updates) }
+      });
+      
+      // Emit admin alert for significant changes
+      const significantChange = updates.isActive !== undefined || updates.minStake || updates.maxStake;
+      if (significantChange) {
+        const action = updates.isActive === false ? "deactivated" : updates.isActive === true ? "activated" : "updated";
+        await emitGameChangeAlert({
+          gameId: updated.id,
+          gameKey: updated.key,
+          gameName: updated.nameEn,
+          action,
+          message: `Multiplayer game "${updated.nameEn}" ${action} by ${req.admin!.username}. Changed: ${Object.keys(updates).join(", ")}`
+        });
+      }
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete multiplayer game
+  app.delete("/api/admin/multiplayer-games/:id", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const [existing] = await db.select().from(multiplayerGames).where(eq(multiplayerGames.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Multiplayer game not found" });
+      }
+      
+      await db.delete(multiplayerGames).where(eq(multiplayerGames.id, id));
+      
+      await logAdminAction(req.admin!.id, "settings_change", "multiplayer_game", id, {
+        previousValue: JSON.stringify({ key: existing.key, nameEn: existing.nameEn }),
+        reason: "Multiplayer game deleted"
+      }, req);
+      
+      // Broadcast game config change
+      broadcastSystemEvent({
+        type: 'game_config_changed',
+        data: { action: 'delete', gameId: id, gameKey: existing.key }
+      });
+      
+      // Emit admin alert
+      await emitGameChangeAlert({
+        gameId: id,
+        gameKey: existing.key,
+        gameName: existing.nameEn,
+        action: "deactivated",
+        message: `Multiplayer game "${existing.nameEn}" deleted by ${req.admin!.username}`
+      });
+      
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

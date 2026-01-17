@@ -72,6 +72,10 @@ export default function AdminP2PPage() {
   const [actionDialog, setActionDialog] = useState<string | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [resolution, setResolution] = useState("");
+  
+  // Dispute filters
+  const [disputeStatus, setDisputeStatus] = useState<string>("all");
+  const [disputeSortBy, setDisputeSortBy] = useState<string>("criticality");
 
   const { data: offers = [], isLoading: offersLoading } = useQuery({
     queryKey: ["/api/admin/p2p/offers"],
@@ -84,8 +88,8 @@ export default function AdminP2PPage() {
   });
 
   const { data: disputes = [], isLoading: disputesLoading } = useQuery({
-    queryKey: ["/api/admin/p2p/disputes"],
-    queryFn: () => adminFetch("/api/admin/p2p/disputes"),
+    queryKey: ["/api/admin/p2p/disputes", disputeStatus, disputeSortBy],
+    queryFn: () => adminFetch(`/api/admin/p2p/disputes?status=${disputeStatus}&sortBy=${disputeSortBy}`),
   });
 
   const { data: stats } = useQuery({
@@ -125,6 +129,40 @@ export default function AdminP2PPage() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to resolve dispute", variant: "destructive" });
+    },
+  });
+
+  const escalateDisputeMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return adminFetch(`/api/admin/p2p/disputes/${id}/escalate`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/p2p/disputes"] });
+      toast({ title: "Dispute Escalated", description: "The dispute has been escalated for investigation" });
+      closeDialog();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to escalate dispute", variant: "destructive" });
+    },
+  });
+
+  const closeDisputeMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return adminFetch(`/api/admin/p2p/disputes/${id}/close`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/p2p/disputes"] });
+      toast({ title: "Dispute Closed", description: "The dispute has been closed" });
+      closeDialog();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to close dispute", variant: "destructive" });
     },
   });
 
@@ -369,6 +407,44 @@ export default function AdminP2PPage() {
         </TabsContent>
 
         <TabsContent value="disputes" className="space-y-4">
+          {/* Dispute Filters */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Status:</Label>
+                  <Select value={disputeStatus} onValueChange={setDisputeStatus}>
+                    <SelectTrigger className="w-36" data-testid="select-dispute-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="investigating">Investigating</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Sort:</Label>
+                  <Select value={disputeSortBy} onValueChange={setDisputeSortBy}>
+                    <SelectTrigger className="w-36" data-testid="select-dispute-sort">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="criticality">Criticality</SelectItem>
+                      <SelectItem value="date">Date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Badge variant="outline" className="ml-auto">
+                  {disputes?.length || 0} disputes
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+          
           {disputesLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
@@ -378,44 +454,84 @@ export default function AdminP2PPage() {
           ) : (
             <div className="space-y-3">
               {disputes?.map((dispute: any) => (
-                <Card key={dispute.id}>
+                <Card key={dispute.id} className={dispute.status === "open" ? "border-destructive/50" : ""}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-4 flex-wrap">
                       <div className="flex items-center gap-4">
-                        <div className="p-2 rounded-full bg-red-500/10">
-                          <AlertTriangle className="h-5 w-5 text-red-500" />
+                        <div className={`p-2 rounded-full ${dispute.status === "open" ? "bg-red-500/20" : dispute.status === "investigating" ? "bg-yellow-500/20" : "bg-muted"}`}>
+                          <AlertTriangle className={`h-5 w-5 ${dispute.status === "open" ? "text-red-500" : dispute.status === "investigating" ? "text-yellow-500" : "text-muted-foreground"}`} />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold">Dispute #{dispute.id.slice(0, 8)}</span>
-                            <Badge variant={getStatusColor(dispute.status)}>
+                            <Badge variant={dispute.status === "open" ? "destructive" : dispute.status === "investigating" ? "secondary" : "outline"}>
                               {dispute.status}
                             </Badge>
+                            {dispute.tradeAmount && (
+                              <Badge variant="outline">${dispute.tradeAmount}</Badge>
+                            )}
                           </div>
                           <div className="text-sm text-muted-foreground">
                             {dispute.initiatorName} vs {dispute.respondentName}
                           </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Reason: {dispute.reason?.slice(0, 50)}{dispute.reason?.length > 50 ? "..." : ""}
+                          </div>
                         </div>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" data-testid={`button-dispute-actions-${dispute.id}`}>
-                            <MoreVertical className="h-4 w-4" />
+                      <div className="flex items-center gap-2">
+                        {/* Inline action buttons */}
+                        {dispute.status === "open" && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => { setSelectedTrade(dispute); setActionDialog("escalateDispute"); }}
+                            data-testid={`button-escalate-${dispute.id}`}
+                          >
+                            <TrendingUp className="h-4 w-4 mr-1" />
+                            Escalate
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => { setSelectedTrade(dispute); setActionDialog("viewDispute"); }}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </DropdownMenuItem>
-                          {(dispute.status === "pending" || dispute.status === "under_review") && (
-                            <DropdownMenuItem onClick={() => { setSelectedTrade(dispute); setActionDialog("resolveDispute"); }}>
-                              <Shield className="h-4 w-4 mr-2" />
-                              Resolve Dispute
+                        )}
+                        {(dispute.status === "open" || dispute.status === "investigating") && (
+                          <>
+                            <Button 
+                              size="sm" 
+                              variant="default"
+                              onClick={() => { setSelectedTrade(dispute); setActionDialog("resolveDispute"); }}
+                              data-testid={`button-resolve-${dispute.id}`}
+                            >
+                              <Check className="h-4 w-4 mr-1" />
+                              Resolve
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => { setSelectedTrade(dispute); setActionDialog("closeDispute"); }}
+                              data-testid={`button-close-${dispute.id}`}
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Close
+                            </Button>
+                          </>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-dispute-actions-${dispute.id}`}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => { setSelectedTrade(dispute); setActionDialog("viewDispute"); }}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
                             </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            <DropdownMenuItem onClick={() => { setSelectedTrade(dispute); setActionDialog("viewLogs"); }}>
+                              <Clock className="h-4 w-4 mr-2" />
+                              View Audit Log
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -526,6 +642,123 @@ export default function AdminP2PPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Escalate Dispute Dialog */}
+      <Dialog open={actionDialog === "escalateDispute"} onOpenChange={() => closeDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Escalate Dispute</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Escalate this dispute to investigation status. This will mark it for priority review.
+            </p>
+            <div className="space-y-2">
+              <Label>Reason for Escalation</Label>
+              <Textarea
+                placeholder="Enter reason for escalation..."
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                data-testid="input-escalate-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button
+              onClick={() => escalateDisputeMutation.mutate({ id: selectedTrade?.id, reason: actionReason })}
+              disabled={escalateDisputeMutation.isPending}
+              data-testid="button-confirm-escalate"
+            >
+              {escalateDisputeMutation.isPending ? "Escalating..." : "Escalate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Dispute Dialog */}
+      <Dialog open={actionDialog === "closeDispute"} onOpenChange={() => closeDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close Dispute</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Close this dispute without a formal resolution. Use this for disputes that were withdrawn or resolved outside the platform.
+            </p>
+            <div className="space-y-2">
+              <Label>Reason for Closing</Label>
+              <Textarea
+                placeholder="Enter reason for closing..."
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                data-testid="input-close-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button
+              variant="secondary"
+              onClick={() => closeDisputeMutation.mutate({ id: selectedTrade?.id, reason: actionReason })}
+              disabled={!actionReason || closeDisputeMutation.isPending}
+              data-testid="button-confirm-close"
+            >
+              {closeDisputeMutation.isPending ? "Closing..." : "Close Dispute"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Audit Logs Dialog */}
+      <Dialog open={actionDialog === "viewLogs"} onOpenChange={() => closeDialog()}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Dispute Audit Log</DialogTitle>
+          </DialogHeader>
+          <DisputeAuditLog disputeId={selectedTrade?.id} />
+          <DialogFooter>
+            <Button onClick={closeDialog}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DisputeAuditLog({ disputeId }: { disputeId?: string }) {
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ["/api/admin/p2p/disputes", disputeId, "logs"],
+    queryFn: () => disputeId 
+      ? fetch(`/api/admin/p2p/disputes/${disputeId}/logs`, {
+          headers: { "x-admin-token": localStorage.getItem("adminToken") || "" }
+        }).then(r => r.json())
+      : Promise.resolve([]),
+    enabled: !!disputeId,
+  });
+
+  if (isLoading) {
+    return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12" />)}</div>;
+  }
+
+  if (!logs.length) {
+    return <p className="text-center text-muted-foreground py-4">No audit logs found</p>;
+  }
+
+  return (
+    <div className="space-y-2 max-h-96 overflow-y-auto">
+      {logs.map((log: any) => (
+        <div key={log.id} className="p-3 bg-muted rounded-lg">
+          <div className="flex items-center justify-between gap-2">
+            <Badge variant="outline">{log.action}</Badge>
+            <span className="text-xs text-muted-foreground">
+              {new Date(log.createdAt).toLocaleString()}
+            </span>
+          </div>
+          <p className="text-sm mt-1">{log.description}</p>
+          <p className="text-xs text-muted-foreground mt-1">By: {log.username}</p>
+        </div>
+      ))}
     </div>
   );
 }

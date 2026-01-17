@@ -1,0 +1,136 @@
+Objective:
+Upgrade the admin panel and platform features to fully manage multiplayer games, P2P disputes, and notifications in real-time, ensuring accuracy, consistency, and security.
+
+Phase 1 – Advanced Game Management
+
+Goal: Turn the games section into a dynamic, fully-configurable system.
+
+Tasks:
+
+Dynamic Games Table
+
+Ensure all multiplayer games are stored in multiplayer_games table.
+
+Fields to include: name, icon, description, category_id, active_status, free_play_count, paid_play_count, price, max_players.
+
+Seed initial game data.
+
+Admin CRUD Operations
+
+Create API endpoints for Create/Read/Update/Delete games.
+
+Validate input with Zod/TypeScript schemas.
+
+Enforce atomic updates for financial-related fields (price, free_play_count, etc.).
+
+Admin Panel UI Enhancements
+
+Add table/list view of all games with filtering by category, active status, and pricing.
+
+Include inline editing for quick updates.
+
+Display live play counts, free vs paid, and player limits.
+
+Show icons and descriptions visually.
+
+Real-Time Sync
+
+Emit game_config_changed WebSocket events on any change.
+
+Frontend: subscribe to WebSocket and invalidate local cache dynamically.
+
+Ensure all users see updated games instantly.
+
+Phase 2 – P2P Dispute Management Enhancements
+
+Goal: Enable real-time, actionable dispute handling for admins.
+
+Tasks:
+
+Dispute Dashboard
+
+Display all open disputes with filters: type, status, date, value.
+
+Add sorting by criticality or timestamp.
+
+Real-Time Notifications
+
+Emit admin_alert events via WebSocket when new disputes arise.
+
+Allow clicking notifications to navigate directly to the relevant dispute page.
+
+Direct Actions
+
+Inline buttons for resolving, escalating, or closing disputes.
+
+Automatic updates to database and frontend after each action.
+
+Audit Logging
+
+Track every action taken by admins on disputes.
+
+Include timestamps, admin ID, and action details.
+
+Phase 3 – Real-Time Admin Alerts System
+
+Goal: Make all critical events visible immediately in the admin panel.
+
+Tasks:
+
+WebSocket Integration
+
+Create admin_auth handler.
+
+Allow server to push alerts for: game config changes, disputes, complaints, P2P trade events.
+
+Admin Alerts Dropdown
+
+Display recent events in header.
+
+Include badge count of unseen alerts.
+
+Click on alert → navigate to relevant page.
+
+Alert Storage
+
+Store alerts in DB for history and audit.
+
+Support read/unread states.
+
+Phase 4 – Optional UX Enhancements
+
+Goal: Improve admin efficiency and user awareness.
+
+Live Update Sent Indicator
+
+Show confirmation when WebSocket broadcast succeeds.
+
+Toast Notifications for Users
+
+Notify users instantly of game config changes, disputes resolutions, or system messages.
+
+Config Version Display
+
+Show current game configuration version in admin/debug view.
+
+Supports audit traceability.
+
+General Guidelines / Notes for Replit Agent
+
+Security: All API endpoints require proper JWT auth and role validation.
+
+Atomic Updates: Financial fields, play counts, and dispute actions must be transactional.
+
+Validation: Use schema validation (Zod/TypeScript) for all inputs.
+
+WebSocket Reliability: Include reconnection logic and ensure events are idempotent.
+
+Flexibility: Allow categories to be reorganized, games to be activated/deactivated, and pricing/limits to be adjusted dynamically.
+
+Testing: All features must be testable end-to-end in dev environment.
+
+✅ Next Steps:
+
+Agent can implement DB schema, API, WebSocket integration, and admin panel UI based on the placeholders.
+
+After completion, run a full regression test: real-time sync, dispute alerts, and game updates.
