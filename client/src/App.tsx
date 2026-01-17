@@ -91,6 +91,7 @@ const AdminLoginPage = lazy(() => import("@/pages/admin/admin-login"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/admin-dashboard"));
 const AdminUsersPage = lazy(() => import("@/pages/admin/admin-users"));
 const AdminP2PPage = lazy(() => import("@/pages/admin/admin-p2p"));
+const AdminCurrencyPage = lazy(() => import("@/pages/admin/admin-currency"));
 const AdminSectionsPage = lazy(() => import("@/pages/admin/admin-sections"));
 const AdminAntiCheatPage = lazy(() => import("@/pages/admin/admin-anti-cheat"));
 const AdminAnalyticsPage = lazy(() => import("@/pages/admin/admin-analytics"));
@@ -493,6 +494,9 @@ function AdminRouter() {
         </Route>
         <Route path="/admin/p2p">
           <AdminLayout><AdminP2PPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/currency">
+          <AdminLayout><AdminCurrencyPage /></AdminLayout>
         </Route>
         <Route path="/admin/support">
           <AdminLayout><AdminSupportPage /></AdminLayout>

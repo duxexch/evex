@@ -37,6 +37,7 @@ import {
   Search,
   CreditCard,
   Share2,
+  Coins,
 } from "lucide-react";
 import { AdminAlertsDropdown } from "@/components/admin/AdminAlertsDropdown";
 
@@ -76,6 +77,7 @@ function AdminSidebar() {
 
   const settingsItems = [
     { title: "App Settings", url: "/admin/app-settings", icon: Cog },
+    { title: "Project Currency", url: "/admin/currency", icon: Coins },
     { title: "SEO Settings", url: "/admin/seo", icon: Search },
     { title: "Section Controls", url: "/admin/sections", icon: Settings },
     { title: "Social Platforms", url: "/admin/social-platforms", icon: Share2 },
