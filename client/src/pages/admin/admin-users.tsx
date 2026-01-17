@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import {
@@ -31,15 +40,30 @@ import {
   MoreVertical,
   User,
   Mail,
-  Shield,
+  Phone,
+  Edit,
   ArrowLeftRight,
+  Eye,
+  Gamepad2,
+  Trophy,
+  Calendar,
+  X,
+  Check,
+  Shield,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 function getAdminToken() {
   return localStorage.getItem("adminToken");
@@ -59,18 +83,87 @@ async function adminFetch(url: string, options?: RequestInit) {
   return res.json();
 }
 
+interface UserType {
+  id: string;
+  username: string;
+  nickname?: string;
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+  role: string;
+  status: string;
+  balance: string;
+  profilePicture?: string;
+  vipLevel: number;
+  gamesPlayed: number;
+  gamesWon: number;
+  totalDeposited: string;
+  totalWithdrawn: string;
+  totalWagered: string;
+  totalWon: string;
+  p2pBanned: boolean;
+  p2pBanReason?: string;
+  p2pBannedAt?: string;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
 export default function AdminUsersPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
   const [actionDialog, setActionDialog] = useState<string | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionAmount, setActionAmount] = useState("");
   const [adjustType, setAdjustType] = useState<"add" | "subtract">("add");
+  const [viewUserSheet, setViewUserSheet] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editFormData, setEditFormData] = useState<Partial<UserType>>({});
 
   const { data: users, isLoading } = useQuery({
     queryKey: ["/api/admin/users"],
     queryFn: () => adminFetch("/api/admin/users"),
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<UserType> }) => {
+      const filteredData: Record<string, string | undefined> = {};
+      if (data.username) filteredData.username = data.username;
+      if (data.nickname) filteredData.nickname = data.nickname;
+      if (data.email) filteredData.email = data.email;
+      if (data.phone) filteredData.phone = data.phone;
+      if (data.firstName) filteredData.firstName = data.firstName;
+      if (data.lastName) filteredData.lastName = data.lastName;
+      if (data.role) filteredData.role = data.role;
+      if (data.status) filteredData.status = data.status;
+      
+      return adminFetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(filteredData),
+      });
+    },
+    onSuccess: (updatedUser) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      if (updatedUser && selectedUser) {
+        setSelectedUser({ ...selectedUser, ...updatedUser });
+        setEditFormData({
+          username: updatedUser.username,
+          nickname: updatedUser.nickname || "",
+          email: updatedUser.email || "",
+          phone: updatedUser.phone || "",
+          firstName: updatedUser.firstName || "",
+          lastName: updatedUser.lastName || "",
+          role: updatedUser.role,
+          status: updatedUser.status,
+        });
+      }
+      toast({ title: "User Updated", description: "User profile has been updated successfully" });
+      setEditMode(false);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update user", variant: "destructive" });
+    },
   });
 
   const banMutation = useMutation({
@@ -203,9 +296,34 @@ export default function AdminUsersPage() {
     }
   };
 
-  const filteredUsers = users?.filter((user: any) =>
+  const openUserView = (user: UserType) => {
+    setSelectedUser(user);
+    setEditFormData({
+      username: user.username,
+      nickname: user.nickname || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      role: user.role,
+      status: user.status,
+    });
+    setViewUserSheet(true);
+    setEditMode(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (!selectedUser) return;
+    updateUserMutation.mutate({
+      id: selectedUser.id,
+      data: editFormData,
+    });
+  };
+
+  const filteredUsers = users?.filter((user: UserType) =>
     user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (user.phone && user.phone.includes(searchQuery))
   );
 
   const getStatusColor = (status: string) => {
@@ -215,6 +333,25 @@ export default function AdminUsersPage() {
       case "suspended": return "secondary";
       default: return "outline";
     }
+  };
+
+  const formatDate = (date: string | undefined) => {
+    if (!date) return "-";
+    return new Date(date).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const safeNumber = (value: string | number | undefined | null): number => {
+    if (value === undefined || value === null) return 0;
+    const num = typeof value === "string" ? parseFloat(value) : value;
+    return isNaN(num) ? 0 : num;
+  };
+
+  const formatCurrency = (value: string | number | undefined | null): string => {
+    return `$${safeNumber(value).toFixed(2)}`;
   };
 
   return (
@@ -236,104 +373,417 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredUsers?.map((user: any) => (
-            <Card key={user.id}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{user.username}</span>
-                        <Badge variant={getStatusColor(user.status)}>
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6 space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[250px]">User</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Balance</TableHead>
+                    <TableHead>Games</TableHead>
+                    <TableHead>VIP</TableHead>
+                    <TableHead>Joined</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers?.map((user: UserType) => (
+                    <TableRow key={user.id} className="hover-elevate cursor-pointer" onClick={() => openUserView(user)}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={user.profilePicture} />
+                            <AvatarFallback>
+                              {user.username.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              {user.username}
+                              {user.p2pBanned && (
+                                <Badge variant="secondary" className="text-xs bg-orange-500/10 text-orange-500">
+                                  P2P
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {user.email || user.phone || "-"}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">
+                          {user.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusColor(user.status)} className="capitalize">
                           {user.status}
                         </Badge>
-                        <Badge variant="outline">{user.role}</Badge>
-                        {user.p2pBanned && (
-                          <Badge variant="secondary" className="bg-orange-500/10 text-orange-500">
-                            P2P Banned
-                          </Badge>
-                        )}
-                      </div>
-                      {user.p2pBanned && (
-                        <div className="mt-1 text-xs text-orange-500/80 bg-orange-500/5 px-2 py-1 rounded">
-                          <span className="font-medium">P2P Ban:</span> {user.p2pBanReason || "No reason specified"}
-                          {user.p2pBannedAt && (
-                            <span className="ml-2 text-muted-foreground">
-                              ({new Date(user.p2pBannedAt).toLocaleDateString()})
-                            </span>
-                          )}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {formatCurrency(user.balance)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Gamepad2 className="h-3 w-3 text-muted-foreground" />
+                          {user.gamesPlayed ?? 0}
+                          <Trophy className="h-3 w-3 text-yellow-500 ml-2" />
+                          {user.gamesWon ?? 0}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10">
+                          VIP {user.vipLevel ?? 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(user.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" data-testid={`button-user-actions-${user.id}`}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openUserView(user); }}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedUser(user); setActionDialog("reward"); }}>
+                              <Gift className="h-4 w-4 mr-2" />
+                              Send Reward
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedUser(user); setActionDialog("balance"); }}>
+                              <DollarSign className="h-4 w-4 mr-2" />
+                              Adjust Balance
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedUser(user); setActionDialog("suspend"); }}>
+                              <Clock className="h-4 w-4 mr-2" />
+                              Suspend User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedUser(user); setActionDialog("p2pBan"); }}>
+                              <ArrowLeftRight className="h-4 w-4 mr-2" />
+                              {user.p2pBanned ? "Unban P2P" : "Ban from P2P"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={(e) => { e.stopPropagation(); setSelectedUser(user); setActionDialog("ban"); }}
+                              className="text-destructive"
+                            >
+                              <Ban className="h-4 w-4 mr-2" />
+                              Ban User
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {filteredUsers?.length === 0 && (
+                <div className="p-6 text-center text-muted-foreground">
+                  No users found
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Sheet open={viewUserSheet} onOpenChange={setViewUserSheet}>
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+          <SheetHeader>
+            <div className="flex items-center justify-between">
+              <SheetTitle>User Profile</SheetTitle>
+              {!editMode ? (
+                <Button variant="outline" size="sm" onClick={() => setEditMode(true)} data-testid="button-edit-user">
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditMode(false)}>
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSaveEdit} disabled={updateUserMutation.isPending} data-testid="button-save-user">
+                    <Check className="h-4 w-4 mr-2" />
+                    Save
+                  </Button>
+                </div>
+              )}
+            </div>
+          </SheetHeader>
+
+          {selectedUser && (
+            <div className="mt-6 space-y-6">
+              <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
+                <Avatar className="h-16 w-16">
+                  <AvatarImage src={selectedUser.profilePicture} />
+                  <AvatarFallback className="text-xl">
+                    {selectedUser.username.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold">{selectedUser.username}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant={getStatusColor(selectedUser.status)}>
+                      {selectedUser.status}
+                    </Badge>
+                    <Badge variant="outline">{selectedUser.role}</Badge>
+                    <Badge variant="outline" className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10">
+                      VIP {selectedUser.vipLevel ?? 0}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Card className="p-4">
+                  <div className="text-sm text-muted-foreground">Balance</div>
+                  <div className="text-2xl font-bold text-primary">
+                    {formatCurrency(selectedUser.balance)}
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="text-sm text-muted-foreground">Games Won</div>
+                  <div className="text-2xl font-bold text-yellow-500">
+                    {selectedUser.gamesWon ?? 0} / {selectedUser.gamesPlayed ?? 0}
+                  </div>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Profile Information
+                </h4>
+
+                <div className="grid gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Username</Label>
+                      {editMode ? (
+                        <Input
+                          value={editFormData.username || ""}
+                          onChange={(e) => setEditFormData({ ...editFormData, username: e.target.value })}
+                          data-testid="input-edit-username"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm">{selectedUser.username}</div>
                       )}
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          {user.email}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <DollarSign className="h-3 w-3" />
-                          ${parseFloat(user.balance || "0").toFixed(2)}
-                        </span>
-                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Nickname</Label>
+                      {editMode ? (
+                        <Input
+                          value={editFormData.nickname || ""}
+                          onChange={(e) => setEditFormData({ ...editFormData, nickname: e.target.value })}
+                          data-testid="input-edit-nickname"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm">{selectedUser.nickname || "-"}</div>
+                      )}
                     </div>
                   </div>
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" data-testid={`button-user-actions-${user.id}`}>
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => { setSelectedUser(user); setActionDialog("reward"); }}>
-                        <Gift className="h-4 w-4 mr-2" />
-                        Send Reward
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => { setSelectedUser(user); setActionDialog("balance"); }}>
-                        <DollarSign className="h-4 w-4 mr-2" />
-                        Adjust Balance
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => { setSelectedUser(user); setActionDialog("suspend"); }}>
-                        <Clock className="h-4 w-4 mr-2" />
-                        Suspend User
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => { setSelectedUser(user); setActionDialog("p2pBan"); }}>
-                        <ArrowLeftRight className="h-4 w-4 mr-2" />
-                        {user.p2pBanned ? "Unban P2P" : "Ban from P2P"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => { setSelectedUser(user); setActionDialog("ban"); }}
-                        className="text-destructive"
-                      >
-                        <Ban className="h-4 w-4 mr-2" />
-                        Ban User
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>First Name</Label>
+                      {editMode ? (
+                        <Input
+                          value={editFormData.firstName || ""}
+                          onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })}
+                          data-testid="input-edit-firstname"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm">{selectedUser.firstName || "-"}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Last Name</Label>
+                      {editMode ? (
+                        <Input
+                          value={editFormData.lastName || ""}
+                          onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })}
+                          data-testid="input-edit-lastname"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm">{selectedUser.lastName || "-"}</div>
+                      )}
+                    </div>
+                  </div>
 
-          {filteredUsers?.length === 0 && (
-            <Card>
-              <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">No users found</p>
-              </CardContent>
-            </Card>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        <Mail className="h-3 w-3" />
+                        Email
+                      </Label>
+                      {editMode ? (
+                        <Input
+                          type="email"
+                          value={editFormData.email || ""}
+                          onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                          data-testid="input-edit-email"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm">{selectedUser.email || "-"}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        Phone
+                      </Label>
+                      {editMode ? (
+                        <Input
+                          value={editFormData.phone || ""}
+                          onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                          data-testid="input-edit-phone"
+                        />
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm">{selectedUser.phone || "-"}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        <Shield className="h-3 w-3" />
+                        Role
+                      </Label>
+                      {editMode ? (
+                        <Select
+                          value={editFormData.role}
+                          onValueChange={(v) => setEditFormData({ ...editFormData, role: v })}
+                        >
+                          <SelectTrigger data-testid="select-edit-role">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="player">Player</SelectItem>
+                            <SelectItem value="agent">Agent</SelectItem>
+                            <SelectItem value="affiliate">Affiliate</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm capitalize">{selectedUser.role}</div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      {editMode ? (
+                        <Select
+                          value={editFormData.status}
+                          onValueChange={(v) => setEditFormData({ ...editFormData, status: v })}
+                        >
+                          <SelectTrigger data-testid="select-edit-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="inactive">Inactive</SelectItem>
+                            <SelectItem value="suspended">Suspended</SelectItem>
+                            <SelectItem value="banned">Banned</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="p-2 bg-muted rounded text-sm capitalize">{selectedUser.status}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Financial Summary
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Total Deposited</div>
+                    <div className="font-semibold text-green-500">
+                      {formatCurrency(selectedUser.totalDeposited)}
+                    </div>
+                  </div>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Total Withdrawn</div>
+                    <div className="font-semibold text-red-500">
+                      {formatCurrency(selectedUser.totalWithdrawn)}
+                    </div>
+                  </div>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Total Wagered</div>
+                    <div className="font-semibold">
+                      {formatCurrency(selectedUser.totalWagered)}
+                    </div>
+                  </div>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Total Won</div>
+                    <div className="font-semibold text-yellow-500">
+                      {formatCurrency(selectedUser.totalWon)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-semibold flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Account Info
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Joined</div>
+                    <div className="font-semibold">{formatDate(selectedUser.createdAt)}</div>
+                  </div>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Last Login</div>
+                    <div className="font-semibold">{formatDate(selectedUser.lastLoginAt)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {selectedUser.p2pBanned && (
+                <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                  <div className="flex items-center gap-2 text-orange-500 font-semibold">
+                    <ArrowLeftRight className="h-4 w-4" />
+                    P2P Trading Banned
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedUser.p2pBanReason || "No reason specified"}
+                  </p>
+                  {selectedUser.p2pBannedAt && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Banned on {formatDate(selectedUser.p2pBannedAt)}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={actionDialog !== null} onOpenChange={() => closeDialog()}>
         <DialogContent>
@@ -350,11 +800,14 @@ export default function AdminUsersPage() {
           <div className="space-y-4 py-4">
             {selectedUser && (
               <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                <User className="h-5 w-5" />
+                <Avatar>
+                  <AvatarImage src={selectedUser.profilePicture} />
+                  <AvatarFallback>{selectedUser.username.substring(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
                 <div>
                   <p className="font-medium">{selectedUser.username}</p>
                   <p className="text-sm text-muted-foreground">
-                    Current Balance: ${parseFloat(selectedUser.balance || "0").toFixed(2)}
+                    Current Balance: {formatCurrency(selectedUser.balance)}
                   </p>
                 </div>
               </div>
