@@ -2574,7 +2574,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/trades - Start a trade from an offer (ATOMIC)
   app.post("/api/p2p/trades", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const { offerId, amount, paymentMethod } = req.body;
+      const { offerId, amount, paymentMethod, currencyType = 'usd' } = req.body;
       
       // Input validation
       if (!offerId || typeof offerId !== 'string') {
@@ -2587,6 +2587,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       if (!paymentMethod || typeof paymentMethod !== 'string') {
         return res.status(400).json({ error: "Payment method is required" });
+      }
+      
+      // Validate project currency is enabled for P2P
+      if (currencyType === 'project') {
+        const settings = await storage.getProjectCurrencySettings();
+        if (!settings?.isActive || !settings?.useInP2P) {
+          return res.status(400).json({ error: "Project currency is not available for P2P trading" });
+        }
       }
       
       // Pre-check offer (non-locking read for early validation)
@@ -2616,17 +2624,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const sellerId = isBuyer ? offer.userId : req.user!.id;
       
       // ATOMIC: Create trade with escrow debit and offer reservation
-      const result = await storage.createP2PTradeAtomic({
-        offerId,
-        buyerId,
-        sellerId,
-        amount: amount.toString(),
-        fiatAmount: fiatAmount.toFixed(2),
-        price: offer.price,
-        paymentMethod,
-        platformFee: platformFee.toFixed(8),
-        expiresAt: new Date(Date.now() + (offer.paymentTimeLimit * 60 * 1000)),
-      });
+      // Use appropriate method based on currency type
+      let result;
+      if (currencyType === 'project') {
+        result = await storage.createP2PTradeProjectCurrencyAtomic({
+          offerId,
+          buyerId,
+          sellerId,
+          amount: amount.toString(),
+          fiatAmount: fiatAmount.toFixed(2),
+          price: offer.price,
+          paymentMethod,
+          platformFee: platformFee.toFixed(8),
+          expiresAt: new Date(Date.now() + (offer.paymentTimeLimit * 60 * 1000)),
+        });
+      } else {
+        result = await storage.createP2PTradeAtomic({
+          offerId,
+          buyerId,
+          sellerId,
+          amount: amount.toString(),
+          fiatAmount: fiatAmount.toFixed(2),
+          price: offer.price,
+          paymentMethod,
+          platformFee: platformFee.toFixed(8),
+          expiresAt: new Date(Date.now() + (offer.paymentTimeLimit * 60 * 1000)),
+        });
+      }
       
       if (!result.success) {
         return res.status(400).json({ error: result.error });
@@ -2745,8 +2769,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // POST /api/p2p/trades/:id/complete - Complete the trade and release funds (ATOMIC)
   app.post("/api/p2p/trades/:id/complete", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      // ATOMIC: Complete trade with escrow release
-      const result = await storage.completeP2PTradeAtomic(req.params.id, req.user!.id);
+      // First get the trade to check currency type
+      const existingTrade = await storage.getP2PTrade(req.params.id);
+      if (!existingTrade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      // ATOMIC: Complete trade with escrow release - use appropriate method based on currency type
+      let result;
+      if (existingTrade.currencyType === 'project') {
+        result = await storage.completeP2PTradeProjectCurrencyAtomic(req.params.id, req.user!.id);
+      } else {
+        result = await storage.completeP2PTradeAtomic(req.params.id, req.user!.id);
+      }
       
       if (!result.success) {
         const statusCode = result.error?.includes('not found') ? 404 :
@@ -2792,8 +2827,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { reason } = req.body;
       
-      // ATOMIC: Cancel trade with escrow refund
-      const result = await storage.cancelP2PTradeAtomic(req.params.id, req.user!.id, reason);
+      // First get the trade to check currency type
+      const existingTrade = await storage.getP2PTrade(req.params.id);
+      if (!existingTrade) {
+        return res.status(404).json({ error: "Trade not found" });
+      }
+      
+      // ATOMIC: Cancel trade with escrow refund - use appropriate method based on currency type
+      let result;
+      if (existingTrade.currencyType === 'project') {
+        result = await storage.cancelP2PTradeProjectCurrencyAtomic(req.params.id, req.user!.id, reason);
+      } else {
+        result = await storage.cancelP2PTradeAtomic(req.params.id, req.user!.id, reason);
+      }
       
       if (!result.success) {
         const statusCode = result.error?.includes('not found') ? 404 :
@@ -6341,7 +6387,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const trade of expiredTrades) {
         try {
           // Cancel using atomic operation (credits seller back to escrow)
-          const result = await storage.cancelP2PTradeAtomic(trade.id, trade.sellerId, "Trade expired - auto-cancelled");
+          // Use appropriate method based on currency type
+          let result;
+          if (trade.currencyType === 'project') {
+            result = await storage.cancelP2PTradeProjectCurrencyAtomic(trade.id, trade.sellerId, "Trade expired - auto-cancelled");
+          } else {
+            result = await storage.cancelP2PTradeAtomic(trade.id, trade.sellerId, "Trade expired - auto-cancelled");
+          }
           
           if (result.success) {
             console.log(`[P2P Scheduler] Auto-cancelled expired trade ${trade.id}`);

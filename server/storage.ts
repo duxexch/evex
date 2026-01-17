@@ -2115,6 +2115,300 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  // ATOMIC P2P trade creation with PROJECT CURRENCY escrow
+  async createP2PTradeProjectCurrencyAtomic(params: {
+    offerId: string;
+    buyerId: string;
+    sellerId: string;
+    amount: string;
+    fiatAmount: string;
+    price: string;
+    paymentMethod: string;
+    platformFee: string;
+    expiresAt: Date;
+  }): Promise<{ success: boolean; trade?: any; error?: string }> {
+    const tradeAmount = parseFloat(params.amount);
+    if (isNaN(tradeAmount) || tradeAmount <= 0) {
+      return { success: false, error: 'Invalid amount' };
+    }
+
+    return await db.transaction(async (tx) => {
+      // 1. Lock the offer row and verify availability
+      const [offer] = await tx
+        .select()
+        .from(p2pOffers)
+        .where(eq(p2pOffers.id, params.offerId))
+        .for('update');
+
+      if (!offer) {
+        return { success: false, error: 'Offer not found' };
+      }
+
+      if (offer.status !== 'active') {
+        return { success: false, error: 'Offer is no longer active' };
+      }
+
+      const availableAmount = parseFloat(offer.availableAmount);
+      if (tradeAmount > availableAmount) {
+        return { success: false, error: `Insufficient available amount. Maximum: ${availableAmount}` };
+      }
+
+      // 2. Lock seller's PROJECT CURRENCY wallet and debit escrow
+      const [sellerWallet] = await tx
+        .select()
+        .from(projectCurrencyWallets)
+        .where(eq(projectCurrencyWallets.userId, params.sellerId))
+        .for('update');
+
+      if (!sellerWallet) {
+        return { success: false, error: 'Seller project currency wallet not found' };
+      }
+
+      // Calculate total balance (deduct from earned first)
+      let earnedBalance = parseFloat(sellerWallet.earnedBalance);
+      let purchasedBalance = parseFloat(sellerWallet.purchasedBalance);
+      const totalBalance = earnedBalance + purchasedBalance;
+
+      if (totalBalance < tradeAmount) {
+        return { success: false, error: 'Seller has insufficient project currency for escrow' };
+      }
+
+      // Deduct from earned first, then purchased
+      let remaining = tradeAmount;
+      if (earnedBalance >= remaining) {
+        earnedBalance -= remaining;
+        remaining = 0;
+      } else {
+        remaining -= earnedBalance;
+        earnedBalance = 0;
+        purchasedBalance -= remaining;
+      }
+
+      // 3. Debit seller's project currency (escrow hold)
+      await tx.update(projectCurrencyWallets)
+        .set({ 
+          earnedBalance: earnedBalance.toFixed(8),
+          purchasedBalance: purchasedBalance.toFixed(8),
+          updatedAt: new Date() 
+        })
+        .where(eq(projectCurrencyWallets.userId, params.sellerId));
+
+      // 4. Update offer availability
+      const newAvailable = (availableAmount - tradeAmount).toFixed(8);
+      await tx.update(p2pOffers)
+        .set({
+          availableAmount: newAvailable,
+          status: parseFloat(newAvailable) <= 0 ? 'completed' : 'active',
+          updatedAt: new Date()
+        })
+        .where(eq(p2pOffers.id, params.offerId));
+
+      // 5. Create the trade record with currencyType='project'
+      const [trade] = await tx.insert(p2pTrades).values({
+        offerId: params.offerId,
+        buyerId: params.buyerId,
+        sellerId: params.sellerId,
+        status: 'pending',
+        amount: params.amount,
+        fiatAmount: params.fiatAmount,
+        price: params.price,
+        paymentMethod: params.paymentMethod,
+        escrowAmount: params.amount,
+        platformFee: params.platformFee,
+        currencyType: 'project',
+        expiresAt: params.expiresAt,
+      }).returning();
+
+      // 6. Create ledger entry for audit
+      await tx.insert(projectCurrencyLedger).values({
+        walletId: sellerWallet.id,
+        userId: params.sellerId,
+        transactionType: 'p2p_escrow',
+        amount: (-tradeAmount).toFixed(8),
+        balanceType: 'earned',
+        balanceBefore: totalBalance.toFixed(8),
+        balanceAfter: (earnedBalance + purchasedBalance).toFixed(8),
+        description: `P2P trade ${trade.id} - escrow hold`,
+        referenceId: trade.id
+      });
+
+      return { success: true, trade };
+    });
+  }
+
+  // ATOMIC P2P trade completion with PROJECT CURRENCY escrow release
+  async completeP2PTradeProjectCurrencyAtomic(tradeId: string, completedByUserId: string): Promise<{ success: boolean; trade?: any; error?: string }> {
+    return await db.transaction(async (tx) => {
+      // 1. Lock and verify trade
+      const [trade] = await tx
+        .select()
+        .from(p2pTrades)
+        .where(eq(p2pTrades.id, tradeId))
+        .for('update');
+
+      if (!trade) {
+        return { success: false, error: 'Trade not found' };
+      }
+
+      // Idempotency: already completed - return success
+      if (trade.status === 'completed') {
+        return { success: true, trade };
+      }
+
+      if (trade.sellerId !== completedByUserId) {
+        return { success: false, error: 'Only the seller can complete the trade' };
+      }
+
+      if (trade.status !== 'confirmed') {
+        return { success: false, error: 'Trade payment not confirmed yet' };
+      }
+
+      const escrowAmount = parseFloat(trade.escrowAmount);
+      const platformFee = parseFloat(trade.platformFee || '0');
+      const releaseAmount = escrowAmount - platformFee;
+
+      // 2. Get or create buyer's project currency wallet
+      let [buyerWallet] = await tx
+        .select()
+        .from(projectCurrencyWallets)
+        .where(eq(projectCurrencyWallets.userId, trade.buyerId))
+        .for('update');
+
+      if (!buyerWallet) {
+        const [created] = await tx.insert(projectCurrencyWallets)
+          .values({ userId: trade.buyerId })
+          .returning();
+        buyerWallet = created;
+      }
+
+      const buyerTotalBefore = parseFloat(buyerWallet.earnedBalance) + parseFloat(buyerWallet.purchasedBalance);
+      const newEarnedBalance = (parseFloat(buyerWallet.earnedBalance) + releaseAmount).toFixed(8);
+
+      await tx.update(projectCurrencyWallets)
+        .set({ earnedBalance: newEarnedBalance, updatedAt: new Date() })
+        .where(eq(projectCurrencyWallets.userId, trade.buyerId));
+
+      // 3. Update trade status
+      const [updatedTrade] = await tx.update(p2pTrades)
+        .set({ status: 'completed', completedAt: new Date(), updatedAt: new Date() })
+        .where(eq(p2pTrades.id, tradeId))
+        .returning();
+
+      // 4. Create ledger entry for audit
+      await tx.insert(projectCurrencyLedger).values({
+        walletId: buyerWallet.id,
+        userId: trade.buyerId,
+        transactionType: 'p2p_received',
+        amount: releaseAmount.toFixed(8),
+        balanceType: 'earned',
+        balanceBefore: buyerTotalBefore.toFixed(8),
+        balanceAfter: (buyerTotalBefore + releaseAmount).toFixed(8),
+        description: `P2P trade ${tradeId} - funds received`,
+        referenceId: tradeId
+      });
+
+      return { success: true, trade: updatedTrade };
+    });
+  }
+
+  // ATOMIC P2P trade cancellation with PROJECT CURRENCY escrow refund
+  async cancelP2PTradeProjectCurrencyAtomic(tradeId: string, cancelledByUserId: string, reason?: string): Promise<{ success: boolean; trade?: any; error?: string }> {
+    return await db.transaction(async (tx) => {
+      // 1. Lock and verify trade
+      const [trade] = await tx
+        .select()
+        .from(p2pTrades)
+        .where(eq(p2pTrades.id, tradeId))
+        .for('update');
+
+      if (!trade) {
+        return { success: false, error: 'Trade not found' };
+      }
+
+      // Idempotency: already cancelled - return success
+      if (trade.status === 'cancelled') {
+        return { success: true, trade };
+      }
+
+      if (trade.buyerId !== cancelledByUserId && trade.sellerId !== cancelledByUserId) {
+        return { success: false, error: 'Not authorized to cancel this trade' };
+      }
+
+      if (trade.status === 'completed') {
+        return { success: false, error: 'Cannot cancel a completed trade' };
+      }
+
+      const escrowAmount = parseFloat(trade.escrowAmount);
+      const tradeAmount = parseFloat(trade.amount);
+
+      // 2. Refund escrow to seller if funds were held
+      if (escrowAmount > 0) {
+        const [sellerWallet] = await tx
+          .select()
+          .from(projectCurrencyWallets)
+          .where(eq(projectCurrencyWallets.userId, trade.sellerId))
+          .for('update');
+
+        if (sellerWallet) {
+          const sellerTotalBefore = parseFloat(sellerWallet.earnedBalance) + parseFloat(sellerWallet.purchasedBalance);
+          const newEarnedBalance = (parseFloat(sellerWallet.earnedBalance) + escrowAmount).toFixed(8);
+
+          await tx.update(projectCurrencyWallets)
+            .set({ earnedBalance: newEarnedBalance, updatedAt: new Date() })
+            .where(eq(projectCurrencyWallets.userId, trade.sellerId));
+
+          // Create refund ledger entry
+          await tx.insert(projectCurrencyLedger).values({
+            walletId: sellerWallet.id,
+            userId: trade.sellerId,
+            transactionType: 'p2p_refund',
+            amount: escrowAmount.toFixed(8),
+            balanceType: 'earned',
+            balanceBefore: sellerTotalBefore.toFixed(8),
+            balanceAfter: (sellerTotalBefore + escrowAmount).toFixed(8),
+            description: `P2P trade ${tradeId} - escrow refund`,
+            referenceId: tradeId
+          });
+        }
+      }
+
+      // 3. Restore offer availability
+      if (trade.offerId && tradeAmount > 0) {
+        const [offer] = await tx
+          .select()
+          .from(p2pOffers)
+          .where(eq(p2pOffers.id, trade.offerId))
+          .for('update');
+
+        if (offer) {
+          const currentAvailable = parseFloat(offer.availableAmount);
+          const restoredAvailable = (currentAvailable + tradeAmount).toFixed(8);
+
+          await tx.update(p2pOffers)
+            .set({
+              availableAmount: restoredAvailable,
+              status: 'active',
+              updatedAt: new Date()
+            })
+            .where(eq(p2pOffers.id, trade.offerId));
+        }
+      }
+
+      // 4. Update trade status
+      const [updatedTrade] = await tx.update(p2pTrades)
+        .set({
+          status: 'cancelled',
+          cancelReason: reason || 'Cancelled by user',
+          cancelledAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(p2pTrades.id, tradeId))
+        .returning();
+
+      return { success: true, trade: updatedTrade };
+    });
+  }
+
   // ==================== MULTIPLAYER GAMES (Single Source of Truth) ====================
 
   async getMultiplayerGame(id: string): Promise<MultiplayerGame | undefined> {
