@@ -40,7 +40,9 @@ import {
   type MultiplayerGame, type InsertMultiplayerGame,
   type SystemConfig, type InsertSystemConfig,
   type ScheduledConfigChange, type InsertScheduledConfigChange,
+  type AdminAlert, type InsertAdminAlert,
   scheduledConfigChanges,
+  adminAlerts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, asc, or, like, ne } from "drizzle-orm";
@@ -226,6 +228,15 @@ export interface IStorage {
   updateScheduledConfigChange(id: string, data: Partial<ScheduledConfigChange>): Promise<ScheduledConfigChange | undefined>;
   cancelScheduledConfigChange(id: string): Promise<boolean>;
   applyScheduledConfigChange(id: string): Promise<{ success: boolean; error?: string }>;
+
+  // Admin Alerts (Real-time Admin Notifications)
+  createAdminAlert(alert: InsertAdminAlert): Promise<AdminAlert>;
+  getAdminAlert(id: string): Promise<AdminAlert | undefined>;
+  listAdminAlerts(options?: { unreadOnly?: boolean; type?: string; severity?: string; limit?: number }): Promise<AdminAlert[]>;
+  markAdminAlertAsRead(id: string, readBy: string): Promise<AdminAlert | undefined>;
+  markAllAdminAlertsAsRead(readBy: string): Promise<number>;
+  getUnreadAdminAlertCount(): Promise<number>;
+  deleteAdminAlert(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2199,6 +2210,68 @@ export class DatabaseStorage implements IStorage {
       await this.updateScheduledConfigChange(id, { status: 'failed', failureReason: error.message, appliedAt: new Date() });
       return { success: false, error: error.message };
     }
+  }
+
+  // ==================== ADMIN ALERTS ====================
+
+  async createAdminAlert(alert: InsertAdminAlert): Promise<AdminAlert> {
+    const [created] = await db.insert(adminAlerts).values(alert).returning();
+    return created;
+  }
+
+  async getAdminAlert(id: string): Promise<AdminAlert | undefined> {
+    const [alert] = await db.select().from(adminAlerts).where(eq(adminAlerts.id, id));
+    return alert || undefined;
+  }
+
+  async listAdminAlerts(options?: { unreadOnly?: boolean; type?: string; severity?: string; limit?: number }): Promise<AdminAlert[]> {
+    const conditions = [];
+    if (options?.unreadOnly) {
+      conditions.push(eq(adminAlerts.isRead, false));
+    }
+    if (options?.type) {
+      conditions.push(eq(adminAlerts.type, options.type as any));
+    }
+    if (options?.severity) {
+      conditions.push(eq(adminAlerts.severity, options.severity as any));
+    }
+
+    let query = db.select().from(adminAlerts);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+    query = query.orderBy(desc(adminAlerts.createdAt)) as typeof query;
+    if (options?.limit) {
+      query = query.limit(options.limit) as typeof query;
+    }
+    return query;
+  }
+
+  async markAdminAlertAsRead(id: string, readBy: string): Promise<AdminAlert | undefined> {
+    const [updated] = await db.update(adminAlerts)
+      .set({ isRead: true, readAt: new Date(), readBy })
+      .where(eq(adminAlerts.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async markAllAdminAlertsAsRead(readBy: string): Promise<number> {
+    const result = await db.update(adminAlerts)
+      .set({ isRead: true, readAt: new Date(), readBy })
+      .where(eq(adminAlerts.isRead, false));
+    return result.rowCount || 0;
+  }
+
+  async getUnreadAdminAlertCount(): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` })
+      .from(adminAlerts)
+      .where(eq(adminAlerts.isRead, false));
+    return Number(result?.count || 0);
+  }
+
+  async deleteAdminAlert(id: string): Promise<boolean> {
+    const result = await db.delete(adminAlerts).where(eq(adminAlerts.id, id));
+    return (result.rowCount || 0) > 0;
   }
 }
 

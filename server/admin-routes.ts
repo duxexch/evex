@@ -1782,4 +1782,70 @@ export function registerAdminRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ==================== ADMIN ALERTS (Real-time Admin Notifications) ====================
+
+  // Get admin alerts with optional filtering
+  app.get("/api/admin/alerts", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { unreadOnly, type, severity, limit } = req.query;
+      const alerts = await storage.listAdminAlerts({
+        unreadOnly: unreadOnly === 'true',
+        type: type as string | undefined,
+        severity: severity as string | undefined,
+        limit: limit ? parseInt(limit as string) : 100,
+      });
+      res.json(alerts);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get unread admin alert count
+  app.get("/api/admin/alerts/count", adminAuthMiddleware, async (_req: AdminRequest, res: Response) => {
+    try {
+      const count = await storage.getUnreadAdminAlertCount();
+      res.json({ count });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark single alert as read
+  app.post("/api/admin/alerts/:id/read", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const alert = await storage.markAdminAlertAsRead(id, req.admin!.id);
+      if (!alert) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+      res.json(alert);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mark all alerts as read
+  app.post("/api/admin/alerts/read-all", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const count = await storage.markAllAdminAlertsAsRead(req.admin!.id);
+      res.json({ success: true, count });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete an alert
+  app.delete("/api/admin/alerts/:id", adminAuthMiddleware, async (req: AdminRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteAdminAlert(id);
+      if (!success) {
+        return res.status(404).json({ error: "Alert not found" });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 }

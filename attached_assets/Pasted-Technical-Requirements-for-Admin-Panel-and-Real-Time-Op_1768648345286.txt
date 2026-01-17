@@ -1,0 +1,128 @@
+Technical Requirements for Admin Panel and Real-Time Operations
+
+1. Games Management Section (Multiplayer & Casino Games)
+Current Issue:
+
+Only the “Add Game” option appears in the admin panel.
+
+Games visible to users on the platform do not appear in the admin panel.
+
+Game categories, pricing, free/play counts, player limits, icons, descriptions, and metadata are not manageable.
+
+Required Improvements:
+
+Game Visibility: All games currently available to users must be listed in the admin panel.
+
+Category Management: Admins must be able to create, edit, and assign games to categories. Categories should control display order and visibility.
+
+Pricing & Play Counts:
+
+Configure price for paid plays.
+
+Configure number of free plays allowed.
+
+Track total plays per game in real-time.
+
+Player Limits: Ability to set min/max number of players per game session.
+
+Icons & Descriptions: Admin can upload icons, write descriptions, and maintain metadata.
+
+Real-Time Updates: Changes made by the admin should propagate immediately to all connected clients without requiring page reloads.
+
+2. P2P Dispute and Appeals Section
+Current Issue:
+
+The dispute/appeals section does not provide sufficient visibility or control.
+
+Required Improvements:
+
+Real-Time Notifications: Admins must receive instant alerts for:
+
+New disputes/appeals
+
+Dispute updates
+
+Player messages related to the dispute
+
+Direct Navigation: Notifications should be actionable; clicking them should navigate directly to the relevant dispute case.
+
+Resolution Interface: Admin can:
+
+View all details of a dispute (users, trade data, chat messages, screenshots, timestamps)
+
+Respond to players directly from the panel
+
+Apply resolutions (refund, trade reversal, warnings, escalation)
+
+Organization & Filtering:
+
+Filter disputes by status (Open, Pending, Closed)
+
+Sort by creation date, game type, amount, or priority
+
+Mark disputes as urgent or assign to specific admin
+
+3. Real-Time Notifications System
+Required Features:
+
+Instant push notifications for all critical events (disputes, trades, messages, game changes).
+
+Notifications are actionable and redirect the admin to the exact relevant section.
+
+Include contextual data (game name, user name, trade/dispute ID, timestamp).
+
+Support multi-admin visibility, so multiple admins can see the same updates.
+
+Audit trail for all notifications and actions taken by admins.
+
+4. Data Synchronization & Safety
+
+All changes (games, categories, pricing, P2P disputes) must use atomic database transactions.
+
+Use row-level locking or equivalent concurrency protection to prevent race conditions.
+
+Admin actions must log a full audit trail (user, timestamp, action type, previous/updated values).
+
+5. Suggested Architecture Enhancements:
+
+Admin Panel Backend:
+
+Expand API endpoints to provide full CRUD for games, categories, pricing, play counts, and metadata.
+
+Add endpoints for dispute management with real-time notifications via WebSocket.
+
+Frontend Admin Panel:
+
+List all games with editable properties.
+
+Drag-and-drop or sorting options for categories and display order.
+
+Visual indicators for free vs. paid plays and total play counts.
+
+Real-time sync via WebSocket for all updates.
+
+Notifications:
+
+WebSocket-based push notifications for instant updates.
+
+Clickable notifications navigating directly to the corresponding panel view.
+
+Audit & Security:
+
+Ensure every admin action is logged and traceable.
+
+Role-based access control (admins, moderators).
+
+Prevent inconsistent states with transactional updates.
+
+6. Business & Operational Benefits:
+
+Instant admin visibility of disputes, trades, and game activity.
+
+Ability to manage games, pricing, and categories dynamically without downtime.
+
+Accurate tracking of free vs. paid plays ensures monetization integrity.
+
+Real-time notifications ensure faster response to disputes, improving user trust.
+
+Audit trails and transactional safety protect against errors and abuse.

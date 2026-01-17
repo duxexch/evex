@@ -38,6 +38,7 @@ import {
   CreditCard,
   Share2,
 } from "lucide-react";
+import { AdminAlertsDropdown } from "@/components/admin/AdminAlertsDropdown";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -217,6 +218,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <header className="flex items-center justify-between gap-4 p-3 border-b bg-background sticky top-0 z-50">
             <SidebarTrigger data-testid="button-admin-sidebar-toggle" />
             <div className="flex items-center gap-3">
+              <AdminAlertsDropdown />
               <ThemeToggle />
             </div>
           </header>

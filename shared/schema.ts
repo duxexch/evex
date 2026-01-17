@@ -2161,6 +2161,47 @@ export const insertGameSectionSchema = createInsertSchema(gameSections).omit({ i
 export type InsertGameSection = z.infer<typeof insertGameSectionSchema>;
 export type GameSection = typeof gameSections.$inferSelect;
 
+// ==================== ADMIN ALERTS (Real-time Admin Notifications) ====================
+
+export const adminAlertTypeEnum = pgEnum("admin_alert_type", [
+  "new_dispute", "dispute_update", "new_trade", "trade_issue",
+  "new_complaint", "complaint_escalated", "game_change", "user_issue",
+  "payment_issue", "system_alert", "security_alert"
+]);
+
+export const adminAlertSeverityEnum = pgEnum("admin_alert_severity", ["info", "warning", "critical", "urgent"]);
+
+export const adminAlerts = pgTable("admin_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: adminAlertTypeEnum("type").notNull(),
+  severity: adminAlertSeverityEnum("severity").notNull().default("info"),
+  title: text("title").notNull(),
+  titleAr: text("title_ar"),
+  message: text("message").notNull(),
+  messageAr: text("message_ar"),
+  entityType: text("entity_type"),
+  entityId: varchar("entity_id"),
+  deepLink: text("deep_link"),
+  metadata: text("metadata"),
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at"),
+  readBy: varchar("read_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_admin_alerts_type").on(table.type),
+  index("idx_admin_alerts_severity").on(table.severity),
+  index("idx_admin_alerts_is_read").on(table.isRead),
+  index("idx_admin_alerts_created_at").on(table.createdAt),
+]);
+
+export const adminAlertsRelations = relations(adminAlerts, ({ one }) => ({
+  reader: one(users, { fields: [adminAlerts.readBy], references: [users.id] }),
+}));
+
+export const insertAdminAlertSchema = createInsertSchema(adminAlerts).omit({ id: true, createdAt: true });
+export type InsertAdminAlert = z.infer<typeof insertAdminAlertSchema>;
+export type AdminAlert = typeof adminAlerts.$inferSelect;
+
 // ==================== ADVERTISEMENTS (Carousel Ads) ====================
 
 export const advertisementTypeEnum = pgEnum("advertisement_type", ["image", "video", "link", "embed"]);

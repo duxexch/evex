@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { db } from "./db";
 import { 
   notifications, chatMessages, chatSettings, users, matchmakingQueue, gameMatches, games,
-  challengeGameSessions, challengeChatMessages, challenges
+  challengeGameSessions, challengeChatMessages, challenges, adminAlerts
 } from "@shared/schema";
 import { eq, desc, and, or, sql } from "drizzle-orm";
 import * as ChessEngine from "./game-engines/chess-engine";
@@ -15,6 +15,9 @@ import { chatRateLimiter } from "./lib/rate-limiter";
 import { filterMessage } from "./lib/word-filter";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "pwm-secret-key-change-in-production";
+const ADMIN_JWT_SECRET = process.env.SESSION_SECRET ? 
+  `admin_${process.env.SESSION_SECRET}_secure` : 
+  "admin-secret-key-change-in-production-secure";
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: string;
@@ -73,6 +76,35 @@ export function setupWebSocket(server: Server) {
             }));
           } catch {
             ws.send(JSON.stringify({ type: "auth_error", error: "Invalid token" }));
+          }
+        }
+
+        // Admin authentication for real-time admin alerts
+        if (data.type === "admin_auth") {
+          try {
+            const decoded = jwt.verify(data.token, ADMIN_JWT_SECRET) as any;
+            // Verify the user is an admin
+            if (decoded.role === 'admin') {
+              ws.userId = decoded.id;
+              adminClients.add(ws);
+              
+              // Add cleanup on socket close
+              ws.on('close', () => {
+                adminClients.delete(ws);
+              });
+              
+              ws.send(JSON.stringify({ type: "admin_auth_success", userId: decoded.id }));
+              
+              // Send current unread alert count
+              const [result] = await db.select({ count: sql<number>`count(*)` })
+                .from(adminAlerts)
+                .where(eq(adminAlerts.isRead, false));
+              ws.send(JSON.stringify({ type: "admin_alert_count", count: Number(result?.count || 0) }));
+            } else {
+              ws.send(JSON.stringify({ type: "admin_auth_error", error: "Not authorized" }));
+            }
+          } catch {
+            ws.send(JSON.stringify({ type: "admin_auth_error", error: "Invalid token" }));
           }
         }
 
@@ -1244,4 +1276,39 @@ export function broadcastSystemEvent(event: {
       }
     });
   });
+}
+
+// Admin clients for real-time admin notifications
+const adminClients = new Set<AuthenticatedSocket>();
+
+export function registerAdminClient(socket: AuthenticatedSocket) {
+  adminClients.add(socket);
+  socket.on('close', () => {
+    adminClients.delete(socket);
+  });
+}
+
+export function broadcastAdminAlert(alert: {
+  id: string;
+  type: string;
+  severity: string;
+  title: string;
+  titleAr?: string | null;
+  message: string;
+  messageAr?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  deepLink?: string | null;
+  createdAt: Date | string;
+}) {
+  const message = JSON.stringify({ type: 'admin_alert', data: alert });
+  adminClients.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  });
+}
+
+export function getAdminClientCount() {
+  return adminClients.size;
 }
