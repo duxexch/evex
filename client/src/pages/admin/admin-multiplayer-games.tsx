@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Gamepad2, Power, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Gamepad2, Power, AlertCircle, Radio, CheckCircle2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -114,7 +114,10 @@ function GameForm({
         maxPlayers: parseInt(data.maxPlayers),
       }),
     onSuccess: () => {
-      toast({ title: "Game created successfully" });
+      toast({ 
+        title: "Game created successfully",
+        description: "Live update sent to all connected users",
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
       onSuccess();
     },
@@ -136,7 +139,10 @@ function GameForm({
         maxPlayers: parseInt(data.maxPlayers),
       }),
     onSuccess: () => {
-      toast({ title: "Game updated successfully" });
+      toast({ 
+        title: "Game updated successfully",
+        description: "Live update sent to all connected users",
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
       onSuccess();
     },
@@ -384,11 +390,24 @@ export default function AdminMultiplayerGames() {
     queryKey: ["/api/admin/multiplayer-games"],
   });
 
+  const { data: configVersion } = useQuery<{ version: string }>({
+    queryKey: ["/api/config-version/multiplayer_games_version"],
+    queryFn: async () => {
+      const res = await fetch("/api/config-version/multiplayer_games_version");
+      if (!res.ok) return { version: "" };
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
+
   const toggleMutation = useMutation({
     mutationFn: (id: string) =>
       apiRequest("POST", `/api/admin/multiplayer-games/${id}/toggle`),
     onSuccess: () => {
-      toast({ title: "Game status updated" });
+      toast({ 
+        title: "Game status updated",
+        description: "Live update sent to all connected users",
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
     },
     onError: (error: Error) => {
@@ -404,7 +423,10 @@ export default function AdminMultiplayerGames() {
     mutationFn: (id: string) =>
       apiRequest("DELETE", `/api/admin/multiplayer-games/${id}`),
     onSuccess: () => {
-      toast({ title: "Game deleted successfully" });
+      toast({ 
+        title: "Game deleted successfully",
+        description: "Live update sent to all connected users",
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
       setGameToDelete(null);
     },
@@ -463,7 +485,7 @@ export default function AdminMultiplayerGames() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
             <Gamepad2 className="h-6 w-6" />
@@ -473,10 +495,21 @@ export default function AdminMultiplayerGames() {
             Manage game configurations - this is the single source of truth for all game settings
           </p>
         </div>
-        <Button onClick={handleCreate} data-testid="button-add-game">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Game
-        </Button>
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1" data-testid="badge-sync-status">
+            <Radio className="h-3 w-3 text-green-500 animate-pulse" />
+            <span className="text-xs">Live Sync Active</span>
+          </Badge>
+          {configVersion?.version && (
+            <Badge variant="secondary" className="text-xs" data-testid="badge-config-version">
+              Config v{new Date(parseInt(configVersion.version)).toLocaleTimeString()}
+            </Badge>
+          )}
+          <Button onClick={handleCreate} data-testid="button-add-game">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Game
+          </Button>
+        </div>
       </div>
 
       <Card>

@@ -113,6 +113,15 @@ export function useNotifications() {
           if (event?.type === 'game_config_changed') {
             // Invalidate multiplayer games cache to refresh game config
             queryClient.invalidateQueries({ queryKey: ['/api/multiplayer-games'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/config-version/multiplayer_games_version'] });
+            
+            // Show user-facing toast notification
+            toast({
+              title: language === 'ar' ? 'تم تحديث إعدادات اللعبة' : 'Game settings updated',
+              description: language === 'ar' 
+                ? 'تم تطبيق أحدث إعدادات اللعبة' 
+                : 'Latest game configuration has been applied',
+            });
           }
         }
       } catch (error) {
