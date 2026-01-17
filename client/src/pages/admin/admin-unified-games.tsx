@@ -70,8 +70,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+function getAdminToken() {
+  return localStorage.getItem("adminToken");
+}
+
+async function adminFetch(url: string, options?: RequestInit) {
+  const token = getAdminToken();
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...options?.headers,
+    },
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: "Request failed" }));
+    throw new Error(error.error || "Request failed");
+  }
+  return res.json();
+}
 import {
   AlertDialog,
   AlertDialogAction,
@@ -216,12 +237,15 @@ function GameForm({
 
   const createMutation = useMutation({
     mutationFn: (data: GameFormData) =>
-      apiRequest("POST", "/api/admin/multiplayer-games", {
-        ...data,
-        defaultTimeLimit: data.defaultTimeLimit ? parseInt(data.defaultTimeLimit) : 300,
-        minPlayers: parseInt(data.minPlayers),
-        maxPlayers: parseInt(data.maxPlayers),
-        freePlayLimit: parseInt(data.freePlayLimit),
+      adminFetch("/api/admin/multiplayer-games", {
+        method: "POST",
+        body: JSON.stringify({
+          ...data,
+          defaultTimeLimit: data.defaultTimeLimit ? parseInt(data.defaultTimeLimit) : 300,
+          minPlayers: parseInt(data.minPlayers),
+          maxPlayers: parseInt(data.maxPlayers),
+          freePlayLimit: parseInt(data.freePlayLimit),
+        }),
       }),
     onSuccess: () => {
       toast({ 
@@ -241,12 +265,15 @@ function GameForm({
 
   const updateMutation = useMutation({
     mutationFn: (data: GameFormData) =>
-      apiRequest("PATCH", `/api/admin/multiplayer-games/${game!.id}`, {
-        ...data,
-        defaultTimeLimit: data.defaultTimeLimit ? parseInt(data.defaultTimeLimit) : 300,
-        minPlayers: parseInt(data.minPlayers),
-        maxPlayers: parseInt(data.maxPlayers),
-        freePlayLimit: parseInt(data.freePlayLimit),
+      adminFetch(`/api/admin/multiplayer-games/${game!.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...data,
+          defaultTimeLimit: data.defaultTimeLimit ? parseInt(data.defaultTimeLimit) : 300,
+          minPlayers: parseInt(data.minPlayers),
+          maxPlayers: parseInt(data.maxPlayers),
+          freePlayLimit: parseInt(data.freePlayLimit),
+        }),
       }),
     onSuccess: () => {
       toast({ 
@@ -663,11 +690,12 @@ export default function AdminUnifiedGames() {
 
   const { data: games = [], isLoading } = useQuery<MultiplayerGame[]>({
     queryKey: ["/api/admin/multiplayer-games"],
+    queryFn: () => adminFetch("/api/admin/multiplayer-games"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      apiRequest("DELETE", `/api/admin/multiplayer-games/${id}`),
+      adminFetch(`/api/admin/multiplayer-games/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       toast({ 
         title: language === "ar" ? "تم حذف اللعبة بنجاح" : "Game deleted successfully",
@@ -686,7 +714,10 @@ export default function AdminUnifiedGames() {
 
   const toggleStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
-      apiRequest("PATCH", `/api/admin/multiplayer-games/${id}`, { status }),
+      adminFetch(`/api/admin/multiplayer-games/${id}`, { 
+        method: "PATCH", 
+        body: JSON.stringify({ status }) 
+      }),
     onSuccess: () => {
       toast({ 
         title: language === "ar" ? "تم تحديث الحالة" : "Status updated",
