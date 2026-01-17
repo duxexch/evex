@@ -276,9 +276,9 @@ export default function AdminP2PPage() {
           <TabsTrigger value="trades" data-testid="tab-trades">Trades</TabsTrigger>
           <TabsTrigger value="disputes" data-testid="tab-disputes">
             Disputes
-            {disputes?.filter((d: any) => d.status === "pending" || d.status === "under_review").length > 0 && (
+            {disputes?.filter((d: any) => d.status === "open" || d.status === "investigating").length > 0 && (
               <Badge variant="destructive" className="ml-2">
-                {disputes?.filter((d: any) => d.status === "pending" || d.status === "under_review").length}
+                {disputes?.filter((d: any) => d.status === "open" || d.status === "investigating").length}
               </Badge>
             )}
           </TabsTrigger>
@@ -727,15 +727,17 @@ export default function AdminP2PPage() {
 }
 
 function DisputeAuditLog({ disputeId }: { disputeId?: string }) {
-  const { data: logs = [], isLoading } = useQuery({
+  const { data: logs = [], isLoading, isError } = useQuery({
     queryKey: ["/api/admin/p2p/disputes", disputeId, "logs"],
     queryFn: () => disputeId 
-      ? fetch(`/api/admin/p2p/disputes/${disputeId}/logs`, {
-          headers: { "x-admin-token": localStorage.getItem("adminToken") || "" }
-        }).then(r => r.json())
+      ? adminFetch(`/api/admin/p2p/disputes/${disputeId}/logs`)
       : Promise.resolve([]),
     enabled: !!disputeId,
   });
+
+  if (isError) {
+    return <p className="text-center text-destructive py-4">Failed to load audit logs</p>;
+  }
 
   if (isLoading) {
     return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12" />)}</div>;
