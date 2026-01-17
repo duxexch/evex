@@ -819,6 +819,8 @@ export const p2pTrades = pgTable("p2p_trades", {
   paymentMethod: text("payment_method").notNull(),
   paymentReference: text("payment_reference"),
   escrowAmount: decimal("escrow_amount", { precision: 15, scale: 8 }).notNull(),
+  escrowEarnedAmount: decimal("escrow_earned_amount", { precision: 15, scale: 8 }).default("0"), // For project currency: earned portion
+  escrowPurchasedAmount: decimal("escrow_purchased_amount", { precision: 15, scale: 8 }).default("0"), // For project currency: purchased portion
   platformFee: decimal("platform_fee", { precision: 15, scale: 8 }).notNull().default("0"),
   currencyType: text("currency_type").notNull().default("usd"), // 'usd' or 'project' (VEX Coin)
   expiresAt: timestamp("expires_at"),

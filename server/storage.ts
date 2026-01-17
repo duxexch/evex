@@ -2173,14 +2173,20 @@ export class DatabaseStorage implements IStorage {
         return { success: false, error: 'Seller has insufficient project currency for escrow' };
       }
 
-      // Deduct from earned first, then purchased
+      // Deduct from earned first, then purchased - track amounts for accurate refunds
       let remaining = tradeAmount;
+      let earnedDeducted = 0;
+      let purchasedDeducted = 0;
+      
       if (earnedBalance >= remaining) {
+        earnedDeducted = remaining;
         earnedBalance -= remaining;
         remaining = 0;
       } else {
+        earnedDeducted = earnedBalance;
         remaining -= earnedBalance;
         earnedBalance = 0;
+        purchasedDeducted = remaining;
         purchasedBalance -= remaining;
       }
 
@@ -2203,7 +2209,7 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(p2pOffers.id, params.offerId));
 
-      // 5. Create the trade record with currencyType='project'
+      // 5. Create the trade record with currencyType='project' - track escrow split for accurate refunds
       const [trade] = await tx.insert(p2pTrades).values({
         offerId: params.offerId,
         buyerId: params.buyerId,
@@ -2214,23 +2220,41 @@ export class DatabaseStorage implements IStorage {
         price: params.price,
         paymentMethod: params.paymentMethod,
         escrowAmount: params.amount,
+        escrowEarnedAmount: earnedDeducted.toFixed(8), // Track earned portion for refunds
+        escrowPurchasedAmount: purchasedDeducted.toFixed(8), // Track purchased portion for refunds
         platformFee: params.platformFee,
         currencyType: 'project',
         expiresAt: params.expiresAt,
       }).returning();
 
-      // 6. Create ledger entry for audit
-      await tx.insert(projectCurrencyLedger).values({
-        walletId: sellerWallet.id,
-        userId: params.sellerId,
-        transactionType: 'p2p_escrow',
-        amount: (-tradeAmount).toFixed(8),
-        balanceType: 'earned',
-        balanceBefore: totalBalance.toFixed(8),
-        balanceAfter: (earnedBalance + purchasedBalance).toFixed(8),
-        description: `P2P trade ${trade.id} - escrow hold`,
-        referenceId: trade.id
-      });
+      // 6. Create ledger entries for audit - separate entries for earned and purchased
+      if (earnedDeducted > 0) {
+        await tx.insert(projectCurrencyLedger).values({
+          walletId: sellerWallet.id,
+          userId: params.sellerId,
+          transactionType: 'p2p_escrow',
+          amount: (-earnedDeducted).toFixed(8),
+          balanceType: 'earned',
+          balanceBefore: (parseFloat(sellerWallet.earnedBalance)).toFixed(8),
+          balanceAfter: earnedBalance.toFixed(8),
+          description: `P2P trade ${trade.id} - escrow hold (earned)`,
+          referenceId: trade.id
+        });
+      }
+      
+      if (purchasedDeducted > 0) {
+        await tx.insert(projectCurrencyLedger).values({
+          walletId: sellerWallet.id,
+          userId: params.sellerId,
+          transactionType: 'p2p_escrow',
+          amount: (-purchasedDeducted).toFixed(8),
+          balanceType: 'purchased',
+          balanceBefore: (parseFloat(sellerWallet.purchasedBalance)).toFixed(8),
+          balanceAfter: purchasedBalance.toFixed(8),
+          description: `P2P trade ${trade.id} - escrow hold (purchased)`,
+          referenceId: trade.id
+        });
+      }
 
       return { success: true, trade };
     });
@@ -2340,8 +2364,12 @@ export class DatabaseStorage implements IStorage {
 
       const escrowAmount = parseFloat(trade.escrowAmount);
       const tradeAmount = parseFloat(trade.amount);
+      
+      // Get tracked escrow split for accurate refunds
+      const escrowEarnedAmount = parseFloat(trade.escrowEarnedAmount || '0');
+      const escrowPurchasedAmount = parseFloat(trade.escrowPurchasedAmount || '0');
 
-      // 2. Refund escrow to seller if funds were held
+      // 2. Refund escrow to seller if funds were held - using tracked split for accuracy
       if (escrowAmount > 0) {
         const [sellerWallet] = await tx
           .select()
@@ -2350,25 +2378,49 @@ export class DatabaseStorage implements IStorage {
           .for('update');
 
         if (sellerWallet) {
-          const sellerTotalBefore = parseFloat(sellerWallet.earnedBalance) + parseFloat(sellerWallet.purchasedBalance);
-          const newEarnedBalance = (parseFloat(sellerWallet.earnedBalance) + escrowAmount).toFixed(8);
+          const currentEarned = parseFloat(sellerWallet.earnedBalance);
+          const currentPurchased = parseFloat(sellerWallet.purchasedBalance);
+          
+          // Refund to correct balance types using tracked split
+          const newEarnedBalance = (currentEarned + escrowEarnedAmount).toFixed(8);
+          const newPurchasedBalance = (currentPurchased + escrowPurchasedAmount).toFixed(8);
 
           await tx.update(projectCurrencyWallets)
-            .set({ earnedBalance: newEarnedBalance, updatedAt: new Date() })
+            .set({ 
+              earnedBalance: newEarnedBalance,
+              purchasedBalance: newPurchasedBalance,
+              updatedAt: new Date() 
+            })
             .where(eq(projectCurrencyWallets.userId, trade.sellerId));
 
-          // Create refund ledger entry
-          await tx.insert(projectCurrencyLedger).values({
-            walletId: sellerWallet.id,
-            userId: trade.sellerId,
-            transactionType: 'p2p_refund',
-            amount: escrowAmount.toFixed(8),
-            balanceType: 'earned',
-            balanceBefore: sellerTotalBefore.toFixed(8),
-            balanceAfter: (sellerTotalBefore + escrowAmount).toFixed(8),
-            description: `P2P trade ${tradeId} - escrow refund`,
-            referenceId: tradeId
-          });
+          // Create separate refund ledger entries for earned and purchased
+          if (escrowEarnedAmount > 0) {
+            await tx.insert(projectCurrencyLedger).values({
+              walletId: sellerWallet.id,
+              userId: trade.sellerId,
+              transactionType: 'p2p_refund',
+              amount: escrowEarnedAmount.toFixed(8),
+              balanceType: 'earned',
+              balanceBefore: currentEarned.toFixed(8),
+              balanceAfter: newEarnedBalance,
+              description: `P2P trade ${tradeId} - escrow refund (earned)`,
+              referenceId: tradeId
+            });
+          }
+          
+          if (escrowPurchasedAmount > 0) {
+            await tx.insert(projectCurrencyLedger).values({
+              walletId: sellerWallet.id,
+              userId: trade.sellerId,
+              transactionType: 'p2p_refund',
+              amount: escrowPurchasedAmount.toFixed(8),
+              balanceType: 'purchased',
+              balanceBefore: currentPurchased.toFixed(8),
+              balanceAfter: newPurchasedBalance,
+              description: `P2P trade ${tradeId} - escrow refund (purchased)`,
+              referenceId: tradeId
+            });
+          }
         }
       }
 
