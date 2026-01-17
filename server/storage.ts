@@ -1673,6 +1673,275 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updated || undefined;
   }
+
+  // ATOMIC P2P trade creation with escrow and offer reservation
+  async createP2PTradeAtomic(params: {
+    offerId: string;
+    buyerId: string;
+    sellerId: string;
+    amount: string;
+    fiatAmount: string;
+    price: string;
+    paymentMethod: string;
+    platformFee: string;
+    expiresAt: Date;
+  }): Promise<{ success: boolean; trade?: any; error?: string }> {
+    const tradeAmount = parseFloat(params.amount);
+    if (isNaN(tradeAmount) || tradeAmount <= 0) {
+      return { success: false, error: 'Invalid amount' };
+    }
+
+    return await db.transaction(async (tx) => {
+      // 1. Lock the offer row and verify availability
+      const [offer] = await tx
+        .select()
+        .from(p2pOffers)
+        .where(eq(p2pOffers.id, params.offerId))
+        .for('update');
+
+      if (!offer) {
+        return { success: false, error: 'Offer not found' };
+      }
+
+      if (offer.status !== 'active') {
+        return { success: false, error: 'Offer is no longer active' };
+      }
+
+      const availableAmount = parseFloat(offer.availableAmount);
+      if (tradeAmount > availableAmount) {
+        return { success: false, error: `Insufficient available amount. Maximum: ${availableAmount}` };
+      }
+
+      // 2. Lock seller's balance and debit escrow
+      const [seller] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, params.sellerId))
+        .for('update');
+
+      if (!seller) {
+        return { success: false, error: 'Seller not found' };
+      }
+
+      const sellerBalance = parseFloat(seller.balance);
+      if (sellerBalance < tradeAmount) {
+        return { success: false, error: 'Seller has insufficient balance for escrow' };
+      }
+
+      // 3. Debit seller's balance (escrow hold)
+      const newSellerBalance = (sellerBalance - tradeAmount).toFixed(2);
+      await tx.update(users)
+        .set({ balance: newSellerBalance, updatedAt: new Date() })
+        .where(eq(users.id, params.sellerId));
+
+      // 4. Update offer availability
+      const newAvailable = (availableAmount - tradeAmount).toFixed(8);
+      await tx.update(p2pOffers)
+        .set({
+          availableAmount: newAvailable,
+          status: parseFloat(newAvailable) <= 0 ? 'completed' : 'active',
+          updatedAt: new Date()
+        })
+        .where(eq(p2pOffers.id, params.offerId));
+
+      // 5. Create the trade record
+      const [trade] = await tx.insert(p2pTrades).values({
+        offerId: params.offerId,
+        buyerId: params.buyerId,
+        sellerId: params.sellerId,
+        status: 'pending',
+        amount: params.amount,
+        fiatAmount: params.fiatAmount,
+        price: params.price,
+        paymentMethod: params.paymentMethod,
+        escrowAmount: params.amount,
+        platformFee: params.platformFee,
+        expiresAt: params.expiresAt,
+      }).returning();
+
+      // 6. Create escrow transaction record for audit
+      await tx.insert(transactions).values({
+        userId: params.sellerId,
+        type: 'withdrawal',
+        amount: params.amount,
+        balanceBefore: sellerBalance.toFixed(2),
+        balanceAfter: newSellerBalance,
+        status: 'completed',
+        description: `P2P trade ${trade.id} - escrow hold`,
+        processedAt: new Date()
+      });
+
+      return { success: true, trade };
+    });
+  }
+
+  // ATOMIC P2P trade completion with escrow release
+  async completeP2PTradeAtomic(tradeId: string, completedByUserId: string): Promise<{ success: boolean; trade?: any; error?: string }> {
+    return await db.transaction(async (tx) => {
+      // 1. Lock and verify trade
+      const [trade] = await tx
+        .select()
+        .from(p2pTrades)
+        .where(eq(p2pTrades.id, tradeId))
+        .for('update');
+
+      if (!trade) {
+        return { success: false, error: 'Trade not found' };
+      }
+
+      // Idempotency: already completed - return success
+      if (trade.status === 'completed') {
+        return { success: true, trade };
+      }
+
+      if (trade.sellerId !== completedByUserId) {
+        return { success: false, error: 'Only the seller can complete the trade' };
+      }
+
+      if (trade.status !== 'confirmed') {
+        return { success: false, error: 'Trade payment not confirmed yet' };
+      }
+
+      const escrowAmount = parseFloat(trade.escrowAmount);
+      const platformFee = parseFloat(trade.platformFee || '0');
+      const releaseAmount = escrowAmount - platformFee;
+
+      // 2. Lock buyer's balance and credit
+      const [buyer] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, trade.buyerId))
+        .for('update');
+
+      if (!buyer) {
+        return { success: false, error: 'Buyer not found' };
+      }
+
+      const buyerBalance = parseFloat(buyer.balance);
+      const newBuyerBalance = (buyerBalance + releaseAmount).toFixed(2);
+
+      await tx.update(users)
+        .set({ balance: newBuyerBalance, updatedAt: new Date() })
+        .where(eq(users.id, trade.buyerId));
+
+      // 3. Update trade status
+      const [updatedTrade] = await tx.update(p2pTrades)
+        .set({ status: 'completed', completedAt: new Date(), updatedAt: new Date() })
+        .where(eq(p2pTrades.id, tradeId))
+        .returning();
+
+      // 4. Create transaction record for audit
+      await tx.insert(transactions).values({
+        userId: trade.buyerId,
+        type: 'deposit',
+        amount: releaseAmount.toFixed(2),
+        balanceBefore: buyerBalance.toFixed(2),
+        balanceAfter: newBuyerBalance,
+        status: 'completed',
+        description: `P2P trade ${tradeId} - funds received`,
+        processedAt: new Date()
+      });
+
+      return { success: true, trade: updatedTrade };
+    });
+  }
+
+  // ATOMIC P2P trade cancellation with escrow refund and offer restoration
+  async cancelP2PTradeAtomic(tradeId: string, cancelledByUserId: string, reason?: string): Promise<{ success: boolean; trade?: any; error?: string }> {
+    return await db.transaction(async (tx) => {
+      // 1. Lock and verify trade
+      const [trade] = await tx
+        .select()
+        .from(p2pTrades)
+        .where(eq(p2pTrades.id, tradeId))
+        .for('update');
+
+      if (!trade) {
+        return { success: false, error: 'Trade not found' };
+      }
+
+      // Idempotency: already cancelled - return success
+      if (trade.status === 'cancelled') {
+        return { success: true, trade };
+      }
+
+      if (trade.buyerId !== cancelledByUserId && trade.sellerId !== cancelledByUserId) {
+        return { success: false, error: 'Not authorized to cancel this trade' };
+      }
+
+      if (trade.status === 'completed') {
+        return { success: false, error: 'Cannot cancel a completed trade' };
+      }
+
+      const escrowAmount = parseFloat(trade.escrowAmount);
+      const tradeAmount = parseFloat(trade.amount);
+
+      // 2. Refund escrow to seller if funds were held
+      if (escrowAmount > 0) {
+        const [seller] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.id, trade.sellerId))
+          .for('update');
+
+        if (seller) {
+          const sellerBalance = parseFloat(seller.balance);
+          const newSellerBalance = (sellerBalance + escrowAmount).toFixed(2);
+
+          await tx.update(users)
+            .set({ balance: newSellerBalance, updatedAt: new Date() })
+            .where(eq(users.id, trade.sellerId));
+
+          // Create refund transaction record
+          await tx.insert(transactions).values({
+            userId: trade.sellerId,
+            type: 'deposit',
+            amount: trade.escrowAmount,
+            balanceBefore: sellerBalance.toFixed(2),
+            balanceAfter: newSellerBalance,
+            status: 'completed',
+            description: `P2P trade ${tradeId} - escrow refund`,
+            processedAt: new Date()
+          });
+        }
+      }
+
+      // 3. Restore offer availability
+      if (trade.offerId && tradeAmount > 0) {
+        const [offer] = await tx
+          .select()
+          .from(p2pOffers)
+          .where(eq(p2pOffers.id, trade.offerId))
+          .for('update');
+
+        if (offer) {
+          const currentAvailable = parseFloat(offer.availableAmount);
+          const restoredAvailable = (currentAvailable + tradeAmount).toFixed(8);
+
+          await tx.update(p2pOffers)
+            .set({
+              availableAmount: restoredAvailable,
+              status: 'active', // Re-activate offer if it was marked completed
+              updatedAt: new Date()
+            })
+            .where(eq(p2pOffers.id, trade.offerId));
+        }
+      }
+
+      // 4. Update trade status
+      const [updatedTrade] = await tx.update(p2pTrades)
+        .set({
+          status: 'cancelled',
+          cancelReason: reason || 'Cancelled by user',
+          cancelledAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(p2pTrades.id, tradeId))
+        .returning();
+
+      return { success: true, trade: updatedTrade };
+    });
+  }
 }
 
 export const storage = new DatabaseStorage();

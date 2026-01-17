@@ -2379,11 +2379,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // POST /api/p2p/trades - Start a trade from an offer
+  // POST /api/p2p/trades - Start a trade from an offer (ATOMIC)
   app.post("/api/p2p/trades", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { offerId, amount, paymentMethod } = req.body;
       
+      // Input validation
       if (!offerId || typeof offerId !== 'string') {
         return res.status(400).json({ error: "Valid offer ID is required" });
       }
@@ -2396,13 +2397,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "Payment method is required" });
       }
       
+      // Pre-check offer (non-locking read for early validation)
       const offer = await storage.getP2POffer(offerId);
       if (!offer) {
         return res.status(404).json({ error: "Offer not found" });
-      }
-      
-      if (offer.status !== "active") {
-        return res.status(400).json({ error: "Offer is not active" });
       }
       
       if (offer.userId === req.user!.id) {
@@ -2410,12 +2408,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       const tradeAmount = parseFloat(amount);
-      const availableAmount = parseFloat(offer.availableAmount);
-      
-      if (tradeAmount > availableAmount) {
-        return res.status(400).json({ error: `Insufficient available amount. Maximum: ${availableAmount}` });
-      }
-      
       const minLimit = parseFloat(offer.minLimit);
       const maxLimit = parseFloat(offer.maxLimit);
       
@@ -2431,44 +2423,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const buyerId = isBuyer ? req.user!.id : offer.userId;
       const sellerId = isBuyer ? offer.userId : req.user!.id;
       
-      const escrowDebitResult = await storage.updateUserBalanceWithCheck(
-        sellerId,
-        amount.toString(),
-        'subtract'
-      );
-      
-      if (!escrowDebitResult.success) {
-        return res.status(400).json({ error: "Seller has insufficient balance for escrow" });
-      }
-      
-      const trade = await storage.createP2PTrade({
+      // ATOMIC: Create trade with escrow debit and offer reservation
+      const result = await storage.createP2PTradeAtomic({
         offerId,
         buyerId,
         sellerId,
-        status: "pending",
         amount: amount.toString(),
         fiatAmount: fiatAmount.toFixed(2),
         price: offer.price,
         paymentMethod,
-        escrowAmount: amount.toString(),
         platformFee: platformFee.toFixed(8),
         expiresAt: new Date(Date.now() + (offer.paymentTimeLimit * 60 * 1000)),
       });
       
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      // System message (non-critical, outside transaction)
       await storage.createP2PTradeMessage({
-        tradeId: trade.id,
+        tradeId: result.trade.id,
         senderId: req.user!.id,
         message: "Trade started",
         isSystemMessage: true,
       });
       
-      const newAvailable = (availableAmount - tradeAmount).toFixed(8);
-      await storage.updateP2POffer(offerId, {
-        availableAmount: newAvailable,
-        status: parseFloat(newAvailable) <= 0 ? "completed" : "active",
-      });
-      
-      res.status(201).json(trade);
+      res.status(201).json(result.trade);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2570,54 +2550,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // POST /api/p2p/trades/:id/complete - Complete the trade and release funds
+  // POST /api/p2p/trades/:id/complete - Complete the trade and release funds (ATOMIC)
   app.post("/api/p2p/trades/:id/complete", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const trade = await storage.getP2PTrade(req.params.id);
-      if (!trade) {
-        return res.status(404).json({ error: "Trade not found" });
+      // ATOMIC: Complete trade with escrow release
+      const result = await storage.completeP2PTradeAtomic(req.params.id, req.user!.id);
+      
+      if (!result.success) {
+        const statusCode = result.error?.includes('not found') ? 404 :
+                          result.error?.includes('Only the seller') ? 403 : 400;
+        return res.status(statusCode).json({ error: result.error });
       }
       
-      if (trade.sellerId !== req.user!.id) {
-        return res.status(403).json({ error: "Only the seller can complete the trade" });
-      }
+      const trade = result.trade;
       
-      if (trade.status !== "confirmed") {
-        return res.status(400).json({ error: "Trade payment not confirmed yet" });
-      }
-      
-      if (trade.status === "completed") {
-        return res.status(400).json({ error: "Trade already completed" });
-      }
-      
-      const escrowAmount = parseFloat(trade.escrowAmount);
-      const platformFee = parseFloat(trade.platformFee || "0");
-      const releaseAmount = (escrowAmount - platformFee).toFixed(8);
-      
-      const releaseResult = await storage.updateUserBalanceWithCheck(
-        trade.buyerId,
-        releaseAmount,
-        'add'
-      );
-      
-      if (!releaseResult.success) {
-        return res.status(500).json({ error: "Failed to release funds to buyer" });
-      }
-      
-      await storage.createTransaction({
-        userId: trade.buyerId,
-        type: 'deposit',
-        status: 'completed',
-        amount: releaseAmount,
-        currency: 'USD',
-        description: `P2P trade ${trade.id} - funds received`,
-      });
-      
-      const updated = await storage.updateP2PTrade(trade.id, {
-        status: "completed",
-        completedAt: new Date(),
-      });
-      
+      // Non-critical operations (outside atomic transaction)
       await storage.createP2PTradeMessage({
         tradeId: trade.id,
         senderId: req.user!.id,
@@ -2625,6 +2572,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         isSystemMessage: true,
       });
       
+      // Update trader metrics
       const metrics = await storage.getP2PTraderMetrics(trade.buyerId);
       await storage.updateP2PTraderMetrics(trade.buyerId, {
         totalTrades: (metrics?.totalTrades || 0) + 1,
@@ -2641,51 +2589,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         lastTradeAt: new Date(),
       });
       
-      res.json(updated);
+      res.json(trade);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  // POST /api/p2p/trades/:id/cancel - Cancel the trade
+  // POST /api/p2p/trades/:id/cancel - Cancel the trade (ATOMIC)
   app.post("/api/p2p/trades/:id/cancel", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const trade = await storage.getP2PTrade(req.params.id);
-      if (!trade) {
-        return res.status(404).json({ error: "Trade not found" });
-      }
-      
-      if (trade.buyerId !== req.user!.id && trade.sellerId !== req.user!.id) {
-        return res.status(403).json({ error: "Not authorized to cancel this trade" });
-      }
-      
-      if (trade.status === "completed" || trade.status === "cancelled") {
-        return res.status(400).json({ error: "Cannot cancel this trade" });
-      }
-      
       const { reason } = req.body;
       
-      if (trade.status === "confirmed" || trade.status === "paid") {
-        const escrowAmount = parseFloat(trade.escrowAmount);
-        if (escrowAmount > 0) {
-          const refundResult = await storage.updateUserBalanceWithCheck(
-            trade.sellerId,
-            trade.escrowAmount,
-            'add'
-          );
-          
-          if (!refundResult.success) {
-            console.error(`P2P trade ${trade.id} escrow refund failed:`, refundResult.error);
-          }
-        }
+      // ATOMIC: Cancel trade with escrow refund
+      const result = await storage.cancelP2PTradeAtomic(req.params.id, req.user!.id, reason);
+      
+      if (!result.success) {
+        const statusCode = result.error?.includes('not found') ? 404 :
+                          result.error?.includes('Not authorized') ? 403 : 400;
+        return res.status(statusCode).json({ error: result.error });
       }
       
-      const updated = await storage.updateP2PTrade(trade.id, {
-        status: "cancelled",
-        cancelReason: reason || "Cancelled by user",
-        cancelledAt: new Date(),
-      });
+      const trade = result.trade;
       
+      // Non-critical operations (outside atomic transaction)
       await storage.createP2PTradeMessage({
         tradeId: trade.id,
         senderId: req.user!.id,
@@ -2693,6 +2619,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         isSystemMessage: true,
       });
       
+      // Update trader metrics
       const buyerMetrics = await storage.getP2PTraderMetrics(trade.buyerId);
       await storage.updateP2PTraderMetrics(trade.buyerId, {
         totalTrades: (buyerMetrics?.totalTrades || 0) + 1,
@@ -2705,7 +2632,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         cancelledTrades: (sellerMetrics?.cancelledTrades || 0) + 1,
       });
       
-      res.json(updated);
+      res.json(trade);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
