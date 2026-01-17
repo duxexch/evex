@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,7 +46,25 @@ interface LeaderboardPlayer {
   gameWon?: number;
 }
 
-const GAME_CONFIG: Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> = {
+interface MultiplayerGameFromAPI {
+  id: string;
+  key: string;
+  nameEn: string;
+  nameAr: string;
+  isActive: boolean;
+}
+
+const GAME_ICONS: Record<string, { icon: typeof Crown; color: string }> = {
+  chess: { icon: Crown, color: 'text-amber-500' },
+  domino: { icon: Target, color: 'text-blue-500' },
+  backgammon: { icon: Shuffle, color: 'text-emerald-500' },
+  tarneeb: { icon: Gem, color: 'text-purple-500' },
+  baloot: { icon: Gem, color: 'text-rose-500' },
+};
+
+const DEFAULT_GAME_STYLE = { icon: Gamepad2, color: 'text-gray-500' };
+
+const FALLBACK_GAME_CONFIG: Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> = {
   all: { name: 'All Games', nameAr: 'جميع الألعاب', icon: Gamepad2, color: 'text-primary' },
   chess: { name: 'Chess', nameAr: 'شطرنج', icon: Crown, color: 'text-amber-500' },
   domino: { name: 'Domino', nameAr: 'دومينو', icon: Target, color: 'text-blue-500' },
@@ -54,6 +72,25 @@ const GAME_CONFIG: Record<string, { name: string; nameAr: string; icon: typeof C
   tarneeb: { name: 'Tarneeb', nameAr: 'طرنيب', icon: Gem, color: 'text-purple-500' },
   baloot: { name: 'Baloot', nameAr: 'بلوت', icon: Gem, color: 'text-rose-500' },
 };
+
+function buildGameConfig(apiGames: MultiplayerGameFromAPI[]): Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> {
+  const config: Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> = {
+    all: { name: 'All Games', nameAr: 'جميع الألعاب', icon: Gamepad2, color: 'text-primary' },
+  };
+  if (!apiGames || apiGames.length === 0) {
+    return FALLBACK_GAME_CONFIG;
+  }
+  for (const game of apiGames) {
+    const iconStyle = GAME_ICONS[game.key] || DEFAULT_GAME_STYLE;
+    config[game.key] = {
+      name: game.nameEn,
+      nameAr: game.nameAr,
+      icon: iconStyle.icon,
+      color: iconStyle.color,
+    };
+  }
+  return config;
+}
 
 const RANK_MEDALS = [
   { bg: 'bg-gradient-to-br from-amber-400 to-amber-600', icon: Crown, size: 'w-8 h-8' },
@@ -76,6 +113,13 @@ export default function LeaderboardPage() {
   const { data: myRank } = useQuery<{ rank: number; sortBy: string }>({
     queryKey: ['/api/me/rank', { sortBy }],
   });
+
+  const { data: apiGames = [] } = useQuery<MultiplayerGameFromAPI[]>({
+    queryKey: ['/api/multiplayer-games'],
+    staleTime: 60000,
+  });
+
+  const GAME_CONFIG = useMemo(() => buildGameConfig(apiGames), [apiGames]);
 
   const formatNumber = (num: number | string) => {
     const n = typeof num === 'string' ? parseFloat(num) : num;

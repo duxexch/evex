@@ -1,0 +1,104 @@
+Current Progress Summary (Multiplayer Games Sync)
+
+What has been completed successfully so far:
+
+1. Single Source of Truth (Database)
+
+Added a dedicated multiplayer_games table to manage:
+
+Game key (chess, backgammon, domino, tarneeb, baloot)
+
+Display names
+
+Active / inactive status
+
+Stakes & configuration
+
+Removed hardcoded multiplayer game definitions from frontend constants.
+
+Seeded initial multiplayer game data successfully.
+
+Ensured no schema duplication (reused existing adminAuditLogs table).
+
+2. Backend Integration
+
+Added storage-layer methods for:
+
+Fetching multiplayer games
+
+Admin updates (activate/deactivate, config changes)
+
+Updated challenge creation logic to validate game existence and status directly from the database.
+
+This guarantees:
+
+No challenges for disabled games
+
+No mismatch between admin panel and backend logic
+
+3. Admin Panel
+
+Created a dedicated admin page for multiplayer games (separate from casino games).
+
+Added routing and navigation in the admin panel.
+
+Admin can now control multiplayer games without touching code.
+
+4. Frontend (In Progress)
+
+Started refactoring the Game Lobby to fetch multiplayer games dynamically from the API.
+
+Removed dependency on static GAME_CONFIG.
+
+Updated ChallengeRow to receive game config via props and handle missing/disabled games safely.
+
+Current Blocker
+
+Replit payment interruption stopped further frontend refactoring mid-task.
+
+No architectural issues — work can resume immediately once environment access is restored.
+
+Next Steps (Once Access Is Restored)
+Step 1: Complete Frontend Migration
+
+Finish updating:
+
+GameLobbyPage
+
+ChallengeRow
+
+Any remaining components using static game configs
+
+Ensure all game names, icons, and availability come from the DB.
+
+Step 2: Real-Time Sync (Optional but Recommended)
+
+Add WebSocket or cache invalidation broadcast when admin updates games:
+
+Lobby updates instantly
+
+No refresh required
+
+Step 3: Safety & Monitoring
+
+Add:
+
+Admin audit logs for multiplayer game changes
+
+Health checks to detect missing/invalid game configs
+
+Fallback UI if a game is disabled while users are browsing
+
+Final Result (Target State)
+
+Admin panel = single control center
+
+Backend = strict enforcer
+
+Frontend = dynamic and always accurate
+
+Zero hardcoded multiplayer game logic
+
+No desync between site and dashboard
+
+Safer financial and challenge operations

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,13 +79,48 @@ interface MatchHistoryItem {
   result: 'win' | 'loss' | 'draw';
 }
 
-const GAME_CONFIG: Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> = {
+interface MultiplayerGameFromAPI {
+  id: string;
+  key: string;
+  nameEn: string;
+  nameAr: string;
+  isActive: boolean;
+}
+
+const GAME_ICONS: Record<string, { icon: typeof Crown; color: string }> = {
+  chess: { icon: Crown, color: 'text-amber-500' },
+  domino: { icon: Target, color: 'text-blue-500' },
+  backgammon: { icon: Shuffle, color: 'text-emerald-500' },
+  tarneeb: { icon: Gem, color: 'text-purple-500' },
+  baloot: { icon: Gem, color: 'text-rose-500' },
+};
+
+const DEFAULT_GAME_STYLE = { icon: Gamepad2, color: 'text-gray-500' };
+
+const FALLBACK_GAME_CONFIG: Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> = {
   chess: { name: 'Chess', nameAr: 'شطرنج', icon: Crown, color: 'text-amber-500' },
   domino: { name: 'Domino', nameAr: 'دومينو', icon: Target, color: 'text-blue-500' },
   backgammon: { name: 'Backgammon', nameAr: 'طاولة', icon: Shuffle, color: 'text-emerald-500' },
   tarneeb: { name: 'Tarneeb', nameAr: 'طرنيب', icon: Gem, color: 'text-purple-500' },
   baloot: { name: 'Baloot', nameAr: 'بلوت', icon: Gem, color: 'text-rose-500' },
 };
+
+function buildGameConfig(apiGames: MultiplayerGameFromAPI[]): Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> {
+  if (!apiGames || apiGames.length === 0) {
+    return FALLBACK_GAME_CONFIG;
+  }
+  const config: Record<string, { name: string; nameAr: string; icon: typeof Crown; color: string }> = {};
+  for (const game of apiGames) {
+    const iconStyle = GAME_ICONS[game.key] || DEFAULT_GAME_STYLE;
+    config[game.key] = {
+      name: game.nameEn,
+      nameAr: game.nameAr,
+      icon: iconStyle.icon,
+      color: iconStyle.color,
+    };
+  }
+  return config;
+}
 
 const VIP_COLORS = [
   'from-gray-500 to-gray-600',
@@ -120,6 +155,13 @@ export default function PlayerProfilePage() {
     queryKey: ['/api/me/rank'],
     enabled: isOwnProfile,
   });
+
+  const { data: apiGames = [] } = useQuery<MultiplayerGameFromAPI[]>({
+    queryKey: ['/api/multiplayer-games'],
+    staleTime: 60000,
+  });
+
+  const GAME_CONFIG = useMemo(() => buildGameConfig(apiGames), [apiGames]);
 
   const isBlocked = user?.blockedUsers?.includes(userId || '') || false;
   const isMuted = user?.mutedUsers?.includes(userId || '') || false;
