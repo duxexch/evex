@@ -3965,6 +3965,125 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Block a user
+  app.post("/api/users/:userId/block", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const targetUserId = req.params.userId;
+      
+      if (userId === targetUserId) {
+        return res.status(400).json({ error: "Cannot block yourself" });
+      }
+      
+      const [user] = await db.select({ blockedUsers: users.blockedUsers })
+        .from(users).where(eq(users.id, userId));
+      
+      const blockedUsers = user?.blockedUsers || [];
+      if (blockedUsers.includes(targetUserId)) {
+        return res.status(400).json({ error: "User already blocked" });
+      }
+      
+      await db.update(users)
+        .set({ blockedUsers: [...blockedUsers, targetUserId] })
+        .where(eq(users.id, userId));
+      
+      res.json({ success: true, message: "User blocked" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unblock a user
+  app.delete("/api/users/:userId/block", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const targetUserId = req.params.userId;
+      
+      const [user] = await db.select({ blockedUsers: users.blockedUsers })
+        .from(users).where(eq(users.id, userId));
+      
+      const blockedUsers = user?.blockedUsers || [];
+      const newBlockedUsers = blockedUsers.filter((id: string) => id !== targetUserId);
+      
+      await db.update(users)
+        .set({ blockedUsers: newBlockedUsers })
+        .where(eq(users.id, userId));
+      
+      res.json({ success: true, message: "User unblocked" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Mute a user
+  app.post("/api/users/:userId/mute", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const targetUserId = req.params.userId;
+      
+      if (userId === targetUserId) {
+        return res.status(400).json({ error: "Cannot mute yourself" });
+      }
+      
+      const [user] = await db.select({ mutedUsers: users.mutedUsers })
+        .from(users).where(eq(users.id, userId));
+      
+      const mutedUsers = user?.mutedUsers || [];
+      if (mutedUsers.includes(targetUserId)) {
+        return res.status(400).json({ error: "User already muted" });
+      }
+      
+      await db.update(users)
+        .set({ mutedUsers: [...mutedUsers, targetUserId] })
+        .where(eq(users.id, userId));
+      
+      res.json({ success: true, message: "User muted" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unmute a user
+  app.delete("/api/users/:userId/mute", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const targetUserId = req.params.userId;
+      
+      const [user] = await db.select({ mutedUsers: users.mutedUsers })
+        .from(users).where(eq(users.id, userId));
+      
+      const mutedUsers = user?.mutedUsers || [];
+      const newMutedUsers = mutedUsers.filter((id: string) => id !== targetUserId);
+      
+      await db.update(users)
+        .set({ mutedUsers: newMutedUsers })
+        .where(eq(users.id, userId));
+      
+      res.json({ success: true, message: "User unmuted" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get blocked and muted users
+  app.get("/api/users/blocked-muted", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      
+      const [user] = await db.select({ 
+        blockedUsers: users.blockedUsers,
+        mutedUsers: users.mutedUsers
+      }).from(users).where(eq(users.id, userId));
+      
+      res.json({ 
+        blockedUsers: user?.blockedUsers || [],
+        mutedUsers: user?.mutedUsers || []
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== MATCHMAKING ROUTES ====================
 
   // Join random matchmaking queue
