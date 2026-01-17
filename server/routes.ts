@@ -6015,5 +6015,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // ==================== SCHEDULED CONFIG CHANGES SCHEDULER ====================
+  // Check every 30 seconds for pending scheduled changes
+  const SCHEDULER_INTERVAL = 30 * 1000; // 30 seconds
+  
+  async function processScheduledChanges() {
+    try {
+      const pendingChanges = await storage.getPendingScheduledChanges();
+      
+      for (const change of pendingChanges) {
+        console.log(`[Scheduler] Applying scheduled change ${change.id} for game ${change.gameId}`);
+        const result = await storage.applyScheduledConfigChange(change.id);
+        
+        if (result.success) {
+          // Get the game to include in broadcast
+          const game = await storage.getMultiplayerGame(change.gameId);
+          
+          // Broadcast to all clients
+          broadcastSystemEvent({
+            type: 'game_config_changed',
+            data: {
+              action: change.action,
+              gameKey: game?.key,
+              scheduledChangeId: change.id,
+              isScheduled: true
+            }
+          });
+          
+          console.log(`[Scheduler] Successfully applied scheduled change ${change.id}`);
+        } else {
+          console.error(`[Scheduler] Failed to apply scheduled change ${change.id}: ${result.error}`);
+        }
+      }
+    } catch (error) {
+      console.error('[Scheduler] Error processing scheduled changes:', error);
+    }
+  }
+
+  // Start the scheduler
+  setInterval(processScheduledChanges, SCHEDULER_INTERVAL);
+  console.log(`[Scheduler] Started scheduled config changes processor (interval: ${SCHEDULER_INTERVAL / 1000}s)`);
+
   return httpServer;
 }
