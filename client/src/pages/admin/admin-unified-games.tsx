@@ -1,0 +1,1096 @@
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { 
+  Plus, 
+  Pencil, 
+  Trash2, 
+  Gamepad2, 
+  Power, 
+  Crown, 
+  Shuffle, 
+  Target, 
+  Gem,
+  TrendingUp,
+  Dices,
+  CircleDot,
+  Star,
+  Trophy,
+  Eye,
+  EyeOff,
+  Home,
+  LayoutGrid,
+  Swords,
+  Sparkles,
+  DollarSign,
+  Coins,
+  Gift,
+  Settings2,
+  Filter,
+  Search
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useI18n } from "@/lib/i18n";
+
+const GAME_CATEGORIES = [
+  { key: "all", labelEn: "All Games", labelAr: "جميع الألعاب", icon: LayoutGrid },
+  { key: "multiplayer", labelEn: "Multiplayer", labelAr: "متعددة اللاعبين", icon: Gamepad2 },
+  { key: "crash", labelEn: "Crash", labelAr: "ألعاب الانهيار", icon: TrendingUp },
+  { key: "dice", labelEn: "Dice", labelAr: "ألعاب النرد", icon: Dices },
+  { key: "wheel", labelEn: "Wheel", labelAr: "ألعاب العجلة", icon: CircleDot },
+  { key: "slots", labelEn: "Slots", labelAr: "ماكينات القمار", icon: Star },
+  { key: "jackpot", labelEn: "Jackpot", labelAr: "ألعاب الجائزة", icon: Trophy },
+];
+
+const DISPLAY_LOCATIONS = [
+  { key: "home", labelEn: "Home Page", labelAr: "الصفحة الرئيسية", icon: Home },
+  { key: "games", labelEn: "Games Section", labelAr: "قسم الألعاب", icon: LayoutGrid },
+  { key: "challenges", labelEn: "Challenges", labelAr: "التحديات", icon: Swords },
+  { key: "featured", labelEn: "Featured", labelAr: "المميزة", icon: Sparkles },
+];
+
+const STATUS_COLORS = {
+  active: "bg-green-500/20 text-green-500 border-green-500/30",
+  listed: "bg-yellow-500/20 text-yellow-500 border-yellow-500/30",
+  inactive: "bg-red-500/20 text-red-500 border-red-500/30",
+  maintenance: "bg-blue-500/20 text-blue-500 border-blue-500/30",
+};
+
+const STATUS_LABELS = {
+  active: { en: "Active", ar: "نشطة" },
+  listed: { en: "Listed", ar: "مدرجة" },
+  inactive: { en: "Inactive", ar: "خاملة" },
+  maintenance: { en: "Maintenance", ar: "صيانة" },
+};
+
+const gameFormSchema = z.object({
+  key: z.string().min(1, "Game key is required").regex(/^[a-z0-9_]+$/, "Only lowercase letters, numbers, and underscores"),
+  nameEn: z.string().min(1, "English name is required"),
+  nameAr: z.string().min(1, "Arabic name is required"),
+  descriptionEn: z.string().optional(),
+  descriptionAr: z.string().optional(),
+  category: z.string().min(1, "Category is required"),
+  status: z.enum(["active", "listed", "inactive", "maintenance"]),
+  minStake: z.string().min(1, "Minimum stake is required"),
+  maxStake: z.string().min(1, "Maximum stake is required"),
+  priceVex: z.string().min(1, "VEX price is required"),
+  houseFee: z.string().min(1, "House fee is required"),
+  defaultTimeLimit: z.string().optional(),
+  minPlayers: z.string().min(1, "Minimum players is required"),
+  maxPlayers: z.string().min(1, "Maximum players is required"),
+  freePlayLimit: z.string().min(1, "Free play limit is required"),
+  freePlayPeriod: z.enum(["daily", "weekly", "monthly"]),
+  displayLocations: z.array(z.string()).min(1, "At least one display location is required"),
+  isActive: z.boolean(),
+  isFeatured: z.boolean(),
+});
+
+type GameFormData = z.infer<typeof gameFormSchema>;
+
+interface MultiplayerGame {
+  id: string;
+  key: string;
+  nameEn: string;
+  nameAr: string;
+  descriptionEn: string | null;
+  descriptionAr: string | null;
+  iconName: string;
+  colorClass: string;
+  gradientClass: string | null;
+  category: string;
+  status: "active" | "listed" | "inactive" | "maintenance";
+  minStake: string;
+  maxStake: string;
+  priceVex: string;
+  houseFee: string;
+  defaultTimeLimit: number | null;
+  minPlayers: number;
+  maxPlayers: number;
+  freePlayLimit: number;
+  freePlayPeriod: "daily" | "weekly" | "monthly" | null;
+  displayLocations: string[];
+  isActive: boolean;
+  isFeatured: boolean;
+  totalGamesPlayed: number;
+  totalVolume: string;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+function getIconComponent(iconName: string) {
+  const icons: Record<string, typeof Gamepad2> = {
+    Crown, Shuffle, Target, Gem, Gamepad2, TrendingUp, Dices, CircleDot, Star, Trophy
+  };
+  return icons[iconName] || Gamepad2;
+}
+
+function GameForm({ 
+  game, 
+  onSuccess, 
+  onCancel 
+}: { 
+  game?: MultiplayerGame | null;
+  onSuccess: () => void;
+  onCancel: () => void;
+}) {
+  const { toast } = useToast();
+  const { language } = useI18n();
+  const isEditing = !!game;
+
+  const form = useForm<GameFormData>({
+    resolver: zodResolver(gameFormSchema),
+    defaultValues: {
+      key: game?.key || "",
+      nameEn: game?.nameEn || "",
+      nameAr: game?.nameAr || "",
+      descriptionEn: game?.descriptionEn || "",
+      descriptionAr: game?.descriptionAr || "",
+      category: game?.category || "multiplayer",
+      status: game?.status || "active",
+      minStake: game?.minStake || "1",
+      maxStake: game?.maxStake || "1000",
+      priceVex: game?.priceVex || "0",
+      houseFee: game?.houseFee || "0.05",
+      defaultTimeLimit: game?.defaultTimeLimit?.toString() || "300",
+      minPlayers: game?.minPlayers?.toString() || "2",
+      maxPlayers: game?.maxPlayers?.toString() || "2",
+      freePlayLimit: game?.freePlayLimit?.toString() || "0",
+      freePlayPeriod: game?.freePlayPeriod || "daily",
+      displayLocations: game?.displayLocations || ["games"],
+      isActive: game?.isActive ?? true,
+      isFeatured: game?.isFeatured ?? false,
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: GameFormData) =>
+      apiRequest("POST", "/api/admin/multiplayer-games", {
+        ...data,
+        defaultTimeLimit: data.defaultTimeLimit ? parseInt(data.defaultTimeLimit) : 300,
+        minPlayers: parseInt(data.minPlayers),
+        maxPlayers: parseInt(data.maxPlayers),
+        freePlayLimit: parseInt(data.freePlayLimit),
+      }),
+    onSuccess: () => {
+      toast({ 
+        title: language === "ar" ? "تم إنشاء اللعبة بنجاح" : "Game created successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
+      onSuccess();
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: language === "ar" ? "فشل إنشاء اللعبة" : "Failed to create game", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: GameFormData) =>
+      apiRequest("PATCH", `/api/admin/multiplayer-games/${game!.id}`, {
+        ...data,
+        defaultTimeLimit: data.defaultTimeLimit ? parseInt(data.defaultTimeLimit) : 300,
+        minPlayers: parseInt(data.minPlayers),
+        maxPlayers: parseInt(data.maxPlayers),
+        freePlayLimit: parseInt(data.freePlayLimit),
+      }),
+    onSuccess: () => {
+      toast({ 
+        title: language === "ar" ? "تم تحديث اللعبة بنجاح" : "Game updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
+      onSuccess();
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: language === "ar" ? "فشل تحديث اللعبة" : "Failed to update game", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const onSubmit = (data: GameFormData) => {
+    if (isEditing) {
+      updateMutation.mutate(data);
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="key"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{language === "ar" ? "مفتاح اللعبة" : "Game Key"}</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="chess" disabled={isEditing} data-testid="input-game-key" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="category"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{language === "ar" ? "الفئة" : "Category"}</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-category">
+                      <SelectValue placeholder={language === "ar" ? "اختر الفئة" : "Select category"} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {GAME_CATEGORIES.filter(c => c.key !== "all").map((cat) => (
+                      <SelectItem key={cat.key} value={cat.key}>
+                        {language === "ar" ? cat.labelAr : cat.labelEn}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="nameEn"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{language === "ar" ? "الاسم (إنجليزي)" : "Name (English)"}</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Chess" data-testid="input-name-en" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="nameAr"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{language === "ar" ? "الاسم (عربي)" : "Name (Arabic)"}</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="شطرنج" dir="rtl" data-testid="input-name-ar" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{language === "ar" ? "الحالة" : "Status"}</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-status">
+                    <SelectValue placeholder={language === "ar" ? "اختر الحالة" : "Select status"} />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="active">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      {language === "ar" ? "نشطة" : "Active"}
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="listed">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                      {language === "ar" ? "مدرجة" : "Listed"}
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="inactive">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      {language === "ar" ? "خاملة" : "Inactive"}
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="maintenance">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      {language === "ar" ? "صيانة" : "Maintenance"}
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="border rounded-lg p-4 space-y-4">
+          <h4 className="font-medium flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            {language === "ar" ? "التسعير" : "Pricing"}
+          </h4>
+          
+          <div className="grid grid-cols-3 gap-4">
+            <FormField
+              control={form.control}
+              name="minStake"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{language === "ar" ? "الحد الأدنى (USD)" : "Min Stake (USD)"}</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="number" step="0.01" data-testid="input-min-stake" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="maxStake"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{language === "ar" ? "الحد الأقصى (USD)" : "Max Stake (USD)"}</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="number" step="0.01" data-testid="input-max-stake" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="houseFee"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{language === "ar" ? "عمولة المنصة" : "House Fee"}</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="number" step="0.01" placeholder="0.05" data-testid="input-house-fee" />
+                  </FormControl>
+                  <FormDescription>5% = 0.05</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <FormField
+            control={form.control}
+            name="priceVex"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <Coins className="h-4 w-4 text-primary" />
+                  {language === "ar" ? "السعر بـ VEX" : "Price in VEX"}
+                </FormLabel>
+                <FormControl>
+                  <Input {...field} type="number" step="0.01" placeholder="0" data-testid="input-price-vex" />
+                </FormControl>
+                <FormDescription>
+                  {language === "ar" ? "السعر بعملة التطبيق (VEX Coins)" : "Price in app currency (VEX Coins)"}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="border rounded-lg p-4 space-y-4">
+          <h4 className="font-medium flex items-center gap-2">
+            <Gift className="h-4 w-4" />
+            {language === "ar" ? "اللعب المجاني" : "Free Play"}
+          </h4>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="freePlayLimit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{language === "ar" ? "عدد المرات المجانية" : "Free Play Limit"}</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="number" min="0" data-testid="input-free-play-limit" />
+                  </FormControl>
+                  <FormDescription>
+                    {language === "ar" ? "0 يعني بدون لعب مجاني" : "0 means no free plays"}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="freePlayPeriod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{language === "ar" ? "فترة التجديد" : "Reset Period"}</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-free-play-period">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="daily">{language === "ar" ? "يومياً" : "Daily"}</SelectItem>
+                      <SelectItem value="weekly">{language === "ar" ? "أسبوعياً" : "Weekly"}</SelectItem>
+                      <SelectItem value="monthly">{language === "ar" ? "شهرياً" : "Monthly"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+
+        <div className="border rounded-lg p-4 space-y-4">
+          <h4 className="font-medium flex items-center gap-2">
+            <Eye className="h-4 w-4" />
+            {language === "ar" ? "أماكن العرض" : "Display Locations"}
+          </h4>
+          
+          <FormField
+            control={form.control}
+            name="displayLocations"
+            render={({ field }) => (
+              <FormItem>
+                <div className="grid grid-cols-2 gap-3">
+                  {DISPLAY_LOCATIONS.map((location) => {
+                    const IconComp = location.icon;
+                    return (
+                      <div
+                        key={location.key}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
+                          field.value.includes(location.key)
+                            ? "border-primary bg-primary/10"
+                            : "border-muted"
+                        }`}
+                        onClick={() => {
+                          const newValue = field.value.includes(location.key)
+                            ? field.value.filter((v) => v !== location.key)
+                            : [...field.value, location.key];
+                          field.onChange(newValue);
+                        }}
+                        data-testid={`checkbox-location-${location.key}`}
+                      >
+                        <Checkbox
+                          checked={field.value.includes(location.key)}
+                          onCheckedChange={(checked) => {
+                            const newValue = checked
+                              ? [...field.value, location.key]
+                              : field.value.filter((v) => v !== location.key);
+                            field.onChange(newValue);
+                          }}
+                        />
+                        <IconComp className="h-4 w-4" />
+                        <span className="text-sm">
+                          {language === "ar" ? location.labelAr : location.labelEn}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="minPlayers"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{language === "ar" ? "الحد الأدنى للاعبين" : "Min Players"}</FormLabel>
+                <FormControl>
+                  <Input {...field} type="number" min="1" data-testid="input-min-players" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="maxPlayers"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{language === "ar" ? "الحد الأقصى للاعبين" : "Max Players"}</FormLabel>
+                <FormControl>
+                  <Input {...field} type="number" min="1" data-testid="input-max-players" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="flex items-center gap-6">
+          <FormField
+            control={form.control}
+            name="isActive"
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-2">
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    data-testid="switch-is-active"
+                  />
+                </FormControl>
+                <FormLabel className="!mt-0">{language === "ar" ? "مفعّلة" : "Active"}</FormLabel>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="isFeatured"
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-2">
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    data-testid="switch-is-featured"
+                  />
+                </FormControl>
+                <FormLabel className="!mt-0">{language === "ar" ? "مميزة" : "Featured"}</FormLabel>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4 border-t sticky bottom-0 bg-background">
+          <Button type="button" variant="outline" onClick={onCancel} data-testid="button-cancel">
+            {language === "ar" ? "إلغاء" : "Cancel"}
+          </Button>
+          <Button type="submit" disabled={isPending} data-testid="button-submit">
+            {isPending 
+              ? (language === "ar" ? "جاري الحفظ..." : "Saving...") 
+              : isEditing 
+                ? (language === "ar" ? "تحديث" : "Update") 
+                : (language === "ar" ? "إنشاء" : "Create")
+            }
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+}
+
+export default function AdminUnifiedGames() {
+  const { toast } = useToast();
+  const { language } = useI18n();
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingGame, setEditingGame] = useState<MultiplayerGame | null>(null);
+  const [deleteGameId, setDeleteGameId] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const { data: games = [], isLoading } = useQuery<MultiplayerGame[]>({
+    queryKey: ["/api/admin/multiplayer-games"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/admin/multiplayer-games/${id}`),
+    onSuccess: () => {
+      toast({ 
+        title: language === "ar" ? "تم حذف اللعبة بنجاح" : "Game deleted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
+      setDeleteGameId(null);
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: language === "ar" ? "فشل حذف اللعبة" : "Failed to delete game", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiRequest("PATCH", `/api/admin/multiplayer-games/${id}`, { status }),
+    onSuccess: () => {
+      toast({ 
+        title: language === "ar" ? "تم تحديث الحالة" : "Status updated",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: language === "ar" ? "فشل تحديث الحالة" : "Failed to update status", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    let isMounted = true;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    
+    const connectWs = () => {
+      if (!isMounted) return;
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      
+      ws.onopen = () => {
+        reconnectAttempts = 0;
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "game_config_changed") {
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
+          }
+        } catch {}
+      };
+      
+      ws.onclose = () => {
+        wsRef.current = null;
+        if (isMounted) {
+          reconnectAttempts++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+          reconnectTimeout = setTimeout(connectWs, delay);
+        }
+      };
+    };
+    
+    connectWs();
+    
+    return () => {
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, []);
+
+  const filteredGames = games.filter((game) => {
+    const matchesCategory = activeCategory === "all" || game.category === activeCategory;
+    const matchesStatus = statusFilter === "all" || game.status === statusFilter;
+    const matchesSearch = searchQuery === "" || 
+      game.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      game.nameAr.includes(searchQuery) ||
+      game.key.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesStatus && matchesSearch;
+  });
+
+  const getCategoryCounts = () => {
+    const counts: Record<string, number> = { all: games.length };
+    GAME_CATEGORIES.forEach((cat) => {
+      if (cat.key !== "all") {
+        counts[cat.key] = games.filter((g) => g.category === cat.key).length;
+      }
+    });
+    return counts;
+  };
+
+  const getStatusCounts = () => {
+    return {
+      all: games.length,
+      active: games.filter((g) => g.status === "active").length,
+      listed: games.filter((g) => g.status === "listed").length,
+      inactive: games.filter((g) => g.status === "inactive").length,
+    };
+  };
+
+  const categoryCounts = getCategoryCounts();
+  const statusCounts = getStatusCounts();
+
+  const handleEdit = (game: MultiplayerGame) => {
+    setEditingGame(game);
+    setIsFormOpen(true);
+  };
+
+  const handleFormSuccess = () => {
+    setIsFormOpen(false);
+    setEditingGame(null);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-12 w-full" />
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Settings2 className="h-6 w-6" />
+            {language === "ar" ? "إدارة الألعاب" : "Games Management"}
+          </h1>
+          <p className="text-muted-foreground">
+            {language === "ar" 
+              ? `إجمالي ${games.length} لعبة - ${statusCounts.active} نشطة، ${statusCounts.listed} مدرجة، ${statusCounts.inactive} خاملة`
+              : `Total ${games.length} games - ${statusCounts.active} active, ${statusCounts.listed} listed, ${statusCounts.inactive} inactive`
+            }
+          </p>
+        </div>
+        <Button onClick={() => { setEditingGame(null); setIsFormOpen(true); }} data-testid="button-add-game">
+          <Plus className="h-4 w-4 mr-2" />
+          {language === "ar" ? "إضافة لعبة" : "Add Game"}
+        </Button>
+      </div>
+
+      <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap h-auto p-1 bg-muted/50">
+          {GAME_CATEGORIES.map((cat) => {
+            const IconComp = cat.icon;
+            return (
+              <TabsTrigger 
+                key={cat.key} 
+                value={cat.key}
+                className="flex items-center gap-2 whitespace-nowrap"
+                data-testid={`tab-category-${cat.key}`}
+              >
+                <IconComp className="h-4 w-4" />
+                {language === "ar" ? cat.labelAr : cat.labelEn}
+                <Badge variant="secondary" className="ml-1 text-xs">
+                  {categoryCounts[cat.key] || 0}
+                </Badge>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={language === "ar" ? "بحث عن لعبة..." : "Search games..."}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            data-testid="input-search"
+          />
+        </div>
+
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-48" data-testid="select-status-filter">
+            <Filter className="h-4 w-4 mr-2" />
+            <SelectValue placeholder={language === "ar" ? "فلترة بالحالة" : "Filter by status"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">
+              {language === "ar" ? "جميع الحالات" : "All Statuses"} ({statusCounts.all})
+            </SelectItem>
+            <SelectItem value="active">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                {language === "ar" ? "نشطة" : "Active"} ({statusCounts.active})
+              </span>
+            </SelectItem>
+            <SelectItem value="listed">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                {language === "ar" ? "مدرجة" : "Listed"} ({statusCounts.listed})
+              </span>
+            </SelectItem>
+            <SelectItem value="inactive">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                {language === "ar" ? "خاملة" : "Inactive"} ({statusCounts.inactive})
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filteredGames.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Gamepad2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              {language === "ar" 
+                ? "لا توجد ألعاب في هذه الفئة"
+                : "No games found in this category"
+              }
+            </p>
+            <Button className="mt-4" onClick={() => { setEditingGame(null); setIsFormOpen(true); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              {language === "ar" ? "إضافة لعبة جديدة" : "Add New Game"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="w-[250px]">{language === "ar" ? "اللعبة" : "Game"}</TableHead>
+                <TableHead>{language === "ar" ? "الفئة" : "Category"}</TableHead>
+                <TableHead>{language === "ar" ? "الحالة" : "Status"}</TableHead>
+                <TableHead>{language === "ar" ? "السعر (USD)" : "Price (USD)"}</TableHead>
+                <TableHead>{language === "ar" ? "السعر (VEX)" : "Price (VEX)"}</TableHead>
+                <TableHead>{language === "ar" ? "اللعب المجاني" : "Free Plays"}</TableHead>
+                <TableHead>{language === "ar" ? "أماكن العرض" : "Display"}</TableHead>
+                <TableHead className="text-right">{language === "ar" ? "الإجراءات" : "Actions"}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredGames.map((game) => {
+                const IconComp = getIconComponent(game.iconName);
+                const categoryInfo = GAME_CATEGORIES.find((c) => c.key === game.category);
+                return (
+                  <TableRow key={game.id} data-testid={`row-game-${game.id}`}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${game.colorClass}`}>
+                          <IconComp className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{language === "ar" ? game.nameAr : game.nameEn}</p>
+                          <p className="text-xs text-muted-foreground">{game.key}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {language === "ar" ? categoryInfo?.labelAr : categoryInfo?.labelEn}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Select 
+                        value={game.status} 
+                        onValueChange={(value) => toggleStatusMutation.mutate({ id: game.id, status: value })}
+                      >
+                        <SelectTrigger className={`w-32 ${STATUS_COLORS[game.status]}`} data-testid={`select-status-${game.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500" />
+                              {language === "ar" ? "نشطة" : "Active"}
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="listed">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                              {language === "ar" ? "مدرجة" : "Listed"}
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="inactive">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-red-500" />
+                              {language === "ar" ? "خاملة" : "Inactive"}
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-sm">
+                        <DollarSign className="h-3 w-3" />
+                        {game.minStake} - {game.maxStake}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-sm text-primary font-medium">
+                        <Coins className="h-3 w-3" />
+                        {game.priceVex || "0"}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {game.freePlayLimit > 0 ? (
+                        <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                          <Gift className="h-3 w-3" />
+                          {game.freePlayLimit}/{game.freePlayPeriod === "daily" ? (language === "ar" ? "يوم" : "day") : game.freePlayPeriod === "weekly" ? (language === "ar" ? "أسبوع" : "week") : (language === "ar" ? "شهر" : "month")}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {(game.displayLocations || []).map((loc) => {
+                          const locInfo = DISPLAY_LOCATIONS.find((l) => l.key === loc);
+                          if (!locInfo) return null;
+                          const LocIcon = locInfo.icon;
+                          return (
+                            <Badge key={loc} variant="outline" className="text-xs">
+                              <LocIcon className="h-3 w-3 mr-1" />
+                              {language === "ar" ? locInfo.labelAr : locInfo.labelEn}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleEdit(game)}
+                          data-testid={`button-edit-${game.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteGameId(game.id)}
+                          data-testid={`button-delete-${game.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editingGame 
+                ? (language === "ar" ? "تعديل اللعبة" : "Edit Game")
+                : (language === "ar" ? "إضافة لعبة جديدة" : "Add New Game")
+              }
+            </DialogTitle>
+            <DialogDescription>
+              {language === "ar" 
+                ? "قم بتعبئة تفاصيل اللعبة أدناه"
+                : "Fill in the game details below"
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <GameForm
+            game={editingGame}
+            onSuccess={handleFormSuccess}
+            onCancel={() => setIsFormOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteGameId} onOpenChange={() => setDeleteGameId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {language === "ar" ? "هل أنت متأكد؟" : "Are you sure?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {language === "ar" 
+                ? "سيتم حذف هذه اللعبة نهائياً. لا يمكن التراجع عن هذا الإجراء."
+                : "This game will be permanently deleted. This action cannot be undone."
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">
+              {language === "ar" ? "إلغاء" : "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteGameId && deleteMutation.mutate(deleteGameId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {language === "ar" ? "حذف" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

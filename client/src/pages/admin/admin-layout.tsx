@@ -66,7 +66,6 @@ function AdminSidebar() {
     { title: "Dashboard", url: "/admin/dashboard", icon: LayoutDashboard },
     { title: "Users", url: "/admin/users", icon: Users },
     { title: "Games", url: "/admin/games", icon: Gamepad2 },
-    { title: "Multiplayer Games", url: "/admin/multiplayer-games", icon: Users },
     { title: "P2P Management", url: "/admin/p2p", icon: ArrowLeftRight },
     { title: "ID Verification", url: "/admin/id-verification", icon: IdCard },
     { title: "Support Contacts", url: "/admin/support", icon: Headset },
