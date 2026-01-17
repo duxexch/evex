@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,6 +76,100 @@ export default function AdminP2PPage() {
   // Dispute filters
   const [disputeStatus, setDisputeStatus] = useState<string>("all");
   const [disputeSortBy, setDisputeSortBy] = useState<string>("criticality");
+  const [liveUpdateHighlight, setLiveUpdateHighlight] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Handle new dispute alerts from authenticated admin WebSocket
+  const handleDisputeAlert = useCallback((alert: any) => {
+    if (alert.entityType === 'p2p_dispute') {
+      queryClient.invalidateQueries({ 
+        predicate: (query) => 
+          Array.isArray(query.queryKey) && 
+          query.queryKey[0] === "/api/admin/p2p/disputes"
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/p2p/stats"] });
+      
+      toast({
+        title: alert.title || "Dispute Update",
+        description: alert.message || "A dispute requires attention",
+        variant: alert.severity === 'critical' ? 'destructive' : 'default',
+      });
+      
+      if (alert.entityId) {
+        setLiveUpdateHighlight(alert.entityId);
+        setTimeout(() => setLiveUpdateHighlight(null), 5000);
+      }
+    }
+  }, [toast]);
+
+  // Authenticated admin WebSocket for real-time dispute alerts
+  useEffect(() => {
+    const token = getAdminToken();
+    if (!token) return;
+    
+    let isMounted = true;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+    let authFailed = false;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    
+    const connectWs = () => {
+      if (!isMounted || authFailed) return;
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn("[P2P Admin WS] Max reconnection attempts reached, falling back to polling");
+        return;
+      }
+      
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      wsRef.current = ws;
+      
+      ws.onopen = () => {
+        reconnectAttempts = 0; // Reset on successful connection
+        // Authenticate as admin to receive admin alerts
+        ws.send(JSON.stringify({ type: "admin_auth", token }));
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "admin_auth_success") {
+            console.log("[P2P Admin WS] Authenticated successfully");
+          } else if (data.type === "admin_auth_error") {
+            console.error("[P2P Admin WS] Authentication failed:", data.error);
+            // Auth failed, mark as failed and close (won't reconnect)
+            authFailed = true;
+            ws.close();
+            return;
+          } else if (data.type === "admin_alert" && data.data) {
+            handleDisputeAlert(data.data);
+          }
+        } catch (e) {
+          // Ignore non-JSON messages
+        }
+      };
+      
+      ws.onerror = () => {
+        console.warn("[P2P Admin WS] Connection error");
+      };
+      
+      ws.onclose = () => {
+        if (isMounted) {
+          reconnectAttempts++;
+          const delay = Math.min(3000 * Math.pow(1.5, reconnectAttempts), 30000);
+          reconnectTimeout = setTimeout(connectWs, delay);
+        }
+      };
+    };
+    
+    connectWs();
+    
+    return () => {
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      wsRef.current?.close();
+    };
+  }, [handleDisputeAlert]);
 
   const { data: offers = [], isLoading: offersLoading } = useQuery({
     queryKey: ["/api/admin/p2p/offers"],
@@ -90,6 +184,7 @@ export default function AdminP2PPage() {
   const { data: disputes = [], isLoading: disputesLoading } = useQuery({
     queryKey: ["/api/admin/p2p/disputes", disputeStatus, disputeSortBy],
     queryFn: () => adminFetch(`/api/admin/p2p/disputes?status=${disputeStatus}&sortBy=${disputeSortBy}`),
+    refetchInterval: 15000, // Poll every 15 seconds for near-real-time updates
   });
 
   const { data: stats } = useQuery({
@@ -454,7 +549,10 @@ export default function AdminP2PPage() {
           ) : (
             <div className="space-y-3">
               {disputes?.map((dispute: any) => (
-                <Card key={dispute.id} className={dispute.status === "open" ? "border-destructive/50" : ""}>
+                <Card 
+                  key={dispute.id} 
+                  className={`${dispute.status === "open" ? "border-destructive/50" : ""} ${liveUpdateHighlight === dispute.id ? "ring-2 ring-primary animate-pulse" : ""}`}
+                >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-4 flex-wrap">
                       <div className="flex items-center gap-4">

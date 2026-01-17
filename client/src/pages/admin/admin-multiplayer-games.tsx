@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -570,6 +570,79 @@ export default function AdminMultiplayerGames() {
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState<MultiplayerGame | null>(null);
   const [gameToDelete, setGameToDelete] = useState<MultiplayerGame | null>(null);
+  const [liveUpdateHighlight, setLiveUpdateHighlight] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // WebSocket for real-time config updates
+  useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    let isMounted = true;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    
+    const connectWs = () => {
+      if (!isMounted) return;
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn("[Games Admin WS] Max reconnection attempts reached");
+        return;
+      }
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      
+      ws.onopen = () => {
+        reconnectAttempts = 0; // Reset on successful connection
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Handle nested event structure: { type: 'system_event', event: { type: '...', data: {} } }
+          if (data.type === "system_event" && data.event?.type === "game_config_changed") {
+            // Invalidate queries to refresh data
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/config-version/multiplayer_games_version"] });
+            
+            // Show toast notification
+            toast({
+              title: "Game Configuration Updated",
+              description: `${data.event.data?.gameKey || "A game"} was ${data.event.data?.action || "updated"} by another admin`,
+            });
+            
+            // Highlight the updated game row briefly
+            if (data.event.data?.gameId) {
+              setLiveUpdateHighlight(data.event.data.gameId);
+              setTimeout(() => setLiveUpdateHighlight(null), 3000);
+            }
+          }
+        } catch (e) {
+          // Ignore non-JSON messages
+        }
+      };
+      
+      ws.onerror = () => {
+        console.warn("[Games Admin WS] Connection error");
+      };
+      
+      ws.onclose = () => {
+        if (isMounted) {
+          reconnectAttempts++;
+          const delay = Math.min(3000 * Math.pow(1.5, reconnectAttempts), 30000);
+          reconnectTimeout = setTimeout(connectWs, delay);
+        }
+      };
+    };
+    
+    connectWs();
+    
+    return () => {
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      wsRef.current?.close();
+    };
+  }, [toast]);
 
   const { data: games = [], isLoading } = useQuery<MultiplayerGame[]>({
     queryKey: ["/api/admin/multiplayer-games"],
@@ -813,7 +886,11 @@ export default function AdminMultiplayerGames() {
                 </TableRow>
               ) : (
                 games.map((game) => (
-                  <TableRow key={game.id} data-testid={`row-game-${game.key}`}>
+                  <TableRow 
+                    key={game.id} 
+                    data-testid={`row-game-${game.key}`}
+                    className={liveUpdateHighlight === game.id ? "bg-primary/10 transition-colors duration-1000" : ""}
+                  >
                     <TableCell>
                       <div>
                         <div className="font-medium" data-testid={`text-game-name-${game.key}`}>{game.nameEn}</div>

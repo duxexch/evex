@@ -165,6 +165,35 @@ Tests real storage transaction paths with 12 tests covering:
 - Full game stake/payout flow
 - Large concurrent operation stress test (50+ parallel operations)
 
+### Admin Panel Real-time Features
+
+**Admin Alerts System (`server/lib/admin-alerts.ts`)**
+- Real-time WebSocket notifications for admins
+- Alert categories: disputes, game changes, trades
+- Priority levels with visual indicators
+- Deep-link navigation to relevant admin pages
+- JWT-based admin authentication for WebSocket connections
+
+**Multiplayer Games Management (`/admin/multiplayer-games`)**
+- CRUD operations for game configurations
+- Live sync indicators and config version display
+- Scheduled config changes with activation/deactivation
+- Real-time WebSocket updates when games are modified
+- Visual highlighting of recently updated games
+
+**P2P Dispute Management (`/admin/p2p`)**
+- Advanced filtering: status (open/investigating/resolved/closed), sorting (criticality/date)
+- Inline actions: Escalate, Resolve, Close with confirmation dialogs
+- Audit log viewer for each dispute
+- Real-time toast notifications for new disputes
+- Visual highlighting of newly updated disputes
+- Transaction logging using existing action types with metadata.eventType distinction
+
+**WebSocket Event Types**
+- `game_config_changed`: Broadcast when game settings are modified
+- `admin_alert`: Targeted alerts for new disputes, escalations, resolutions
+- Automatic cache invalidation and UI refresh on events
+
 ## Recovery Playbooks
 
 ### Circuit Breaker Recovery
