@@ -186,29 +186,45 @@ function GameForm({
   });
 
   // Watch sections and auto-adjust gameType based on section selection
-  const watchedSections = form.watch("sections");
-  
+  // Use subscription pattern to avoid infinite loops
   useEffect(() => {
-    const hasChallenges = watchedSections?.includes("challenges");
-    const hasMultiplayer = watchedSections?.includes("multiplayer");
-    
-    if (hasChallenges || hasMultiplayer) {
-      // Force multiplayer for challenges/multiplayer sections
-      form.setValue("gameType", "multiplayer");
-      // Set default player counts if they're at single player values
-      if (form.getValues("minPlayers") <= 1) {
-        form.setValue("minPlayers", 2);
+    const subscription = form.watch((value, { name }) => {
+      if (name === "sections" || name === undefined) {
+        const sections = value.sections as string[] | undefined;
+        const hasChallenges = sections?.includes("challenges");
+        const hasMultiplayer = sections?.includes("multiplayer");
+        
+        const currentGameType = form.getValues("gameType");
+        const currentMinPlayers = form.getValues("minPlayers");
+        const currentMaxPlayers = form.getValues("maxPlayers");
+        
+        if (hasChallenges || hasMultiplayer) {
+          // Force multiplayer for challenges/multiplayer sections
+          if (currentGameType !== "multiplayer") {
+            form.setValue("gameType", "multiplayer", { shouldDirty: false });
+          }
+          if (currentMinPlayers <= 1) {
+            form.setValue("minPlayers", 2, { shouldDirty: false });
+          }
+          if (currentMaxPlayers <= 1) {
+            form.setValue("maxPlayers", 4, { shouldDirty: false });
+          }
+        } else {
+          // Revert to single player if no multiplayer sections selected
+          if (currentGameType !== "single") {
+            form.setValue("gameType", "single", { shouldDirty: false });
+          }
+          if (currentMinPlayers !== 1) {
+            form.setValue("minPlayers", 1, { shouldDirty: false });
+          }
+          if (currentMaxPlayers !== 1) {
+            form.setValue("maxPlayers", 1, { shouldDirty: false });
+          }
+        }
       }
-      if (form.getValues("maxPlayers") <= 1) {
-        form.setValue("maxPlayers", 4);
-      }
-    } else {
-      // Revert to single player if no multiplayer sections selected
-      form.setValue("gameType", "single");
-      form.setValue("minPlayers", 1);
-      form.setValue("maxPlayers", 1);
-    }
-  }, [watchedSections, form]);
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   const onSubmit = (data: GameFormData) => {
     if (game) {
