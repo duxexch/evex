@@ -245,18 +245,25 @@ async function simulateGame(challengeId: string): Promise<void> {
         
         if (status.isOver) {
           let winnerId: string | null = null;
+          const isDraw = status.winner === "draw" || status.winner === null || status.winner === undefined;
           
-          if (status.winner) {
-            if (status.winner === "white" || status.winner === currentGame.players[0]) {
+          if (!isDraw && status.winner) {
+            const winner = String(status.winner);
+            if (winner === "white" || winner === "player1" || winner === "0") {
               winnerId = currentGame.players[0];
-            } else if (status.winner === "black" || status.winner === currentGame.players[1]) {
+            } else if (winner === "black" || winner === "player2" || winner === "1") {
               winnerId = currentGame.players[1];
+            } else if (currentGame.players.includes(winner)) {
+              winnerId = winner;
             } else {
-              winnerId = currentGame.players.find(p => p === status.winner) || null;
+              const playerIndex = currentGame.players.findIndex(p => p === winner);
+              if (playerIndex >= 0) {
+                winnerId = currentGame.players[playerIndex];
+              }
             }
           }
           
-          await endGame(challengeId, winnerId, status);
+          await endGame(challengeId, winnerId, status, isDraw);
           return;
         }
         
@@ -295,7 +302,7 @@ async function simulateGame(challengeId: string): Promise<void> {
   gameLoop().catch(err => console.error("[Bot Simulator] Game loop error:", err.message));
 }
 
-async function endGame(challengeId: string, winnerId: string | null, status: any): Promise<void> {
+async function endGame(challengeId: string, winnerId: string | null, status: any, isDraw: boolean = false): Promise<void> {
   try {
     const game = activeGames.get(challengeId);
     if (!game) return;
@@ -326,7 +333,7 @@ async function endGame(challengeId: string, winnerId: string | null, status: any
           })
           .where(eq(users.id, loserId));
       }
-    } else {
+    } else if (isDraw) {
       for (const playerId of game.players) {
         await db.update(users)
           .set({
