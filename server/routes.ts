@@ -7146,6 +7146,177 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // ==================== BOT SIMULATOR ADMIN ENDPOINTS ====================
+  
+  // Get all bot accounts
+  app.get("/api/admin/bots", adminTokenMiddleware, async (_req: AuthRequest, res: Response) => {
+    try {
+      const { getBotAccounts, loadBotAccounts } = await import("./bot-game-simulator");
+      let bots = getBotAccounts();
+      if (bots.length === 0) {
+        bots = await loadBotAccounts();
+      }
+      
+      // Get full bot details with stats
+      const botIds = bots.map(b => b.id);
+      const botDetails = await db.select().from(users).where(inArray(users.id, botIds));
+      
+      const botsWithStats = botDetails.map(bot => ({
+        id: bot.id,
+        nickname: bot.nickname,
+        username: bot.username,
+        email: bot.email,
+        profilePicture: bot.profilePicture,
+        isActive: bot.isActive,
+        gamesPlayed: bot.gamesPlayed,
+        gamesWon: bot.gamesWon,
+        gamesLost: bot.gamesLost,
+        winRate: bot.gamesPlayed > 0 ? Math.round((bot.gamesWon / bot.gamesPlayed) * 100) : 0,
+        isOnline: bot.isOnline,
+        lastActiveAt: bot.lastActiveAt,
+        createdAt: bot.createdAt,
+      }));
+      
+      res.json(botsWithStats);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Update bot profile
+  app.patch("/api/admin/bots/:id", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { updateBotProfile } = await import("./bot-game-simulator");
+      const { nickname, profilePicture } = req.body;
+      
+      const success = await updateBotProfile(req.params.id, { nickname, profilePicture });
+      if (success) {
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ error: "Failed to update bot profile" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Toggle bot active status
+  app.post("/api/admin/bots/:id/toggle", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { toggleBotActive } = await import("./bot-game-simulator");
+      const { isActive } = req.body;
+      
+      const success = await toggleBotActive(req.params.id, isActive);
+      if (success) {
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ error: "Failed to toggle bot status" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Get simulator status
+  app.get("/api/admin/bot-simulator", adminTokenMiddleware, async (_req: AuthRequest, res: Response) => {
+    try {
+      const { getBotSimulatorStatus } = await import("./bot-game-simulator");
+      const status = getBotSimulatorStatus();
+      res.json(status);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Start/Stop simulator
+  app.post("/api/admin/bot-simulator", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { action } = req.body;
+      const { startBotSimulator, stopBotSimulator, getBotSimulatorStatus } = await import("./bot-game-simulator");
+      
+      if (action === "start") {
+        await startBotSimulator();
+      } else if (action === "stop") {
+        stopBotSimulator();
+      } else {
+        return res.status(400).json({ error: "Invalid action. Use 'start' or 'stop'" });
+      }
+      
+      const status = getBotSimulatorStatus();
+      res.json({ success: true, status });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Update simulator config
+  app.patch("/api/admin/bot-simulator/config", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { updateSimulatorConfig } = await import("./bot-game-simulator");
+      const newConfig = updateSimulatorConfig(req.body);
+      res.json({ success: true, config: newConfig });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Get active games
+  app.get("/api/admin/bot-simulator/games", adminTokenMiddleware, async (_req: AuthRequest, res: Response) => {
+    try {
+      const { getActiveGames, getBotAccounts } = await import("./bot-game-simulator");
+      const games = getActiveGames();
+      const bots = getBotAccounts();
+      
+      const gamesWithDetails = games.map(game => {
+        const player1 = bots.find(b => b.id === game.players[0]);
+        const player2 = bots.find(b => b.id === game.players[1]);
+        return {
+          ...game,
+          player1Name: player1?.nickname || game.players[0]?.slice(0, 8),
+          player2Name: player2?.nickname || game.players[1]?.slice(0, 8),
+        };
+      });
+      
+      res.json(gamesWithDetails);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Create manual game
+  app.post("/api/admin/bot-simulator/games", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { createBotChallenge } = await import("./bot-game-simulator");
+      const { gameType, player1Id, player2Id, betAmount } = req.body;
+      
+      const challengeId = await createBotChallenge(gameType, player1Id, player2Id, betAmount);
+      if (challengeId) {
+        res.json({ success: true, challengeId });
+      } else {
+        res.status(400).json({ error: "Failed to create game" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // End game manually
+  app.post("/api/admin/bot-simulator/games/:id/end", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { endGameManually } = await import("./bot-game-simulator");
+      const { winnerId } = req.body;
+      
+      const success = await endGameManually(req.params.id, winnerId);
+      if (success) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "Game not found" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== SCHEDULED CONFIG CHANGES SCHEDULER ====================
   // Check every 30 seconds for pending scheduled changes
   const SCHEDULER_INTERVAL = 30 * 1000; // 30 seconds
