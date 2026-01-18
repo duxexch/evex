@@ -126,17 +126,17 @@ export default function ChallengeWatchPage() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const { data: challenge, isLoading } = useQuery<Challenge>({
-    queryKey: ["/api/challenges", challengeId],
+    queryKey: [`/api/challenges/${challengeId}`],
     enabled: !!challengeId,
   });
 
   const { data: oddsData, isLoading: isLoadingOdds } = useQuery<OddsData>({
-    queryKey: ["/api/challenges", challengeId, "odds"],
+    queryKey: [`/api/challenges/${challengeId}/odds`],
     enabled: !!challengeId,
   });
 
   const { data: supports, isLoading: isLoadingSupports } = useQuery<SupportEntry[]>({
-    queryKey: ["/api/challenges", challengeId, "supports"],
+    queryKey: [`/api/challenges/${challengeId}/supports`],
     enabled: !!challengeId,
   });
 
@@ -152,7 +152,7 @@ export default function ChallengeWatchPage() {
       });
       setSupportAmount("");
       setSelectedPlayer(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/challenges", challengeId, "supports"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/challenges/${challengeId}/supports`] });
     },
     onError: (err: any) => {
       toast({
@@ -220,7 +220,7 @@ export default function ChallengeWatchPage() {
         setGameSession(prev => prev ? { ...prev, spectatorCount: data.count } : null);
         break;
       case "support_added":
-        queryClient.invalidateQueries({ queryKey: ["/api/challenges", challengeId, "supports"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/challenges/${challengeId}/supports`] });
         break;
     }
   }, [language, toast, challengeId]);
