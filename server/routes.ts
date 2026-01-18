@@ -528,6 +528,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   
+  // Login by email
+  app.post("/api/auth/login-by-email", authRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { email, password } = req.body;
+      
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      if (user.status !== "active") {
+        return res.status(403).json({ error: "Account is not active" });
+      }
+      
+      await storage.updateUser(user.id, { lastLoginAt: new Date() });
+      
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      
+      await storage.createAuditLog({
+        userId: user.id,
+        action: "login",
+        entityType: "user",
+        entityId: user.id,
+        details: "Login by email",
+        ipAddress: req.ip,
+      });
+      
+      res.json({ user: { ...user, password: undefined }, token });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // Request password reset
   app.post("/api/auth/forgot-password", strictRateLimiter, async (req: Request, res: Response) => {
     try {

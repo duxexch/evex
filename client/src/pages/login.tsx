@@ -43,7 +43,7 @@ const PLATFORM_ICONS: Record<string, any> = {
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { login, loginByAccount, loginByPhone, oneClickRegister, confirmOneClickLogin, register } = useAuth();
+  const { login, loginByAccount, loginByPhone, loginByEmail, oneClickRegister, confirmOneClickLogin, register } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -176,7 +176,12 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await login(emailLoginForm.username, emailLoginForm.password);
+      // Use email login if identifier contains @, otherwise use username login
+      if (emailLoginForm.username.includes("@")) {
+        await loginByEmail(emailLoginForm.username, emailLoginForm.password);
+      } else {
+        await login(emailLoginForm.username, emailLoginForm.password);
+      }
       setLocation("/");
     } catch (error: any) {
       // Check if it's an email and account doesn't exist
@@ -216,14 +221,20 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       
-      // Store token and set user
-      localStorage.setItem("token", data.token);
+      // Store token with correct key and cache user data
+      localStorage.setItem("pwm_token", data.token);
+      localStorage.setItem("pwm_user_cache", JSON.stringify({
+        data: data.user,
+        etag: "",
+        cachedAt: Date.now()
+      }));
       setShowCreateAccountModal(false);
       setPendingRegistration(null);
       toast({ 
         title: "Account Created", 
         description: `Your account has been created. Please verify your ${pendingRegistration.type}.` 
       });
+      // Navigate and reload to pick up the new auth state
       setLocation("/");
       window.location.reload();
     } catch (error: any) {

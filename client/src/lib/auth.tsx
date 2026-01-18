@@ -17,6 +17,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   loginByAccount: (accountId: string, password: string) => Promise<void>;
   loginByPhone: (phone: string, password: string) => Promise<void>;
+  loginByEmail: (email: string, password: string) => Promise<void>;
   oneClickRegister: () => Promise<OneClickResult>;
   confirmOneClickLogin: (user: User, token: string) => void;
   register: (data: RegisterData) => Promise<void>;
@@ -188,6 +189,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearUserCache();
   };
 
+  const loginByEmail = async (email: string, password: string) => {
+    const res = await fetch("/api/auth/login-by-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Login failed");
+    }
+    
+    const data = await res.json();
+    setUser(data.user);
+    setToken(data.token);
+    localStorage.setItem("pwm_token", data.token);
+    clearUserCache();
+  };
+
   const oneClickRegister = async (): Promise<OneClickResult> => {
     const res = await fetch("/api/auth/one-click-register", {
       method: "POST",
@@ -264,6 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         loginByAccount,
         loginByPhone,
+        loginByEmail,
         oneClickRegister,
         confirmOneClickLogin,
         register,
