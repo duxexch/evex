@@ -4,6 +4,8 @@ import { registerAdminRoutes } from "./admin-routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupGameWebSocket } from "./game-websocket";
+import { seedBotAccounts } from "./bot-seeder";
+import { startBotSimulator } from "./bot-game-simulator";
 
 const app = express();
 const httpServer = createServer(app);
@@ -193,8 +195,20 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+      
+      // Initialize bot accounts and start game simulator
+      setTimeout(async () => {
+        try {
+          log("Seeding bot accounts...", "bot");
+          await seedBotAccounts();
+          log("Starting bot game simulator...", "bot");
+          await startBotSimulator();
+        } catch (error: any) {
+          log(`Bot system error: ${error.message}`, "bot");
+        }
+      }, 5000); // Wait 5 seconds for server to fully initialize
     },
   );
 })();

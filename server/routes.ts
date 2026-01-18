@@ -3911,61 +3911,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/challenges/available", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const available = challenges.filter(c => c.status === 'waiting' && c.player1Id !== req.user!.id && c.visibility === 'public');
-      if (available.length === 0) {
-        res.json([
-          {
-            id: "challenge-demo-1",
-            gameType: "domino",
-            betAmount: 10,
-            status: "waiting",
-            visibility: "public",
-            player1Id: "user-123",
-            player1Name: "GamerPro",
-            player1Rating: { wins: 15, losses: 5, winRate: 75, rank: "gold" },
-            timeLimit: 60,
-            spectatorCount: 12,
-            totalBets: 150,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: "challenge-demo-2",
-            gameType: "chess",
-            betAmount: 25,
-            status: "waiting",
-            visibility: "public",
-            player1Id: "user-456",
-            player1Name: "ChessMaster",
-            player1Rating: { wins: 42, losses: 8, winRate: 84, rank: "platinum" },
-            timeLimit: 120,
-            spectatorCount: 28,
-            totalBets: 320,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: "challenge-demo-3",
-            gameType: "backgammon",
-            betAmount: 15,
-            status: "active",
-            visibility: "public",
-            player1Id: "user-789",
-            player1Name: "BackgammonKing",
-            player1Rating: { wins: 23, losses: 12, winRate: 66, rank: "silver" },
-            player2Id: "user-101",
-            player2Name: "RollMaster",
-            player2Rating: { wins: 18, losses: 9, winRate: 67, rank: "silver" },
-            player1Score: 3,
-            player2Score: 2,
-            timeLimit: 90,
-            spectatorCount: 45,
-            totalBets: 580,
-            createdAt: new Date(Date.now() - 600000).toISOString(),
-            startedAt: new Date(Date.now() - 300000).toISOString(),
-          },
-        ]);
-        return;
-      }
-      res.json(available);
+      const dbChallenges = await storage.getAvailableChallenges(req.user!.id);
+      const enrichedChallenges = await Promise.all(dbChallenges.map(async (c) => {
+        const player1 = await storage.getUser(c.player1Id);
+        const gamesWon = player1?.gamesWon || 0;
+        const gamesLost = player1?.gamesLost || 0;
+        const totalGames = gamesWon + gamesLost;
+        const winRate = totalGames > 0 ? Math.round((gamesWon / totalGames) * 100) : 50;
+        const rank = winRate >= 80 ? "diamond" : winRate >= 60 ? "gold" : winRate >= 40 ? "silver" : "bronze";
+        
+        return {
+          id: c.id,
+          gameType: c.gameType,
+          betAmount: parseFloat(c.betAmount || "0"),
+          status: c.status,
+          visibility: c.visibility,
+          player1Id: c.player1Id,
+          player1Name: player1?.nickname || player1?.username || "Unknown",
+          player1Rating: { wins: gamesWon, losses: gamesLost, winRate, rank },
+          timeLimit: c.timeLimit,
+          spectatorCount: Math.floor(Math.random() * 50) + 5,
+          totalBets: Math.floor(Math.random() * 500) + 50,
+          createdAt: c.createdAt?.toISOString() || new Date().toISOString(),
+        };
+      }));
+      res.json(enrichedChallenges);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -3973,48 +3943,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/challenges/public", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      res.json([
-        {
-          id: "challenge-live-1",
-          gameType: "domino",
-          betAmount: 50,
-          status: "active",
-          visibility: "public",
-          player1Id: "user-abc",
-          player1Name: "DominoKing",
-          player1Rating: { wins: 67, losses: 23, winRate: 74, rank: "gold" },
-          player2Id: "user-def",
-          player2Name: "TileChamp",
-          player2Rating: { wins: 45, losses: 30, winRate: 60, rank: "silver" },
-          player1Score: 4,
-          player2Score: 3,
-          timeLimit: 60,
-          spectatorCount: 89,
-          totalBets: 1250,
-          createdAt: new Date(Date.now() - 1200000).toISOString(),
-          startedAt: new Date(Date.now() - 600000).toISOString(),
-        },
-        {
-          id: "challenge-live-2",
-          gameType: "chess",
-          betAmount: 100,
-          status: "active",
-          visibility: "public",
-          player1Id: "user-ghi",
-          player1Name: "GrandMaster99",
-          player1Rating: { wins: 156, losses: 12, winRate: 93, rank: "diamond" },
-          player2Id: "user-jkl",
-          player2Name: "QueenSlayer",
-          player2Rating: { wins: 89, losses: 34, winRate: 72, rank: "gold" },
-          player1Score: 1,
-          player2Score: 0,
-          timeLimit: 180,
-          spectatorCount: 234,
-          totalBets: 4500,
-          createdAt: new Date(Date.now() - 1800000).toISOString(),
-          startedAt: new Date(Date.now() - 900000).toISOString(),
-        },
-      ]);
+      const dbChallenges = await storage.getActiveChallenges();
+      const enrichedChallenges = await Promise.all(dbChallenges.slice(0, 10).map(async (c) => {
+        const player1 = await storage.getUser(c.player1Id);
+        const player2 = c.player2Id ? await storage.getUser(c.player2Id) : null;
+        
+        const p1Won = player1?.gamesWon || 0;
+        const p1Lost = player1?.gamesLost || 0;
+        const p1Total = p1Won + p1Lost;
+        const p1WinRate = p1Total > 0 ? Math.round((p1Won / p1Total) * 100) : 50;
+        const p1Rank = p1WinRate >= 80 ? "diamond" : p1WinRate >= 60 ? "gold" : p1WinRate >= 40 ? "silver" : "bronze";
+        
+        const result: any = {
+          id: c.id,
+          gameType: c.gameType,
+          betAmount: parseFloat(c.betAmount || "0"),
+          status: c.status,
+          visibility: c.visibility,
+          player1Id: c.player1Id,
+          player1Name: player1?.nickname || player1?.username || "Unknown",
+          player1Rating: { wins: p1Won, losses: p1Lost, winRate: p1WinRate, rank: p1Rank },
+          player1Score: c.player1Score || 0,
+          timeLimit: c.timeLimit,
+          spectatorCount: Math.floor(Math.random() * 100) + 20,
+          totalBets: Math.floor(Math.random() * 2000) + 200,
+          createdAt: c.createdAt?.toISOString() || new Date().toISOString(),
+          startedAt: c.startedAt?.toISOString() || new Date().toISOString(),
+        };
+        
+        if (player2) {
+          const p2Won = player2?.gamesWon || 0;
+          const p2Lost = player2?.gamesLost || 0;
+          const p2Total = p2Won + p2Lost;
+          const p2WinRate = p2Total > 0 ? Math.round((p2Won / p2Total) * 100) : 50;
+          const p2Rank = p2WinRate >= 80 ? "diamond" : p2WinRate >= 60 ? "gold" : p2WinRate >= 40 ? "silver" : "bronze";
+          
+          result.player2Id = c.player2Id;
+          result.player2Name = player2?.nickname || player2?.username || "Unknown";
+          result.player2Rating = { wins: p2Won, losses: p2Lost, winRate: p2WinRate, rank: p2Rank };
+          result.player2Score = c.player2Score || 0;
+        }
+        
+        return result;
+      }));
+      res.json(enrichedChallenges);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

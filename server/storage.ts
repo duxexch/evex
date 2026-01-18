@@ -8,7 +8,7 @@ import {
   liveGameSessions, gameMoves, gameSpectators, giftItems, spectatorGifts, gameChatMessages,
   achievements, userAchievements, seasons, seasonalStats, seasonRewards,
   p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics, p2pSettings,
-  multiplayerGames, systemConfig, adminAuditLogs,
+  multiplayerGames, systemConfig, adminAuditLogs, challenges,
   projectCurrencySettings, projectCurrencyWallets, projectCurrencyConversions, projectCurrencyLedger,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
@@ -266,6 +266,10 @@ export interface IStorage {
   earnProjectCurrencyAtomic(userId: string, amount: string, type: string, referenceId?: string, description?: string): Promise<{ success: boolean; error?: string }>;
   getUserDailyConversionTotal(userId: string): Promise<string>;
   getPlatformDailyConversionTotal(): Promise<string>;
+
+  // Challenges
+  getAvailableChallenges(excludeUserId?: string): Promise<any[]>;
+  getActiveChallenges(): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3222,6 +3226,35 @@ export class DatabaseStorage implements IStorage {
     `);
     
     return (result as any)?.total?.toString() || '0';
+  }
+
+  // ==================== CHALLENGES ====================
+
+  async getAvailableChallenges(excludeUserId?: string): Promise<any[]> {
+    const result = await db.select().from(challenges)
+      .where(
+        and(
+          eq(challenges.status, 'waiting'),
+          eq(challenges.visibility, 'public'),
+          excludeUserId ? ne(challenges.player1Id, excludeUserId) : sql`1=1`
+        )
+      )
+      .orderBy(desc(challenges.createdAt))
+      .limit(20);
+    return result;
+  }
+
+  async getActiveChallenges(): Promise<any[]> {
+    const result = await db.select().from(challenges)
+      .where(
+        and(
+          eq(challenges.status, 'active'),
+          eq(challenges.visibility, 'public')
+        )
+      )
+      .orderBy(desc(challenges.startedAt))
+      .limit(20);
+    return result;
   }
 }
 
