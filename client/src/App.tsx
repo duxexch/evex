@@ -56,6 +56,7 @@ import { prefetchPage } from "@/components/PrefetchLink";
 
 import NotFound from "@/pages/not-found";
 import AdminLayout from "@/pages/admin/admin-layout";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const LoginPage = lazy(() => import("@/pages/login"));
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
@@ -472,8 +473,9 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
 
 function AdminRouter() {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Switch>
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
+        <Switch>
         <Route path="/admin" component={AdminLoginPage} />
         <Route path="/admin/dashboard">
           <AdminLayout><AdminDashboardPage /></AdminLayout>
@@ -544,8 +546,9 @@ function AdminRouter() {
         <Route path="/admin/support-settings">
           <AdminLayout><AdminSupportSettingsPage /></AdminLayout>
         </Route>
-      </Switch>
-    </Suspense>
+        </Switch>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -614,40 +617,42 @@ function Router() {
 
   return (
     <AuthenticatedLayout>
-      <Suspense fallback={<PageLoader />}>
-        <Switch>
-          <Route path="/" component={DashboardPage} />
-          <Route path="/games" component={GamesPage} />
-          <Route path="/play" component={PlayPage} />
-          <Route path="/challenges" component={ChallengesPage} />
-          <Route path="/lobby" component={GameLobbyPage} />
-          <Route path="/profile" component={PlayerProfilePage} />
-          <Route path="/player/:userId" component={PlayerProfilePage} />
-          <Route path="/leaderboard" component={LeaderboardPage} />
-          <Route path="/seasons" component={SeasonalLeaderboardPage} />
-          <Route path="/challenge/:id/play" component={ChallengeGamePage} />
-          <Route path="/challenge/:id/watch" component={ChallengeWatchPage} />
-          <Route path="/game/chess/:sessionId" component={ChessGamePage} />
-          <Route path="/game/backgammon/:sessionId" component={BackgammonGamePage} />
-          <Route path="/game/domino/:sessionId" component={DominoGamePage} />
-          <Route path="/game/tarneeb/:sessionId" component={TarneebGamePage} />
-          <Route path="/game/baloot/:sessionId" component={BalootGamePage} />
-          <Route path="/p2p" component={P2PPage} />
-          <Route path="/p2p/profile/:userId?" component={P2PProfilePage} />
-          <Route path="/p2p/settings" component={P2PSettingsPage} />
-          <Route path="/free" component={FreePage} />
-          <Route path="/wallet" component={WalletPage} />
-          <Route path="/transactions" component={TransactionsPage} />
-          <Route path="/complaints" component={ComplaintsPage} />
-          <Route path="/friends" component={FriendsPage} />
-          <Route path="/multiplayer" component={MultiplayerPage} />
-          <Route path="/chat" component={ChatPage} />
-          <Route path="/support" component={SupportPage} />
-          <Route path="/settings" component={SettingsPage} />
-          <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
-          <Route component={NotFound} />
-        </Switch>
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Switch>
+            <Route path="/" component={DashboardPage} />
+            <Route path="/games" component={GamesPage} />
+            <Route path="/play" component={PlayPage} />
+            <Route path="/challenges" component={ChallengesPage} />
+            <Route path="/lobby" component={GameLobbyPage} />
+            <Route path="/profile" component={PlayerProfilePage} />
+            <Route path="/player/:userId" component={PlayerProfilePage} />
+            <Route path="/leaderboard" component={LeaderboardPage} />
+            <Route path="/seasons" component={SeasonalLeaderboardPage} />
+            <Route path="/challenge/:id/play" component={ChallengeGamePage} />
+            <Route path="/challenge/:id/watch" component={ChallengeWatchPage} />
+            <Route path="/game/chess/:sessionId" component={ChessGamePage} />
+            <Route path="/game/backgammon/:sessionId" component={BackgammonGamePage} />
+            <Route path="/game/domino/:sessionId" component={DominoGamePage} />
+            <Route path="/game/tarneeb/:sessionId" component={TarneebGamePage} />
+            <Route path="/game/baloot/:sessionId" component={BalootGamePage} />
+            <Route path="/p2p" component={P2PPage} />
+            <Route path="/p2p/profile/:userId?" component={P2PProfilePage} />
+            <Route path="/p2p/settings" component={P2PSettingsPage} />
+            <Route path="/free" component={FreePage} />
+            <Route path="/wallet" component={WalletPage} />
+            <Route path="/transactions" component={TransactionsPage} />
+            <Route path="/complaints" component={ComplaintsPage} />
+            <Route path="/friends" component={FriendsPage} />
+            <Route path="/multiplayer" component={MultiplayerPage} />
+            <Route path="/chat" component={ChatPage} />
+            <Route path="/support" component={SupportPage} />
+            <Route path="/settings" component={SettingsPage} />
+            <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </ErrorBoundary>
     </AuthenticatedLayout>
   );
 }

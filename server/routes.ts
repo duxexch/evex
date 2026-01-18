@@ -940,6 +940,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Get all active games for matchmaking (must be before :id route)
+  app.get("/api/games/available", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const availableGames = await db.select().from(games).where(eq(games.status, "active"));
+      res.json(availableGames);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all most played games (must be before :id route)  
+  app.get("/api/games/most-played", async (_req: Request, res: Response) => {
+    try {
+      const mostPlayed = await db.select().from(games)
+        .where(eq(games.status, "active"))
+        .orderBy(sql`${games.playCount} DESC`)
+        .limit(10);
+      res.json(mostPlayed);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
   
   app.get("/api/games/:id", async (req: Request, res: Response) => {
     try {
@@ -5901,16 +5924,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   }
 
-  // Get all games for matchmaking
-  app.get("/api/games/available", authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const availableGames = await db.select().from(games).where(eq(games.status, "active"));
-      res.json(availableGames);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // ==================== GAMEPLAY EMOJIS & IN-GAME CHAT ====================
 
   // Get all active gameplay emojis
@@ -6107,19 +6120,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(gameSections.isActive, true))
         .orderBy(gameSections.sortOrder);
       res.json(sections);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get most played games (public)
-  app.get("/api/games/most-played", async (_req: Request, res: Response) => {
-    try {
-      const mostPlayed = await db.select().from(games)
-        .where(eq(games.status, "active"))
-        .orderBy(desc(games.playCount))
-        .limit(10);
-      res.json(mostPlayed);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
