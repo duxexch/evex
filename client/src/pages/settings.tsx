@@ -302,7 +302,21 @@ function ProfileSection() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("auth.email")}</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>{t("auth.email")}</FormLabel>
+                    {user?.email && (
+                      user?.emailVerified ? (
+                        <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">
+                          <CheckCircle className="w-3 h-3 me-1" />
+                          {t("settings.verified") || "Verified"}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/30">
+                          {t("settings.unverified") || "Unverified"}
+                        </Badge>
+                      )
+                    )}
+                  </div>
                   <FormControl>
                     <Input {...field} type="email" placeholder="email@example.com" data-testid="input-email" />
                   </FormControl>
@@ -315,7 +329,21 @@ function ProfileSection() {
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("auth.phone")}</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>{t("auth.phone")}</FormLabel>
+                    {user?.phone && (
+                      user?.phoneVerified ? (
+                        <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">
+                          <CheckCircle className="w-3 h-3 me-1" />
+                          {t("settings.verified") || "Verified"}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/30">
+                          {t("settings.unverified") || "Unverified"}
+                        </Badge>
+                      )
+                    )}
+                  </div>
                   <FormControl>
                     <Input {...field} type="tel" placeholder="+1234567890" data-testid="input-phone" />
                   </FormControl>
@@ -329,6 +357,216 @@ function ProfileSection() {
             </Button>
           </form>
         </Form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function VerificationSection() {
+  const { user, token, updateUser, refreshUser } = useAuth();
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const headers = useAuthHeaders();
+  
+  const [verifyingType, setVerifyingType] = useState<"email" | "phone" | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
+  
+  const handleSendOtp = async (type: "email" | "phone") => {
+    const contactValue = type === "email" ? user?.email : user?.phone;
+    if (!contactValue) {
+      toast({ 
+        title: t("common.error") || "Error", 
+        description: `Please add your ${type} first in the profile section above.`, 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    setIsSending(true);
+    setVerifyingType(type);
+    try {
+      const res = await fetch("/api/auth/otp/send", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ contactType: type, contactValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setShowOtpInput(true);
+      if (data.devOtp) setDevOtp(data.devOtp);
+      toast({ 
+        title: t("common.success") || "Success", 
+        description: data.message 
+      });
+    } catch (error: any) {
+      toast({ 
+        title: t("common.error") || "Error", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+      setVerifyingType(null);
+    } finally {
+      setIsSending(false);
+    }
+  };
+  
+  const handleVerifyOtp = async () => {
+    if (!verifyingType || !otpCode) return;
+    
+    setIsVerifying(true);
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ contactType: verifyingType, code: otpCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      toast({ 
+        title: t("common.success") || "Success", 
+        description: data.message 
+      });
+      
+      // Refresh user data in auth context and query cache
+      await refreshUser();
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      
+      // Reset state
+      setShowOtpInput(false);
+      setVerifyingType(null);
+      setOtpCode("");
+      setDevOtp(null);
+    } catch (error: any) {
+      toast({ 
+        title: t("common.error") || "Error", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+  
+  const handleCancel = () => {
+    setShowOtpInput(false);
+    setVerifyingType(null);
+    setOtpCode("");
+    setDevOtp(null);
+  };
+  
+  const hasUnverifiedContacts = (user?.email && !user?.emailVerified) || (user?.phone && !user?.phoneVerified);
+  
+  if (!hasUnverifiedContacts) return null;
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="h-5 w-5" />
+          {t("settings.verification") || "Contact Verification"}
+        </CardTitle>
+        <CardDescription>
+          {t("settings.verificationDescription") || "Verify your email and phone number to secure your account."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {showOtpInput ? (
+          <div className="space-y-4">
+            <div className="p-4 bg-accent/10 rounded-md border border-accent/20">
+              <p className="text-sm">
+                Enter the verification code sent to your {verifyingType}.
+              </p>
+              {devOtp && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  (Dev mode) OTP: <span className="font-mono font-bold">{devOtp}</span>
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Verification Code</Label>
+              <Input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value)}
+                placeholder="Enter 6-digit code"
+                maxLength={6}
+                data-testid="input-otp-code"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isVerifying}
+                className="flex-1"
+                data-testid="button-cancel-verify"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleVerifyOtp}
+                disabled={isVerifying || otpCode.length !== 6}
+                className="flex-1"
+                data-testid="button-verify-otp"
+              >
+                {isVerifying && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
+                Verify
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {user?.email && !user?.emailVerified && (
+              <div className="flex items-center justify-between p-3 rounded-md border">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-muted rounded-full">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{user.email}</p>
+                    <p className="text-xs text-muted-foreground">Email not verified</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => handleSendOtp("email")}
+                  disabled={isSending}
+                  data-testid="button-verify-email"
+                >
+                  {isSending && verifyingType === "email" && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
+                  Verify
+                </Button>
+              </div>
+            )}
+            {user?.phone && !user?.phoneVerified && (
+              <div className="flex items-center justify-between p-3 rounded-md border">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-muted rounded-full">
+                    <Smartphone className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{user.phone}</p>
+                    <p className="text-xs text-muted-foreground">Phone not verified</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => handleSendOtp("phone")}
+                  disabled={isSending}
+                  data-testid="button-verify-phone"
+                >
+                  {isSending && verifyingType === "phone" && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
+                  Verify
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1104,7 +1342,10 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="profile">
-          <ProfileSection />
+          <div className="space-y-6">
+            <ProfileSection />
+            <VerificationSection />
+          </div>
         </TabsContent>
 
         <TabsContent value="preferences">

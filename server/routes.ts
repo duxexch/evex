@@ -15,7 +15,7 @@ import {
   insertCountryPaymentMethodSchema, insertSocialPlatformSchema,
   liveGameSessions, p2pSettings, p2pTrades,
   projectCurrencyWallets, projectCurrencyLedger,
-  themes, featureFlags
+  themes, featureFlags, otpVerifications
 } from "@shared/schema";
 
 // Helper function to calculate P2P platform fee based on settings
@@ -596,6 +596,259 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       
       res.json({ success: true, message: "Password has been reset successfully" });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== AUTO-REGISTRATION & OTP VERIFICATION ====================
+
+  // Check if identifier (email/phone/accountId) exists
+  app.post("/api/auth/check-identifier", authRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { identifier, type } = req.body;
+      
+      if (!identifier || !type) {
+        return res.status(400).json({ error: "Identifier and type are required" });
+      }
+      
+      let user = null;
+      if (type === "email") {
+        user = await storage.getUserByEmail(identifier);
+      } else if (type === "phone") {
+        user = await storage.getUserByPhone(identifier);
+      } else if (type === "account") {
+        user = await storage.getUserByAccountId(identifier);
+      } else {
+        return res.status(400).json({ error: "Invalid type" });
+      }
+      
+      res.json({ exists: !!user, type });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create account from login attempt (auto-registration)
+  app.post("/api/auth/create-from-identifier", registrationRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { identifier, type, password } = req.body;
+      
+      if (!identifier || !type || !password) {
+        return res.status(400).json({ error: "Identifier, type, and password are required" });
+      }
+      
+      if (password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+      
+      // Check if already exists
+      let existingUser = null;
+      if (type === "email") {
+        existingUser = await storage.getUserByEmail(identifier);
+      } else if (type === "phone") {
+        existingUser = await storage.getUserByPhone(identifier);
+      }
+      
+      if (existingUser) {
+        return res.status(400).json({ error: "Account already exists" });
+      }
+      
+      // Generate unique username and account ID
+      const accountId = Math.floor(100000000 + Math.random() * 900000000).toString();
+      const username = type === "email" 
+        ? identifier.split("@")[0] + "_" + Math.random().toString(36).substring(2, 6)
+        : "user_" + Math.random().toString(36).substring(2, 10);
+      
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      const userData: any = {
+        username,
+        password: hashedPassword,
+        accountId,
+        role: "player",
+        status: "active",
+        emailVerified: false,
+        phoneVerified: false,
+      };
+      
+      if (type === "email") {
+        userData.email = identifier;
+      } else if (type === "phone") {
+        userData.phone = identifier;
+      }
+      
+      const user = await storage.createUser(userData);
+      
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      
+      await storage.createAuditLog({
+        userId: user.id,
+        action: "login",
+        entityType: "user",
+        entityId: user.id,
+        details: "Auto-registered from login attempt",
+        ipAddress: req.ip,
+      });
+      
+      res.json({ 
+        user: { ...user, password: undefined }, 
+        token,
+        message: "Account created successfully. Please verify your " + type + "."
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Send OTP for verification
+  app.post("/api/auth/otp/send", authMiddleware, strictRateLimiter, async (req: AuthRequest, res: Response) => {
+    try {
+      const { contactType, contactValue } = req.body;
+      const userId = req.user!.id;
+      
+      if (!contactType || !contactValue) {
+        return res.status(400).json({ error: "Contact type and value are required" });
+      }
+      
+      if (!["email", "phone"].includes(contactType)) {
+        return res.status(400).json({ error: "Invalid contact type" });
+      }
+      
+      // Generate 6-digit OTP
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const codeHash = await bcrypt.hash(otpCode, 10);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      // Delete any existing OTP for this user and contact type
+      await db.delete(otpVerifications)
+        .where(and(
+          eq(otpVerifications.userId, userId),
+          eq(otpVerifications.contactType, contactType)
+        ));
+      
+      // Create new OTP
+      await db.insert(otpVerifications).values({
+        userId,
+        contactType,
+        contactValue,
+        codeHash,
+        expiresAt,
+        attempts: 0,
+        maxAttempts: 5,
+      });
+      
+      // In production, send OTP via email/SMS service
+      // For now, log it (in dev mode)
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[OTP] Code for ${contactType} ${contactValue}: ${otpCode}`);
+      }
+      
+      // Mask the contact value for response
+      let maskedValue = contactValue;
+      if (contactType === "email") {
+        const [name, domain] = contactValue.split("@");
+        maskedValue = name.substring(0, 2) + "***@" + domain;
+      } else if (contactType === "phone") {
+        maskedValue = contactValue.substring(0, 3) + "****" + contactValue.substring(contactValue.length - 3);
+      }
+      
+      res.json({ 
+        success: true, 
+        message: `OTP sent to ${maskedValue}`,
+        expiresIn: 600, // 10 minutes in seconds
+        // Only in development for testing
+        ...(process.env.NODE_ENV !== "production" && { devOtp: otpCode })
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Verify OTP
+  app.post("/api/auth/otp/verify", authMiddleware, strictRateLimiter, async (req: AuthRequest, res: Response) => {
+    try {
+      const { contactType, code } = req.body;
+      const userId = req.user!.id;
+      
+      if (!contactType || !code) {
+        return res.status(400).json({ error: "Contact type and code are required" });
+      }
+      
+      // Get latest OTP for this user and contact type
+      const [otpRecord] = await db.select()
+        .from(otpVerifications)
+        .where(and(
+          eq(otpVerifications.userId, userId),
+          eq(otpVerifications.contactType, contactType)
+        ))
+        .orderBy(desc(otpVerifications.createdAt))
+        .limit(1);
+      
+      if (!otpRecord) {
+        return res.status(400).json({ error: "No OTP request found. Please request a new one." });
+      }
+      
+      // Check if expired
+      if (new Date() > otpRecord.expiresAt) {
+        return res.status(400).json({ error: "OTP has expired. Please request a new one." });
+      }
+      
+      // Check if already consumed
+      if (otpRecord.consumedAt) {
+        return res.status(400).json({ error: "OTP has already been used." });
+      }
+      
+      // Check max attempts
+      if (otpRecord.attempts >= otpRecord.maxAttempts) {
+        return res.status(400).json({ error: "Too many failed attempts. Please request a new OTP." });
+      }
+      
+      // Verify OTP
+      const isValid = await bcrypt.compare(code, otpRecord.codeHash);
+      
+      if (!isValid) {
+        // Increment attempts
+        await db.update(otpVerifications)
+          .set({ attempts: otpRecord.attempts + 1 })
+          .where(eq(otpVerifications.id, otpRecord.id));
+        
+        return res.status(400).json({ 
+          error: "Invalid OTP code.",
+          attemptsRemaining: otpRecord.maxAttempts - otpRecord.attempts - 1
+        });
+      }
+      
+      // Mark OTP as consumed
+      await db.update(otpVerifications)
+        .set({ consumedAt: new Date() })
+        .where(eq(otpVerifications.id, otpRecord.id));
+      
+      // Update user verification status
+      if (contactType === "email") {
+        await storage.updateUser(userId, { 
+          emailVerified: true,
+          email: otpRecord.contactValue 
+        });
+      } else if (contactType === "phone") {
+        await storage.updateUser(userId, { 
+          phoneVerified: true,
+          phone: otpRecord.contactValue 
+        });
+      }
+      
+      await storage.createAuditLog({
+        userId,
+        action: "settings_change",
+        entityType: "user",
+        entityId: userId,
+        details: `${contactType} verified: ${otpRecord.contactValue}`,
+      });
+      
+      res.json({ 
+        success: true, 
+        message: contactType === "email" ? "Email verified successfully" : "Phone verified successfully"
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -37,6 +37,7 @@ export const users = pgTable("users", {
   lastName: text("last_name"),
   phone: text("phone").unique(),
   phoneVerified: boolean("phone_verified").default(false),
+  emailVerified: boolean("email_verified").default(false),
   balance: decimal("balance", { precision: 15, scale: 2 }).notNull().default("0.00"),
   totalDeposited: decimal("total_deposited", { precision: 15, scale: 2 }).notNull().default("0.00"),
   totalWithdrawn: decimal("total_withdrawn", { precision: 15, scale: 2 }).notNull().default("0.00"),
@@ -108,6 +109,37 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   complaints: many(complaints),
   auditLogs: many(auditLogs),
 }));
+
+// ==================== OTP VERIFICATIONS ====================
+
+export const otpContactTypeEnum = pgEnum("otp_contact_type", ["email", "phone"]);
+
+export const otpVerifications = pgTable("otp_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactType: otpContactTypeEnum("contact_type").notNull(),
+  contactValue: text("contact_value").notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_otp_user_id").on(table.userId),
+  index("idx_otp_expires_at").on(table.expiresAt),
+]);
+
+export const otpVerificationsRelations = relations(otpVerifications, ({ one }) => ({
+  user: one(users, { fields: [otpVerifications.userId], references: [users.id] }),
+}));
+
+export const insertOtpVerificationSchema = createInsertSchema(otpVerifications).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOtpVerification = z.infer<typeof insertOtpVerificationSchema>;
+export type OtpVerification = typeof otpVerifications.$inferSelect;
 
 // ==================== AGENTS ====================
 

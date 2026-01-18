@@ -79,6 +79,10 @@ export default function LoginPage() {
   const [phoneLoginForm, setPhoneLoginForm] = useState({ phone: "", password: "" });
   const [emailLoginForm, setEmailLoginForm] = useState({ username: "", password: "" });
   const [forgotPasswordForm, setForgotPasswordForm] = useState({ identifier: "", newPassword: "", confirmPassword: "" });
+  
+  // Auto-registration state
+  const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
+  const [pendingRegistration, setPendingRegistration] = useState<{ identifier: string; type: "email" | "phone"; password: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/settings")
@@ -127,6 +131,25 @@ export default function LoginPage() {
       await loginByPhone(phoneLoginForm.phone, phoneLoginForm.password);
       setLocation("/");
     } catch (error: any) {
+      // Check if account doesn't exist and offer to create one
+      if (error.message === "Invalid credentials" && phoneLoginForm.phone) {
+        const checkRes = await fetch("/api/auth/check-identifier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: phoneLoginForm.phone, type: "phone" }),
+        });
+        const checkData = await checkRes.json();
+        if (checkRes.ok && !checkData.exists) {
+          setPendingRegistration({ 
+            identifier: phoneLoginForm.phone, 
+            type: "phone", 
+            password: phoneLoginForm.password 
+          });
+          setShowCreateAccountModal(true);
+          setIsLoading(false);
+          return;
+        }
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -139,6 +162,54 @@ export default function LoginPage() {
     try {
       await login(emailLoginForm.username, emailLoginForm.password);
       setLocation("/");
+    } catch (error: any) {
+      // Check if it's an email and account doesn't exist
+      if (error.message === "Invalid credentials" && emailLoginForm.username.includes("@")) {
+        const checkRes = await fetch("/api/auth/check-identifier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: emailLoginForm.username, type: "email" }),
+        });
+        const checkData = await checkRes.json();
+        if (checkRes.ok && !checkData.exists) {
+          setPendingRegistration({ 
+            identifier: emailLoginForm.username, 
+            type: "email", 
+            password: emailLoginForm.password 
+          });
+          setShowCreateAccountModal(true);
+          setIsLoading(false);
+          return;
+        }
+      }
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleCreateAccount = async () => {
+    if (!pendingRegistration) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/auth/create-from-identifier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pendingRegistration),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      // Store token and set user
+      localStorage.setItem("token", data.token);
+      setShowCreateAccountModal(false);
+      setPendingRegistration(null);
+      toast({ 
+        title: "Account Created", 
+        description: `Your account has been created. Please verify your ${pendingRegistration.type}.` 
+      });
+      setLocation("/");
+      window.location.reload();
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -718,6 +789,54 @@ export default function LoginPage() {
               </Button>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCreateAccountModal} onOpenChange={setShowCreateAccountModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {pendingRegistration?.type === "email" ? <Mail className="w-5 h-5 text-primary" /> : <Smartphone className="w-5 h-5 text-primary" />}
+              Account Not Found
+            </DialogTitle>
+            <DialogDescription>
+              No account exists with this {pendingRegistration?.type}. Would you like to create one?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-accent/10 rounded-md border border-accent/20">
+              <p className="text-sm">
+                <span className="font-semibold">{pendingRegistration?.type === "email" ? "Email" : "Phone"}:</span>{" "}
+                {pendingRegistration?.identifier}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Click "Create Account" to register with your {pendingRegistration?.type} and password. You can verify your {pendingRegistration?.type} later in your profile.
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowCreateAccountModal(false);
+                  setPendingRegistration(null);
+                }}
+                className="flex-1"
+                disabled={isLoading}
+                data-testid="button-cancel-create"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleCreateAccount}
+                className="flex-1"
+                disabled={isLoading}
+                data-testid="button-confirm-create"
+              >
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Account
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
