@@ -7,16 +7,33 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function getAuthHeaders(url: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  
+  // For admin endpoints, use adminToken
+  if (url.includes("/api/admin/")) {
+    const adminToken = localStorage.getItem("adminToken");
+    if (adminToken) {
+      headers["x-admin-token"] = adminToken;
+    }
+  } else {
+    // For regular endpoints, use user token
+    const token = localStorage.getItem("pwm_token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+  
+  return headers;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const token = localStorage.getItem("pwm_token");
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
+  const headers = getAuthHeaders(url);
+  
   if (data) {
     headers["Content-Type"] = "application/json";
   }
@@ -38,13 +55,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const token = localStorage.getItem("pwm_token");
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+    const url = queryKey[0] as string;
+    const headers = getAuthHeaders(url);
     
-    const res = await fetch(queryKey[0] as string, {
+    const res = await fetch(url, {
       credentials: "include",
       headers,
     });

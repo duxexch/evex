@@ -1312,3 +1312,142 @@ export function broadcastAdminAlert(alert: {
 export function getAdminClientCount() {
   return adminClients.size;
 }
+
+// Bot game broadcast functions for real-time spectator updates
+export function broadcastBotGameState(
+  challengeId: string, 
+  gameState: {
+    gameType: string;
+    state: string;
+    currentPlayerIndex: number;
+    players: string[];
+    moveCount: number;
+  }
+) {
+  const room = challengeGameRooms.get(challengeId);
+  if (!room) return;
+
+  const message = JSON.stringify({
+    type: "game_state_sync",
+    session: {
+      challengeId,
+      gameType: gameState.gameType,
+      gameState: gameState.state,
+      currentTurn: gameState.players[gameState.currentPlayerIndex],
+      totalMoves: gameState.moveCount,
+      status: "playing",
+      spectatorCount: room.spectators.size,
+    },
+  });
+
+  // Broadcast to all spectators
+  room.spectators.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  });
+
+  // Broadcast to players too (for consistency)
+  room.players.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  });
+}
+
+export function broadcastBotGameMove(
+  challengeId: string,
+  move: any,
+  gameState: {
+    gameType: string;
+    state: string;
+    currentPlayerIndex: number;
+    players: string[];
+    moveCount: number;
+    playerId: string;
+  }
+) {
+  const room = challengeGameRooms.get(challengeId);
+  if (!room) return;
+
+  const message = JSON.stringify({
+    type: "game_move",
+    challengeId,
+    move,
+    playerId: gameState.playerId,
+    session: {
+      challengeId,
+      gameType: gameState.gameType,
+      gameState: gameState.state,
+      currentTurn: gameState.players[gameState.currentPlayerIndex],
+      totalMoves: gameState.moveCount,
+      status: "playing",
+      spectatorCount: room.spectators.size,
+    },
+  });
+
+  // Broadcast to all spectators
+  room.spectators.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  });
+
+  // Broadcast to players
+  room.players.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  });
+}
+
+export function broadcastBotGameEnded(
+  challengeId: string,
+  winnerId: string | null,
+  reason: string,
+  isDraw: boolean = false
+) {
+  const room = challengeGameRooms.get(challengeId);
+  if (!room) return;
+
+  const message = JSON.stringify({
+    type: "game_ended",
+    challengeId,
+    winnerId,
+    reason,
+    isDraw,
+  });
+
+  // Broadcast to all spectators
+  room.spectators.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  });
+
+  // Broadcast to players
+  room.players.forEach((socket) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(message);
+    }
+  });
+
+  // Clean up room after game ends
+  setTimeout(() => {
+    challengeGameRooms.delete(challengeId);
+  }, 5000);
+}
+
+export function initBotGameRoom(challengeId: string, player1Id: string, player2Id: string) {
+  if (!challengeGameRooms.has(challengeId)) {
+    challengeGameRooms.set(challengeId, {
+      players: new Map(),
+      spectators: new Map(),
+    });
+  }
+}
+
+export function getBotGameSpectatorCount(challengeId: string): number {
+  const room = challengeGameRooms.get(challengeId);
+  return room ? room.spectators.size : 0;
+}

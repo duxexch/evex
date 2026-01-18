@@ -3,6 +3,12 @@ import { users, challenges, multiplayerGames } from "@shared/schema";
 import { eq, sql, inArray, and } from "drizzle-orm";
 import { getGameEngine } from "./game-engines";
 import type { MoveData } from "./game-engines/types";
+import { 
+  broadcastBotGameState, 
+  broadcastBotGameMove, 
+  broadcastBotGameEnded,
+  initBotGameRoom 
+} from "./websocket";
 
 const DEFAULT_GAME_TYPES = ["chess", "backgammon", "domino"];
 const DEFAULT_BET_AMOUNTS = [5, 10, 25, 50, 100, 250, 500, 1000];
@@ -192,6 +198,9 @@ export async function createBotChallenge(
     const initialState = initializeGameState(selectedGameType, [player1.id, player2.id]);
     
     if (initialState) {
+      // Initialize WebSocket room for spectators
+      initBotGameRoom(challenge.id, player1.id, player2.id);
+      
       activeGames.set(challenge.id, {
         gameType: selectedGameType,
         state: initialState,
@@ -199,6 +208,15 @@ export async function createBotChallenge(
         challengeId: challenge.id,
         currentPlayerIndex: 0,
         startTime: new Date(),
+        moveCount: 0,
+      });
+      
+      // Broadcast initial state to any early spectators
+      broadcastBotGameState(challenge.id, {
+        gameType: selectedGameType,
+        state: initialState,
+        currentPlayerIndex: 0,
+        players: [player1.id, player2.id],
         moveCount: 0,
       });
       
@@ -285,6 +303,16 @@ async function simulateGame(challengeId: string): Promise<void> {
           currentGame.moveCount++;
           activeGames.set(challengeId, currentGame);
           
+          // Broadcast the move to all spectators in real-time
+          broadcastBotGameMove(challengeId, randomMove, {
+            gameType: currentGame.gameType,
+            state: currentGame.state,
+            currentPlayerIndex: currentGame.currentPlayerIndex,
+            players: currentGame.players,
+            moveCount: currentGame.moveCount,
+            playerId: currentPlayerId,
+          });
+          
           if (currentGame.moveCount % 10 === 0) {
             console.log(`[Bot Simulator] Game ${challengeId.slice(0, 8)}: ${currentGame.moveCount} moves`);
           }
@@ -346,6 +374,10 @@ async function endGame(challengeId: string, winnerId: string | null, status: any
     await db.update(multiplayerGames)
       .set({ totalGamesPlayed: sql`${multiplayerGames.totalGamesPlayed} + 1` })
       .where(eq(multiplayerGames.key, game.gameType));
+    
+    // Broadcast game ended to all spectators
+    const winReason = isDraw ? "draw" : (status.reason || "checkmate");
+    broadcastBotGameEnded(challengeId, winnerId, winReason, isDraw);
     
     activeGames.delete(challengeId);
     

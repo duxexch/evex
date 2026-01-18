@@ -4414,8 +4414,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ==================== SPECTATOR SUPPORT SYSTEM (ادعم واربح) ====================
 
-  // Admin endpoints for support settings
-  app.get("/api/admin/support-settings", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  // Admin endpoints for support settings (uses adminTokenMiddleware for admin panel)
+  app.get("/api/admin/support-settings", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const settings = await storage.getSupportSettingsList();
       res.json(settings);
@@ -4424,7 +4424,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/admin/support-settings/:gameType", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.get("/api/admin/support-settings/:gameType", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const settings = await storage.getSupportSettings(req.params.gameType);
       if (!settings) {
@@ -4436,7 +4436,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.put("/api/admin/support-settings/:gameType", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.put("/api/admin/support-settings/:gameType", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const settings = await storage.updateSupportSettings(req.params.gameType, req.body);
       if (!settings) {
@@ -4448,7 +4448,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/admin/support-settings", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  app.post("/api/admin/support-settings", adminTokenMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { gameType, ...settingsData } = req.body;
       if (!gameType) {
