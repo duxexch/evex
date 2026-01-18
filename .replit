@@ -47,4 +47,3 @@ integrations = ["javascript_database:1.0.0"]
 [userenv.shared]
 
 [userenv.production]
-ADMIN_RESET_PASSWORD = "Admin@123"
