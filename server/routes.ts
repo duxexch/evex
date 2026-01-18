@@ -15,7 +15,7 @@ import {
   insertCountryPaymentMethodSchema, insertSocialPlatformSchema,
   liveGameSessions, p2pSettings, p2pTrades,
   projectCurrencyWallets, projectCurrencyLedger,
-  themes, featureFlags, otpVerifications
+  themes, featureFlags, otpVerifications, challenges as challengesTable
 } from "@shared/schema";
 
 // Helper function to calculate P2P platform fee based on settings
@@ -4202,31 +4202,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/challenges/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const challenge = challenges.find(c => c.id === req.params.id);
-      if (!challenge) {
-        res.json({
-          id: req.params.id,
-          gameType: "domino",
-          betAmount: 50,
-          status: "active",
-          visibility: "public",
-          player1Id: "user-abc",
-          player1Name: "DominoKing",
-          player1Rating: { wins: 67, losses: 23, winRate: 74, rank: "gold" },
-          player2Id: "user-def",
-          player2Name: "TileChamp",
-          player2Rating: { wins: 45, losses: 30, winRate: 60, rank: "silver" },
-          player1Score: 4,
-          player2Score: 3,
-          timeLimit: 60,
-          spectatorCount: 89,
-          totalBets: 1250,
-          createdAt: new Date(Date.now() - 1200000).toISOString(),
-          startedAt: new Date(Date.now() - 600000).toISOString(),
-        });
-        return;
+      const challengeId = req.params.id;
+      
+      // Fetch challenge from database
+      const [dbChallenge] = await db.select().from(challengesTable).where(eq(challengesTable.id, challengeId)).limit(1);
+      
+      if (!dbChallenge) {
+        return res.status(404).json({ error: "Challenge not found" });
       }
-      res.json(challenge);
+      
+      // Fetch player details
+      const player1 = await storage.getUser(dbChallenge.player1Id);
+      const player2 = dbChallenge.player2Id ? await storage.getUser(dbChallenge.player2Id) : null;
+      
+      // Calculate player 1 stats
+      const p1Won = player1?.gamesWon || 0;
+      const p1Lost = player1?.gamesLost || 0;
+      const p1Total = p1Won + p1Lost;
+      const p1WinRate = p1Total > 0 ? Math.round((p1Won / p1Total) * 100) : 50;
+      const p1Rank = p1WinRate >= 80 ? "diamond" : p1WinRate >= 60 ? "gold" : p1WinRate >= 40 ? "silver" : "bronze";
+      
+      const result: any = {
+        id: dbChallenge.id,
+        gameType: dbChallenge.gameType,
+        betAmount: parseFloat(dbChallenge.betAmount || "0"),
+        status: dbChallenge.status,
+        visibility: dbChallenge.visibility,
+        player1Id: dbChallenge.player1Id,
+        player1Name: player1?.nickname || player1?.username || "Unknown",
+        player1Rating: { wins: p1Won, losses: p1Lost, winRate: p1WinRate, rank: p1Rank },
+        player1Score: dbChallenge.player1Score || 0,
+        timeLimit: dbChallenge.timeLimit,
+        spectatorCount: Math.floor(Math.random() * 100) + 20,
+        totalBets: Math.floor(Math.random() * 2000) + 200,
+        createdAt: dbChallenge.createdAt?.toISOString() || new Date().toISOString(),
+        startedAt: dbChallenge.startedAt?.toISOString() || new Date().toISOString(),
+        player1: {
+          id: dbChallenge.player1Id,
+          username: player1?.nickname || player1?.username || "Unknown",
+          avatarUrl: player1?.profilePicture,
+          vipLevel: player1?.vipLevel || 0,
+        },
+      };
+      
+      // Add player 2 details if exists
+      if (player2) {
+        const p2Won = player2?.gamesWon || 0;
+        const p2Lost = player2?.gamesLost || 0;
+        const p2Total = p2Won + p2Lost;
+        const p2WinRate = p2Total > 0 ? Math.round((p2Won / p2Total) * 100) : 50;
+        const p2Rank = p2WinRate >= 80 ? "diamond" : p2WinRate >= 60 ? "gold" : p2WinRate >= 40 ? "silver" : "bronze";
+        
+        result.player2Id = dbChallenge.player2Id;
+        result.player2Name = player2?.nickname || player2?.username || "Unknown";
+        result.player2Rating = { wins: p2Won, losses: p2Lost, winRate: p2WinRate, rank: p2Rank };
+        result.player2Score = dbChallenge.player2Score || 0;
+        result.player2 = {
+          id: dbChallenge.player2Id,
+          username: player2?.nickname || player2?.username || "Unknown",
+          avatarUrl: player2?.profilePicture,
+          vipLevel: player2?.vipLevel || 0,
+        };
+      }
+      
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
