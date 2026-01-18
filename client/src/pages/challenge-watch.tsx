@@ -166,7 +166,7 @@ export default function ChallengeWatchPage() {
   useEffect(() => {
     if (!challengeId) return;
 
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("pwm_token");
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
     wsRef.current = ws;
@@ -175,11 +175,14 @@ export default function ChallengeWatchPage() {
       if (token) {
         ws.send(JSON.stringify({ type: "auth", token }));
       }
-      ws.send(JSON.stringify({ 
-        type: "join_challenge_game", 
-        challengeId,
-        isSpectator: true 
-      }));
+      // Small delay to ensure auth is processed before joining
+      setTimeout(() => {
+        ws.send(JSON.stringify({ 
+          type: "join_challenge_game", 
+          challengeId,
+          isSpectator: true 
+        }));
+      }, 100);
     };
 
     ws.onmessage = (event) => {

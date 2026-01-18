@@ -29,10 +29,21 @@ const clients = new Map<string, Set<AuthenticatedSocket>>();
 // Voice chat rooms for WebRTC signaling
 const voiceRooms = new Map<string, Map<string, AuthenticatedSocket>>();
 
-// Challenge game rooms
+// Challenge game rooms with cached state for late joiners
+interface GameRoomState {
+  challengeId: string;
+  gameType: string;
+  gameState: string;
+  currentTurn: string;
+  totalMoves: number;
+  status: string;
+  spectatorCount: number;
+}
+
 const challengeGameRooms = new Map<string, {
   players: Map<string, AuthenticatedSocket>;
   spectators: Map<string, AuthenticatedSocket>;
+  currentState?: GameRoomState;
 }>();
 
 export function setupWebSocket(server: Server) {
@@ -697,14 +708,18 @@ export function setupWebSocket(server: Server) {
             }
           });
 
-          // Send current game state
-          const [session] = await db.select().from(challengeGameSessions)
-            .where(eq(challengeGameSessions.challengeId, challengeId))
-            .orderBy(desc(challengeGameSessions.createdAt))
-            .limit(1);
+          // Send current game state - first try cached state (for bot games), then DB
+          if (room.currentState) {
+            ws.send(JSON.stringify({ type: "game_state_sync", session: room.currentState }));
+          } else {
+            const [session] = await db.select().from(challengeGameSessions)
+              .where(eq(challengeGameSessions.challengeId, challengeId))
+              .orderBy(desc(challengeGameSessions.createdAt))
+              .limit(1);
 
-          if (session) {
-            ws.send(JSON.stringify({ type: "game_state_sync", session }));
+            if (session) {
+              ws.send(JSON.stringify({ type: "game_state_sync", session }));
+            }
           }
 
           ws.send(JSON.stringify({ type: "joined_challenge_game", challengeId }));
@@ -1327,17 +1342,22 @@ export function broadcastBotGameState(
   const room = challengeGameRooms.get(challengeId);
   if (!room) return;
 
+  const sessionData: GameRoomState = {
+    challengeId,
+    gameType: gameState.gameType,
+    gameState: gameState.state,
+    currentTurn: gameState.players[gameState.currentPlayerIndex],
+    totalMoves: gameState.moveCount,
+    status: "playing",
+    spectatorCount: room.spectators.size,
+  };
+
+  // Cache the state for late joiners
+  room.currentState = sessionData;
+
   const message = JSON.stringify({
     type: "game_state_sync",
-    session: {
-      challengeId,
-      gameType: gameState.gameType,
-      gameState: gameState.state,
-      currentTurn: gameState.players[gameState.currentPlayerIndex],
-      totalMoves: gameState.moveCount,
-      status: "playing",
-      spectatorCount: room.spectators.size,
-    },
+    session: sessionData,
   });
 
   // Broadcast to all spectators
@@ -1370,20 +1390,25 @@ export function broadcastBotGameMove(
   const room = challengeGameRooms.get(challengeId);
   if (!room) return;
 
+  const sessionData: GameRoomState = {
+    challengeId,
+    gameType: gameState.gameType,
+    gameState: gameState.state,
+    currentTurn: gameState.players[gameState.currentPlayerIndex],
+    totalMoves: gameState.moveCount,
+    status: "playing",
+    spectatorCount: room.spectators.size,
+  };
+
+  // Cache the state for late joiners
+  room.currentState = sessionData;
+
   const message = JSON.stringify({
     type: "game_move",
     challengeId,
     move,
     playerId: gameState.playerId,
-    session: {
-      challengeId,
-      gameType: gameState.gameType,
-      gameState: gameState.state,
-      currentTurn: gameState.players[gameState.currentPlayerIndex],
-      totalMoves: gameState.moveCount,
-      status: "playing",
-      spectatorCount: room.spectators.size,
-    },
+    session: sessionData,
   });
 
   // Broadcast to all spectators
