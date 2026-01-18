@@ -154,7 +154,6 @@ export default function ChallengesPage() {
   
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
-  const [showSpectateDialog, setShowSpectateDialog] = useState(false);
   const [showGiftShop, setShowGiftShop] = useState(false);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [betAmount, setBetAmount] = useState("");
@@ -162,9 +161,6 @@ export default function ChallengesPage() {
   const [friendAccountId, setFriendAccountId] = useState("");
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
-  const [spectatingChallenge, setSpectatingChallenge] = useState<Challenge | null>(null);
-  const [spectatorBetAmount, setSpectatorBetAmount] = useState("");
-  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [gameFilter, setGameFilter] = useState<string[]>([]);
 
   const { data: myChallenges, isLoading: loadingMy } = useQuery<Challenge[]>({
@@ -283,18 +279,6 @@ export default function ChallengesPage() {
     }
   });
 
-  const placeStakeMutation = useMutation({
-    mutationFn: (data: { challengeId: string; backedPlayerId: string; stakeAmount: number }) =>
-      apiRequest('POST', `/api/challenges/${data.challengeId}/stake`, data),
-    onSuccess: () => {
-      toast({ title: t('common.success'), description: t('challenges.stakePlaced') });
-      setSpectatorBetAmount("");
-      setSelectedPlayer(null);
-    },
-    onError: (err: any) => {
-      toast({ title: t('common.error'), description: err.message, variant: "destructive" });
-    }
-  });
 
   const purchaseGiftMutation = useMutation({
     mutationFn: (data: { giftId: string; quantity: number }) =>
@@ -350,14 +334,6 @@ export default function ChallengesPage() {
     setLocation(`/challenge/${challenge.id}/watch`);
   };
 
-  const handlePlaceBet = () => {
-    if (!spectatingChallenge || !selectedPlayer || !spectatorBetAmount) return;
-    placeStakeMutation.mutate({
-      challengeId: spectatingChallenge.id,
-      backedPlayerId: selectedPlayer,
-      stakeAmount: parseFloat(spectatorBetAmount),
-    });
-  };
 
   const getGameIcon = (gameType: string) => {
     const game = challengeGames.find(g => g.name.toLowerCase() === gameType.toLowerCase() || g.id === gameType);
@@ -946,112 +922,6 @@ export default function ChallengesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Spectate Dialog */}
-      <Dialog open={showSpectateDialog} onOpenChange={setShowSpectateDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
-              {t('challenges.spectating')}
-            </DialogTitle>
-          </DialogHeader>
-          {spectatingChallenge && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between bg-muted/50 p-4 rounded-lg">
-                <div className="text-center flex-1">
-                  <p className="font-bold">{spectatingChallenge.player1Name}</p>
-                  <RatingBadge rating={spectatingChallenge.player1Rating} />
-                  <p className="text-4xl font-bold mt-2">{spectatingChallenge.player1Score || 0}</p>
-                </div>
-                <div className="px-4">
-                  <Badge variant="destructive" className="animate-pulse">{t('challenges.live')}</Badge>
-                </div>
-                <div className="text-center flex-1">
-                  <p className="font-bold">{spectatingChallenge.player2Name}</p>
-                  <RatingBadge rating={spectatingChallenge.player2Rating} />
-                  <p className="text-4xl font-bold mt-2">{spectatingChallenge.player2Score || 0}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <Label className="flex items-center gap-2 mb-2">
-                  <Coins className="h-4 w-4" />
-                  {t('challenges.placeBet')}
-                </Label>
-                <p className="text-xs text-muted-foreground mb-3">{t('challenges.betWarning')}</p>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <Button
-                    variant={selectedPlayer === spectatingChallenge.player1Id ? "default" : "outline"}
-                    onClick={() => setSelectedPlayer(spectatingChallenge.player1Id)}
-                    data-testid="button-stake-player1"
-                  >
-                    {spectatingChallenge.player1Name}
-                  </Button>
-                  <Button
-                    variant={selectedPlayer === spectatingChallenge.player2Id ? "default" : "outline"}
-                    onClick={() => setSelectedPlayer(spectatingChallenge.player2Id || '')}
-                    data-testid="button-stake-player2"
-                  >
-                    {spectatingChallenge.player2Name}
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    value={spectatorBetAmount}
-                    onChange={(e) => setSpectatorBetAmount(e.target.value)}
-                    placeholder="10.00"
-                    data-testid="input-spectator-bet"
-                  />
-                  <Button onClick={handlePlaceBet} disabled={!selectedPlayer || !spectatorBetAmount}>
-                    {t('challenges.bet')}
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <Label className="flex items-center gap-2 mb-2">
-                  <Gift className="h-4 w-4" />
-                  {t('challenges.sendGift')}
-                </Label>
-                <ScrollArea className="h-24">
-                  <div className="flex gap-2">
-                    {giftInventory?.map(item => {
-                      const Icon = GIFT_ICONS[item.iconUrl] || Gift;
-                      return (
-                        <Button
-                          key={item.id}
-                          variant="outline"
-                          size="sm"
-                          className="flex-col h-auto py-2 min-w-[60px]"
-                          onClick={() => {
-                            if (selectedPlayer) {
-                              sendGiftMutation.mutate({
-                                challengeId: spectatingChallenge.id,
-                                recipientId: selectedPlayer,
-                                giftId: item.giftId,
-                              });
-                            }
-                          }}
-                          disabled={!selectedPlayer || item.quantity < 1}
-                          data-testid={`button-send-gift-${item.giftId}`}
-                        >
-                          <Icon className="h-5 w-5 text-primary" />
-                          <span className="text-xs">{item.quantity}</span>
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Gift Shop Dialog */}
       <Dialog open={showGiftShop} onOpenChange={setShowGiftShop}>
