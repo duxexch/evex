@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation, Link, Redirect } from "wouter";
 import {
   Sidebar,
   SidebarContent,
@@ -182,32 +181,12 @@ function AdminSidebar() {
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
-  const [, setLocation] = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem("adminToken");
-    if (!token) {
-      setLocation("/admin");
-    } else {
-      setIsAuthenticated(true);
-    }
-    setIsLoading(false);
-  }, [setLocation]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse">
-          <Shield className="w-12 h-12 text-destructive" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return null;
+  // Check authentication synchronously at render time
+  const token = localStorage.getItem("adminToken");
+  
+  // If no token, use declarative Redirect component (no useEffect, no state loops)
+  if (!token) {
+    return <Redirect to="/admin" />;
   }
 
   const style = {
