@@ -83,6 +83,7 @@ export default function LoginPage() {
   // Auto-registration state
   const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
   const [pendingRegistration, setPendingRegistration] = useState<{ identifier: string; type: "email" | "phone"; password: string } | null>(null);
+  const [showAccountNotFoundModal, setShowAccountNotFoundModal] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/settings")
@@ -118,6 +119,21 @@ export default function LoginPage() {
       await loginByAccount(accountLoginForm.accountId, accountLoginForm.password);
       setLocation("/");
     } catch (error: any) {
+      // Check if account doesn't exist
+      if (error.message === "Invalid credentials" && accountLoginForm.accountId) {
+        const checkRes = await fetch("/api/auth/check-identifier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: accountLoginForm.accountId, type: "account" }),
+        });
+        const checkData = await checkRes.json();
+        if (checkRes.ok && !checkData.exists) {
+          // Account ID doesn't exist - show helpful message
+          setShowAccountNotFoundModal(true);
+          setIsLoading(false);
+          return;
+        }
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -834,6 +850,54 @@ export default function LoginPage() {
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create Account
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAccountNotFoundModal} onOpenChange={setShowAccountNotFoundModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-5 h-5 text-destructive" />
+              Account Not Found
+            </DialogTitle>
+            <DialogDescription>
+              This account ID does not exist in our system. Account IDs are automatically generated when you register.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-4 bg-accent/10 rounded-md border border-accent/20">
+              <p className="text-sm">
+                <span className="font-semibold">Account ID:</span> {accountLoginForm.accountId}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              If you don't have an account yet, use the <strong>"Quick"</strong> tab to create a new account with an automatically generated ID.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Or use the <strong>"Phone"</strong> or <strong>"Email"</strong> tabs to register with your phone number or email address.
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowAccountNotFoundModal(false)}
+                className="flex-1"
+                data-testid="button-close-account-not-found"
+              >
+                Try Again
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowAccountNotFoundModal(false);
+                  setActiveTab("one-click");
+                }}
+                className="flex-1"
+                data-testid="button-go-to-quick"
+              >
+                <Zap className="mr-2 h-4 w-4" />
+                Quick Register
               </Button>
             </div>
           </div>
