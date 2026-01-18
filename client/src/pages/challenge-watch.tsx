@@ -1,14 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BackButton } from "@/components/BackButton";
 import { ChessBoard } from "@/components/games/ChessBoard";
 import { DominoBoard } from "@/components/games/DominoBoard";
@@ -22,6 +26,14 @@ import {
   Eye,
   Loader2,
   X,
+  TrendingUp,
+  Zap,
+  Timer,
+  DollarSign,
+  Users,
+  Star,
+  Gift,
+  Info,
 } from "lucide-react";
 
 interface Player {
@@ -59,6 +71,30 @@ interface Challenge {
   timeLimit: number;
 }
 
+interface OddsData {
+  player1Odds: number;
+  player2Odds: number;
+  instantMatchOdds: number;
+  houseFeePercent: number;
+  minSupport: number;
+  maxSupport: number;
+}
+
+interface SupportEntry {
+  id: string;
+  challengeId: string;
+  supporterId: string;
+  supporterName: string;
+  supporterAvatar?: string;
+  playerId: string;
+  playerName: string;
+  amount: string;
+  potentialWinnings: string;
+  mode: "instant" | "wait_for_match";
+  status: "pending" | "matched" | "won" | "lost" | "cancelled" | "refunded";
+  createdAt: string;
+}
+
 export default function ChallengeWatchPage() {
   const [, params] = useRoute("/challenge/:id/watch");
   const [, setLocation] = useLocation();
@@ -70,11 +106,51 @@ export default function ChallengeWatchPage() {
   const [gameSession, setGameSession] = useState<GameSession | null>(null);
   const [receivedGifts, setReceivedGifts] = useState<any[]>([]);
   
+  const [supportAmount, setSupportAmount] = useState("");
+  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [supportMode, setSupportMode] = useState<"instant" | "wait_for_match">("instant");
+  
   const wsRef = useRef<WebSocket | null>(null);
 
   const { data: challenge, isLoading } = useQuery<Challenge>({
     queryKey: ["/api/challenges", challengeId],
     enabled: !!challengeId,
+  });
+
+  const { data: oddsData, isLoading: isLoadingOdds } = useQuery<OddsData>({
+    queryKey: ["/api/challenges", challengeId, "odds"],
+    enabled: !!challengeId,
+  });
+
+  const { data: supports, isLoading: isLoadingSupports } = useQuery<SupportEntry[]>({
+    queryKey: ["/api/challenges", challengeId, "supports"],
+    enabled: !!challengeId,
+  });
+
+  const addSupportMutation = useMutation({
+    mutationFn: (data: { playerId: string; amount: number; mode: string }) =>
+      apiRequest(`/api/challenges/${challengeId}/support`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      toast({
+        title: language === "ar" ? "تم إضافة الدعم!" : "Support added!",
+        description: language === "ar" 
+          ? "تم تسجيل دعمك بنجاح. حظاً موفقاً!" 
+          : "Your support has been registered. Good luck!",
+      });
+      setSupportAmount("");
+      setSelectedPlayer(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/challenges", challengeId, "supports"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: language === "ar" ? "خطأ" : "Error",
+        description: err.message || (language === "ar" ? "فشل إضافة الدعم" : "Failed to add support"),
+        variant: "destructive",
+      });
+    },
   });
 
   useEffect(() => {
@@ -133,13 +209,60 @@ export default function ChallengeWatchPage() {
       case "spectator_count":
         setGameSession(prev => prev ? { ...prev, spectatorCount: data.count } : null);
         break;
+      case "support_added":
+        queryClient.invalidateQueries({ queryKey: ["/api/challenges", challengeId, "supports"] });
+        break;
     }
-  }, [language, toast]);
+  }, [language, toast, challengeId]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const getPlayerOdds = (playerId: string) => {
+    if (!oddsData || !challenge) return 1.5;
+    if (playerId === challenge.player1Id) {
+      return supportMode === "instant" ? oddsData.instantMatchOdds : oddsData.player1Odds;
+    }
+    return supportMode === "instant" ? oddsData.instantMatchOdds : oddsData.player2Odds;
+  };
+
+  const calculatePotentialWinnings = () => {
+    if (!supportAmount || !selectedPlayer) return 0;
+    const amount = parseFloat(supportAmount);
+    if (isNaN(amount)) return 0;
+    const odds = getPlayerOdds(selectedPlayer);
+    return amount * odds;
+  };
+
+  const handleAddSupport = () => {
+    if (!selectedPlayer || !supportAmount) return;
+    const amount = parseFloat(supportAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: language === "ar" ? "خطأ" : "Error",
+        description: language === "ar" ? "أدخل مبلغاً صحيحاً" : "Enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (oddsData && (amount < oddsData.minSupport || amount > oddsData.maxSupport)) {
+      toast({
+        title: language === "ar" ? "خطأ" : "Error",
+        description: language === "ar" 
+          ? `المبلغ يجب أن يكون بين $${oddsData.minSupport} و $${oddsData.maxSupport}`
+          : `Amount must be between $${oddsData.minSupport} and $${oddsData.maxSupport}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    addSupportMutation.mutate({
+      playerId: selectedPlayer,
+      amount,
+      mode: supportMode,
+    });
   };
 
   if (isLoading) {
@@ -165,10 +288,12 @@ export default function ChallengeWatchPage() {
     );
   }
 
+  const isRTL = language === "ar";
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" dir={isRTL ? "rtl" : "ltr"}>
       <div className="flex flex-col lg:flex-row h-screen">
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col overflow-hidden">
           <header className="flex items-center justify-between gap-4 p-3 border-b bg-card">
             <div className="flex items-center gap-3">
               <BackButton />
@@ -204,95 +329,353 @@ export default function ChallengeWatchPage() {
           </header>
 
           <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-            <div className="flex-1 p-4 flex flex-col items-center justify-center">
-              <div className="w-full max-w-lg mb-4">
-                <div className="flex items-center justify-between p-3 bg-card rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={challenge.player1?.avatarUrl} />
-                      <AvatarFallback>{challenge.player1?.username?.[0]?.toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{challenge.player1?.username || "Player 1"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {challenge.gameType === "chess" ? "⚪ White" : "Player 1"}
-                      </p>
+            <ScrollArea className="flex-1">
+              <div className="p-4 flex flex-col items-center">
+                <div className="w-full max-w-lg mb-4">
+                  <div className="flex items-center justify-between p-3 bg-card rounded-lg border">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={challenge.player1?.avatarUrl} />
+                        <AvatarFallback>{challenge.player1?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{challenge.player1?.username || "Player 1"}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground">
+                            {challenge.gameType === "chess" ? "⚪ White" : "Player 1"}
+                          </p>
+                          {oddsData && (
+                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/30">
+                              x{oddsData.player1Odds.toFixed(2)}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className={`font-mono text-lg ${(gameSession?.player1TimeRemaining || 0) < 30 ? "text-destructive" : ""}`}>
-                      {formatTime(gameSession?.player1TimeRemaining || challenge.timeLimit)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className={`font-mono text-lg ${(gameSession?.player1TimeRemaining || 0) < 30 ? "text-destructive" : ""}`}>
+                        {formatTime(gameSession?.player1TimeRemaining || challenge.timeLimit)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="relative">
-                {receivedGifts.map((gift) => (
-                  <div
-                    key={gift.id}
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 animate-bounce"
-                  >
-                    <div className="bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg shadow-lg">
-                      {gift.giftName} from {gift.senderName}
+                <div className="relative">
+                  {receivedGifts.map((gift) => (
+                    <div
+                      key={gift.id}
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 animate-bounce"
+                    >
+                      <div className="bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg shadow-lg">
+                        {gift.giftName} from {gift.senderName}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {challenge.gameType === "chess" ? (
+                    <ChessBoard
+                      gameState={gameSession?.gameState}
+                      currentTurn={gameSession?.currentTurn}
+                      myColor="white"
+                      isMyTurn={false}
+                      isSpectator={true}
+                      onMove={() => {}}
+                      status={gameSession?.status}
+                    />
+                  ) : (
+                    <DominoBoard
+                      gameState={gameSession?.gameState}
+                      currentTurn={gameSession?.currentTurn}
+                      isMyTurn={false}
+                      isSpectator={true}
+                      onMove={() => {}}
+                      status={gameSession?.status}
+                    />
+                  )}
+                </div>
+
+                <div className="w-full max-w-lg mt-4">
+                  <div className="flex items-center justify-between p-3 bg-card rounded-lg border">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={challenge.player2?.avatarUrl} />
+                        <AvatarFallback>{challenge.player2?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{challenge.player2?.username || "Waiting..."}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground">
+                            {challenge.gameType === "chess" ? "⚫ Black" : "Player 2"}
+                          </p>
+                          {oddsData && challenge.player2 && (
+                            <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-500 border-blue-500/30">
+                              x{oddsData.player2Odds.toFixed(2)}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className={`font-mono text-lg ${(gameSession?.player2TimeRemaining || 0) < 30 ? "text-destructive" : ""}`}>
+                        {formatTime(gameSession?.player2TimeRemaining || challenge.timeLimit)}
+                      </span>
                     </div>
                   </div>
-                ))}
-                
-                {challenge.gameType === "chess" ? (
-                  <ChessBoard
-                    gameState={gameSession?.gameState}
-                    currentTurn={gameSession?.currentTurn}
-                    myColor="white"
-                    isMyTurn={false}
-                    isSpectator={true}
-                    onMove={() => {}}
-                    status={gameSession?.status}
-                  />
-                ) : (
-                  <DominoBoard
-                    gameState={gameSession?.gameState}
-                    currentTurn={gameSession?.currentTurn}
-                    isMyTurn={false}
-                    isSpectator={true}
-                    onMove={() => {}}
-                    status={gameSession?.status}
-                  />
+                </div>
+
+                {!user && (
+                  <div className="mt-4">
+                    <Button onClick={() => setLocation("/")}>
+                      {language === "ar" ? "سجل دخول للمشاركة" : "Login to participate"}
+                    </Button>
+                  </div>
+                )}
+
+                {user && challenge.player2 && gameSession?.status === "playing" && (
+                  <Card className="w-full max-w-lg mt-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <TrendingUp className="h-5 w-5 text-primary" />
+                        <span>{language === "ar" ? "ادعم واربح" : "Support & Win"}</span>
+                        <Star className="h-4 w-4 text-yellow-500" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => setSelectedPlayer(challenge.player1Id)}
+                          className={`p-3 rounded-lg border-2 transition-all ${
+                            selectedPlayer === challenge.player1Id
+                              ? "border-green-500 bg-green-500/10"
+                              : "border-transparent bg-card hover:bg-accent"
+                          }`}
+                          data-testid="support-player1-card"
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <Avatar className="h-12 w-12">
+                              <AvatarImage src={challenge.player1?.avatarUrl} />
+                              <AvatarFallback>{challenge.player1?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <p className="font-medium text-sm truncate w-full text-center">
+                              {challenge.player1?.username}
+                            </p>
+                            <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                              x{(supportMode === "instant" ? oddsData?.instantMatchOdds : oddsData?.player1Odds)?.toFixed(2) || "1.50"}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant={selectedPlayer === challenge.player1Id ? "default" : "outline"}
+                              className="w-full"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedPlayer(challenge.player1Id);
+                              }}
+                              data-testid="button-support-player1"
+                            >
+                              {language === "ar" ? "ادعم" : "Support"}
+                            </Button>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => setSelectedPlayer(challenge.player2Id!)}
+                          className={`p-3 rounded-lg border-2 transition-all ${
+                            selectedPlayer === challenge.player2Id
+                              ? "border-blue-500 bg-blue-500/10"
+                              : "border-transparent bg-card hover:bg-accent"
+                          }`}
+                          data-testid="support-player2-card"
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <Avatar className="h-12 w-12">
+                              <AvatarImage src={challenge.player2?.avatarUrl} />
+                              <AvatarFallback>{challenge.player2?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <p className="font-medium text-sm truncate w-full text-center">
+                              {challenge.player2?.username}
+                            </p>
+                            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                              x{(supportMode === "instant" ? oddsData?.instantMatchOdds : oddsData?.player2Odds)?.toFixed(2) || "1.50"}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant={selectedPlayer === challenge.player2Id ? "default" : "outline"}
+                              className="w-full"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedPlayer(challenge.player2Id!);
+                              }}
+                              data-testid="button-support-player2"
+                            >
+                              {language === "ar" ? "ادعم" : "Support"}
+                            </Button>
+                          </div>
+                        </button>
+                      </div>
+
+                      {selectedPlayer && (
+                        <div className="space-y-4 pt-3 border-t">
+                          <Tabs value={supportMode} onValueChange={(v) => setSupportMode(v as "instant" | "wait_for_match")}>
+                            <TabsList className="grid w-full grid-cols-2">
+                              <TabsTrigger value="instant" className="gap-2" data-testid="tab-instant">
+                                <Zap className="h-4 w-4" />
+                                {language === "ar" ? "فوري" : "Instant"}
+                              </TabsTrigger>
+                              <TabsTrigger value="wait_for_match" className="gap-2" data-testid="tab-wait">
+                                <Timer className="h-4 w-4" />
+                                {language === "ar" ? "انتظر مقابل" : "Wait for Match"}
+                              </TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="instant" className="mt-3">
+                              <p className="text-xs text-muted-foreground">
+                                {language === "ar" 
+                                  ? "معدل ربح ثابت x" + (oddsData?.instantMatchOdds?.toFixed(2) || "1.50") + " - نتيجة فورية!"
+                                  : "Fixed rate x" + (oddsData?.instantMatchOdds?.toFixed(2) || "1.50") + " - instant result!"}
+                              </p>
+                            </TabsContent>
+                            <TabsContent value="wait_for_match" className="mt-3">
+                              <p className="text-xs text-muted-foreground">
+                                {language === "ar" 
+                                  ? "معدل ربح ديناميكي حسب أداء اللاعب - انتظر نهاية المباراة"
+                                  : "Dynamic rate based on player performance - wait for match end"}
+                              </p>
+                            </TabsContent>
+                          </Tabs>
+
+                          <div>
+                            <label className="text-sm font-medium mb-2 block">
+                              {language === "ar" ? "مبلغ الدعم ($)" : "Support Amount ($)"}
+                            </label>
+                            <Input
+                              type="number"
+                              min={oddsData?.minSupport || 1}
+                              max={oddsData?.maxSupport || 1000}
+                              step="0.01"
+                              value={supportAmount}
+                              onChange={(e) => setSupportAmount(e.target.value)}
+                              placeholder={`${oddsData?.minSupport || 1} - ${oddsData?.maxSupport || 1000}`}
+                              className="text-lg"
+                              data-testid="input-support-amount"
+                            />
+                            <div className="flex gap-2 mt-2">
+                              {[5, 10, 25, 50, 100].map((amount) => (
+                                <Button
+                                  key={amount}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSupportAmount(String(amount))}
+                                  data-testid={`quick-amount-${amount}`}
+                                >
+                                  ${amount}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {supportAmount && parseFloat(supportAmount) > 0 && (
+                            <div className="p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-lg border border-green-500/20">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-muted-foreground">
+                                  {language === "ar" ? "الربح المحتمل:" : "Potential Winnings:"}
+                                </span>
+                                <span className="text-xl font-bold text-green-500">
+                                  ${calculatePotentialWinnings().toFixed(2)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                ${supportAmount} × {getPlayerOdds(selectedPlayer).toFixed(2)} = ${calculatePotentialWinnings().toFixed(2)}
+                              </p>
+                            </div>
+                          )}
+
+                          {oddsData && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Info className="h-3 w-3" />
+                              <span>
+                                {language === "ar" 
+                                  ? `رسوم المنصة: ${oddsData.houseFeePercent}% • الحد الأدنى: $${oddsData.minSupport} • الحد الأقصى: $${oddsData.maxSupport}`
+                                  : `House fee: ${oddsData.houseFeePercent}% • Min: $${oddsData.minSupport} • Max: $${oddsData.maxSupport}`}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => {
+                                setSelectedPlayer(null);
+                                setSupportAmount("");
+                              }}
+                              data-testid="button-cancel-support"
+                            >
+                              {language === "ar" ? "إلغاء" : "Cancel"}
+                            </Button>
+                            <Button
+                              className="flex-1 gap-2"
+                              onClick={handleAddSupport}
+                              disabled={!supportAmount || parseFloat(supportAmount) <= 0 || addSupportMutation.isPending}
+                              data-testid="button-add-support"
+                            >
+                              {addSupportMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <DollarSign className="h-4 w-4" />
+                              )}
+                              {language === "ar" ? "أضف الدعم" : "Add Support"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {supports && supports.length > 0 && (
+                  <Card className="w-full max-w-lg mt-4">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Users className="h-4 w-4 text-primary" />
+                        <span>{language === "ar" ? "الدعم الحالي" : "Current Supports"}</span>
+                        <Badge variant="secondary" className="ms-auto">{supports.length}</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {supports.map((support) => (
+                          <div
+                            key={support.id}
+                            className="flex items-center justify-between p-2 bg-muted/50 rounded-lg"
+                            data-testid={`support-entry-${support.id}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                <AvatarImage src={support.supporterAvatar} />
+                                <AvatarFallback className="text-xs">{support.supporterName?.[0]?.toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="text-sm font-medium">{support.supporterName}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {language === "ar" ? "يدعم" : "supports"} {support.playerName}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-end">
+                              <p className="text-sm font-bold text-primary">${parseFloat(support.amount).toFixed(2)}</p>
+                              <p className="text-xs text-green-500">
+                                → ${parseFloat(support.potentialWinnings).toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
               </div>
-
-              <div className="w-full max-w-lg mt-4">
-                <div className="flex items-center justify-between p-3 bg-card rounded-lg border">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={challenge.player2?.avatarUrl} />
-                      <AvatarFallback>{challenge.player2?.username?.[0]?.toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{challenge.player2?.username || "Waiting..."}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {challenge.gameType === "chess" ? "⚫ Black" : "Player 2"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className={`font-mono text-lg ${(gameSession?.player2TimeRemaining || 0) < 30 ? "text-destructive" : ""}`}>
-                      {formatTime(gameSession?.player2TimeRemaining || challenge.timeLimit)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {!user && (
-                <div className="mt-4">
-                  <Button onClick={() => setLocation("/")}>
-                    {language === "ar" ? "سجل دخول للمشاركة" : "Login to participate"}
-                  </Button>
-                </div>
-              )}
-            </div>
+            </ScrollArea>
 
             <div className="w-full lg:w-80 border-s flex flex-col bg-card">
               <SpectatorPanel

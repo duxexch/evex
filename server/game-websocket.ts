@@ -10,6 +10,7 @@ import type { MoveData, WebSocketMessage } from './game-engines/types';
 import { chessEngine, ChessEngine } from './game-engines/chess';
 import { chatRateLimiter, giftRateLimiter } from './lib/rate-limiter';
 import { filterMessage } from './lib/word-filter';
+import { settleSpectatorSupports } from './lib/support-settler';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -523,6 +524,18 @@ async function handleGameOver(room: GameRoom, status: any) {
           statsUpdatedInPayout = true;
           console.log(`[WS] Game payout and stats settled: winner=${winnerId}, stake=${challenge.betAmount}, currency=${challenge.currencyType || 'usd'}`);
         }
+      }
+
+      // Settle spectator supports for this challenge
+      try {
+        const settlementResult = await settleSpectatorSupports(session.challengeId, winnerId);
+        if (!settlementResult.success) {
+          console.error('[WS] Spectator support settlement had errors:', settlementResult.errors);
+        } else {
+          console.log(`[WS] Spectator supports settled: ${settlementResult.settledMatches} matches, ${settlementResult.refundedSupports} refunded`);
+        }
+      } catch (settleError) {
+        console.error('[WS] Error settling spectator supports:', settleError);
       }
     }
 

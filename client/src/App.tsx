@@ -109,6 +109,7 @@ const AdminIntegrationsPage = lazy(() => import("@/pages/admin/admin-integration
 const AdminSocialPlatformsPage = lazy(() => import("@/pages/admin/admin-social-platforms"));
 const AdminAdvertisementsPage = lazy(() => import("@/pages/admin/admin-advertisements"));
 const AdminGameSectionsPage = lazy(() => import("@/pages/admin/admin-game-sections"));
+const AdminSupportSettingsPage = lazy(() => import("@/pages/admin/admin-support-settings"));
 
 function PageLoader() {
   return (
@@ -535,6 +536,9 @@ function AdminRouter() {
         </Route>
         <Route path="/admin/game-sections">
           <AdminLayout><AdminGameSectionsPage /></AdminLayout>
+        </Route>
+        <Route path="/admin/support-settings">
+          <AdminLayout><AdminSupportSettingsPage /></AdminLayout>
         </Route>
       </Switch>
     </Suspense>

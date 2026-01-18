@@ -2786,3 +2786,100 @@ export const projectCurrencyLedgerRelations = relations(projectCurrencyLedger, (
 export const insertProjectCurrencyLedgerSchema = createInsertSchema(projectCurrencyLedger).omit({ id: true, createdAt: true });
 export type InsertProjectCurrencyLedger = z.infer<typeof insertProjectCurrencyLedgerSchema>;
 export type ProjectCurrencyLedger = typeof projectCurrencyLedger.$inferSelect;
+
+// ==================== SPECTATOR SUPPORT SYSTEM (ادعم واربح) ====================
+
+// Enums for support system
+export const supportStatusEnum = pgEnum("support_status", ["pending", "matched", "won", "lost", "cancelled", "refunded"]);
+export const supportModeEnum = pgEnum("support_mode", ["instant", "wait_for_match"]);
+export const oddsCalculationModeEnum = pgEnum("odds_calculation_mode", ["automatic", "manual"]);
+
+// Support Settings - Admin configuration for odds and algorithm
+export const supportSettings = pgTable("support_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  gameType: text("game_type").notNull().unique(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  oddsMode: oddsCalculationModeEnum("odds_mode").notNull().default("automatic"),
+  defaultOddsPlayer1: decimal("default_odds_player1", { precision: 5, scale: 2 }).notNull().default("1.90"),
+  defaultOddsPlayer2: decimal("default_odds_player2", { precision: 5, scale: 2 }).notNull().default("1.90"),
+  minSupportAmount: decimal("min_support_amount", { precision: 15, scale: 2 }).notNull().default("1.00"),
+  maxSupportAmount: decimal("max_support_amount", { precision: 15, scale: 2 }).notNull().default("10000.00"),
+  houseFeePercent: decimal("house_fee_percent", { precision: 5, scale: 2 }).notNull().default("5.00"),
+  allowInstantMatch: boolean("allow_instant_match").notNull().default(true),
+  instantMatchOdds: decimal("instant_match_odds", { precision: 5, scale: 2 }).notNull().default("1.80"),
+  winRateWeight: decimal("win_rate_weight", { precision: 5, scale: 2 }).notNull().default("0.60"),
+  experienceWeight: decimal("experience_weight", { precision: 5, scale: 2 }).notNull().default("0.25"),
+  streakWeight: decimal("streak_weight", { precision: 5, scale: 2 }).notNull().default("0.15"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSupportSettingsSchema = createInsertSchema(supportSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSupportSettings = z.infer<typeof insertSupportSettingsSchema>;
+export type SupportSettings = typeof supportSettings.$inferSelect;
+
+// Spectator Supports - Individual support entries
+export const spectatorSupports = pgTable("spectator_supports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  challengeId: varchar("challenge_id").notNull().references(() => challenges.id),
+  sessionId: varchar("session_id").references(() => liveGameSessions.id),
+  supporterId: varchar("supporter_id").notNull().references(() => users.id),
+  supportedPlayerId: varchar("supported_player_id").notNull().references(() => users.id),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  odds: decimal("odds", { precision: 5, scale: 2 }).notNull(),
+  potentialWinnings: decimal("potential_winnings", { precision: 15, scale: 2 }).notNull(),
+  mode: supportModeEnum("mode").notNull().default("wait_for_match"),
+  status: supportStatusEnum("status").notNull().default("pending"),
+  matchedSupportId: varchar("matched_support_id"),
+  houseFee: decimal("house_fee", { precision: 15, scale: 2 }).notNull().default("0.00"),
+  actualWinnings: decimal("actual_winnings", { precision: 15, scale: 2 }),
+  settledAt: timestamp("settled_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_supports_challenge").on(table.challengeId),
+  index("idx_supports_supporter").on(table.supporterId),
+  index("idx_supports_player").on(table.supportedPlayerId),
+  index("idx_supports_status").on(table.status),
+  index("idx_supports_matched").on(table.matchedSupportId),
+]);
+
+export const spectatorSupportsRelations = relations(spectatorSupports, ({ one }) => ({
+  challenge: one(challenges, { fields: [spectatorSupports.challengeId], references: [challenges.id] }),
+  session: one(liveGameSessions, { fields: [spectatorSupports.sessionId], references: [liveGameSessions.id] }),
+  supporter: one(users, { fields: [spectatorSupports.supporterId], references: [users.id] }),
+  supportedPlayer: one(users, { fields: [spectatorSupports.supportedPlayerId], references: [users.id] }),
+}));
+
+export const insertSpectatorSupportSchema = createInsertSchema(spectatorSupports).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSpectatorSupport = z.infer<typeof insertSpectatorSupportSchema>;
+export type SpectatorSupport = typeof spectatorSupports.$inferSelect;
+
+// Matched Supports - Pairs of opposing supports
+export const matchedSupports = pgTable("matched_supports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  challengeId: varchar("challenge_id").notNull().references(() => challenges.id),
+  support1Id: varchar("support1_id").notNull().references(() => spectatorSupports.id),
+  support2Id: varchar("support2_id").notNull().references(() => spectatorSupports.id),
+  totalPool: decimal("total_pool", { precision: 15, scale: 2 }).notNull(),
+  houseFeeTotal: decimal("house_fee_total", { precision: 15, scale: 2 }).notNull(),
+  winnerId: varchar("winner_id").references(() => users.id),
+  winnerSupportId: varchar("winner_support_id").references(() => spectatorSupports.id),
+  settledAt: timestamp("settled_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_matched_challenge").on(table.challengeId),
+  index("idx_matched_support1").on(table.support1Id),
+  index("idx_matched_support2").on(table.support2Id),
+]);
+
+export const matchedSupportsRelations = relations(matchedSupports, ({ one }) => ({
+  challenge: one(challenges, { fields: [matchedSupports.challengeId], references: [challenges.id] }),
+  support1: one(spectatorSupports, { fields: [matchedSupports.support1Id], references: [spectatorSupports.id] }),
+  support2: one(spectatorSupports, { fields: [matchedSupports.support2Id], references: [spectatorSupports.id] }),
+  winner: one(users, { fields: [matchedSupports.winnerId], references: [users.id] }),
+}));
+
+export const insertMatchedSupportSchema = createInsertSchema(matchedSupports).omit({ id: true, createdAt: true });
+export type InsertMatchedSupport = z.infer<typeof insertMatchedSupportSchema>;
+export type MatchedSupport = typeof matchedSupports.$inferSelect;

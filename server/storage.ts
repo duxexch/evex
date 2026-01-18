@@ -10,6 +10,7 @@ import {
   p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics, p2pSettings,
   multiplayerGames, systemConfig, adminAuditLogs, challenges,
   projectCurrencySettings, projectCurrencyWallets, projectCurrencyConversions, projectCurrencyLedger,
+  supportSettings, spectatorSupports, matchedSupports,
   type User, type InsertUser, type Agent, type InsertAgent,
   type Affiliate, type InsertAffiliate, type Game, type InsertGame,
   type Transaction, type InsertTransaction, type Complaint, type InsertComplaint,
@@ -46,6 +47,9 @@ import {
   type ProjectCurrencyWallet, type InsertProjectCurrencyWallet,
   type ProjectCurrencyConversion, type InsertProjectCurrencyConversion,
   type ProjectCurrencyLedger, type InsertProjectCurrencyLedger,
+  type SupportSettings, type InsertSupportSettings,
+  type SpectatorSupport, type InsertSpectatorSupport,
+  type MatchedSupport, type InsertMatchedSupport,
   scheduledConfigChanges,
   adminAlerts,
 } from "@shared/schema";
@@ -270,6 +274,26 @@ export interface IStorage {
   // Challenges
   getAvailableChallenges(excludeUserId?: string): Promise<any[]>;
   getActiveChallenges(): Promise<any[]>;
+
+  // Support Settings
+  getSupportSettings(gameType: string): Promise<SupportSettings | undefined>;
+  getSupportSettingsList(): Promise<SupportSettings[]>;
+  createSupportSettings(settings: InsertSupportSettings): Promise<SupportSettings>;
+  updateSupportSettings(gameType: string, data: Partial<InsertSupportSettings>): Promise<SupportSettings | undefined>;
+
+  // Spectator Supports
+  createSpectatorSupport(support: InsertSpectatorSupport): Promise<SpectatorSupport>;
+  getSpectatorSupport(id: string): Promise<SpectatorSupport | undefined>;
+  getSpectatorSupportsByChallenge(challengeId: string): Promise<SpectatorSupport[]>;
+  getSpectatorSupportsByUser(userId: string): Promise<SpectatorSupport[]>;
+  getPendingSupportsForPlayer(challengeId: string, playerId: string): Promise<SpectatorSupport[]>;
+  updateSpectatorSupport(id: string, data: Partial<SpectatorSupport>): Promise<SpectatorSupport | undefined>;
+
+  // Matched Supports
+  createMatchedSupport(matched: InsertMatchedSupport): Promise<MatchedSupport>;
+  getMatchedSupport(id: string): Promise<MatchedSupport | undefined>;
+  getMatchedSupportsByChallenge(challengeId: string): Promise<MatchedSupport[]>;
+  settleMatchedSupport(id: string, winnerId: string, winnerSupportId: string): Promise<MatchedSupport | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3255,6 +3279,104 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(challenges.startedAt))
       .limit(20);
     return result;
+  }
+
+  // ==================== SUPPORT SETTINGS ====================
+
+  async getSupportSettings(gameType: string): Promise<SupportSettings | undefined> {
+    const [result] = await db.select().from(supportSettings).where(eq(supportSettings.gameType, gameType));
+    return result || undefined;
+  }
+
+  async getSupportSettingsList(): Promise<SupportSettings[]> {
+    return db.select().from(supportSettings).orderBy(asc(supportSettings.gameType));
+  }
+
+  async createSupportSettings(settings: InsertSupportSettings): Promise<SupportSettings> {
+    const [result] = await db.insert(supportSettings).values(settings).returning();
+    return result;
+  }
+
+  async updateSupportSettings(gameType: string, data: Partial<InsertSupportSettings>): Promise<SupportSettings | undefined> {
+    const [result] = await db.update(supportSettings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(supportSettings.gameType, gameType))
+      .returning();
+    return result || undefined;
+  }
+
+  // ==================== SPECTATOR SUPPORTS ====================
+
+  async createSpectatorSupport(support: InsertSpectatorSupport): Promise<SpectatorSupport> {
+    const [result] = await db.insert(spectatorSupports).values(support).returning();
+    return result;
+  }
+
+  async getSpectatorSupport(id: string): Promise<SpectatorSupport | undefined> {
+    const [result] = await db.select().from(spectatorSupports).where(eq(spectatorSupports.id, id));
+    return result || undefined;
+  }
+
+  async getSpectatorSupportsByChallenge(challengeId: string): Promise<SpectatorSupport[]> {
+    return db.select().from(spectatorSupports)
+      .where(eq(spectatorSupports.challengeId, challengeId))
+      .orderBy(desc(spectatorSupports.createdAt));
+  }
+
+  async getSpectatorSupportsByUser(userId: string): Promise<SpectatorSupport[]> {
+    return db.select().from(spectatorSupports)
+      .where(eq(spectatorSupports.supporterId, userId))
+      .orderBy(desc(spectatorSupports.createdAt));
+  }
+
+  async getPendingSupportsForPlayer(challengeId: string, playerId: string): Promise<SpectatorSupport[]> {
+    return db.select().from(spectatorSupports)
+      .where(
+        and(
+          eq(spectatorSupports.challengeId, challengeId),
+          eq(spectatorSupports.supportedPlayerId, playerId),
+          eq(spectatorSupports.status, 'pending')
+        )
+      )
+      .orderBy(asc(spectatorSupports.createdAt));
+  }
+
+  async updateSpectatorSupport(id: string, data: Partial<SpectatorSupport>): Promise<SpectatorSupport | undefined> {
+    const [result] = await db.update(spectatorSupports)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(spectatorSupports.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  // ==================== MATCHED SUPPORTS ====================
+
+  async createMatchedSupport(matched: InsertMatchedSupport): Promise<MatchedSupport> {
+    const [result] = await db.insert(matchedSupports).values(matched).returning();
+    return result;
+  }
+
+  async getMatchedSupport(id: string): Promise<MatchedSupport | undefined> {
+    const [result] = await db.select().from(matchedSupports).where(eq(matchedSupports.id, id));
+    return result || undefined;
+  }
+
+  async getMatchedSupportsByChallenge(challengeId: string): Promise<MatchedSupport[]> {
+    return db.select().from(matchedSupports)
+      .where(eq(matchedSupports.challengeId, challengeId))
+      .orderBy(desc(matchedSupports.createdAt));
+  }
+
+  async settleMatchedSupport(id: string, winnerId: string, winnerSupportId: string): Promise<MatchedSupport | undefined> {
+    const [result] = await db.update(matchedSupports)
+      .set({
+        winnerId,
+        winnerSupportId,
+        settledAt: new Date(),
+      })
+      .where(eq(matchedSupports.id, id))
+      .returning();
+    return result || undefined;
   }
 }
 

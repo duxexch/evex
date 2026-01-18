@@ -38,6 +38,7 @@ import {
   CreditCard,
   Share2,
   Coins,
+  Heart,
 } from "lucide-react";
 import { AdminAlertsDropdown } from "@/components/admin/AdminAlertsDropdown";
 
@@ -67,6 +68,7 @@ function AdminSidebar() {
     { title: "Users", url: "/admin/users", icon: Users },
     { title: "Games", url: "/admin/games", icon: Gamepad2 },
     { title: "P2P Management", url: "/admin/p2p", icon: ArrowLeftRight },
+    { title: "Support Settings", url: "/admin/support-settings", icon: Heart },
     { title: "ID Verification", url: "/admin/id-verification", icon: IdCard },
     { title: "Support Contacts", url: "/admin/support", icon: Headset },
     { title: "Anti-Cheat", url: "/admin/anti-cheat", icon: Shield },
