@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -149,6 +150,7 @@ export default function ChallengesPage() {
   const { t, language } = useI18n();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
@@ -345,8 +347,7 @@ export default function ChallengesPage() {
   };
 
   const handleSpectate = (challenge: Challenge) => {
-    setSpectatingChallenge(challenge);
-    setShowSpectateDialog(true);
+    setLocation(`/challenge/${challenge.id}/watch`);
   };
 
   const handlePlaceBet = () => {

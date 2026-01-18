@@ -4515,6 +4515,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         houseFeePercent: odds.houseFeePercent,
         instantMatchOdds: settings?.instantMatchOdds || "1.80",
         allowInstantMatch: settings?.allowInstantMatch ?? true,
+        minSupportAmount: parseFloat(settings?.minSupportAmount || "1.00"),
+        maxSupportAmount: parseFloat(settings?.maxSupportAmount || "1000.00"),
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

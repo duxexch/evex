@@ -72,12 +72,25 @@ interface Challenge {
 }
 
 interface OddsData {
-  player1Odds: number;
-  player2Odds: number;
-  instantMatchOdds: number;
+  challengeId: string;
+  gameType: string;
+  player1: {
+    id: string;
+    username: string;
+    odds: number;
+    probability: number;
+  } | null;
+  player2: {
+    id: string;
+    username: string;
+    odds: number;
+    probability: number;
+  } | null;
   houseFeePercent: number;
-  minSupport: number;
-  maxSupport: number;
+  instantMatchOdds: string;
+  allowInstantMatch: boolean;
+  minSupportAmount: number;
+  maxSupportAmount: number;
 }
 
 interface SupportEntry {
@@ -129,10 +142,7 @@ export default function ChallengeWatchPage() {
 
   const addSupportMutation = useMutation({
     mutationFn: (data: { playerId: string; amount: number; mode: string }) =>
-      apiRequest(`/api/challenges/${challengeId}/support`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+      apiRequest("POST", `/api/challenges/${challengeId}/support`, data),
     onSuccess: () => {
       toast({
         title: language === "ar" ? "تم إضافة الدعم!" : "Support added!",
@@ -221,12 +231,13 @@ export default function ChallengeWatchPage() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const getPlayerOdds = (playerId: string) => {
+  const getPlayerOdds = (playerId: string): number => {
     if (!oddsData || !challenge) return 1.5;
+    const instantOdds = parseFloat(oddsData.instantMatchOdds) || 1.8;
     if (playerId === challenge.player1Id) {
-      return supportMode === "instant" ? oddsData.instantMatchOdds : oddsData.player1Odds;
+      return supportMode === "instant" ? instantOdds : (oddsData.player1?.odds || 1.5);
     }
-    return supportMode === "instant" ? oddsData.instantMatchOdds : oddsData.player2Odds;
+    return supportMode === "instant" ? instantOdds : (oddsData.player2?.odds || 1.5);
   };
 
   const calculatePotentialWinnings = () => {
@@ -248,12 +259,12 @@ export default function ChallengeWatchPage() {
       });
       return;
     }
-    if (oddsData && (amount < oddsData.minSupport || amount > oddsData.maxSupport)) {
+    if (oddsData && (amount < oddsData.minSupportAmount || amount > oddsData.maxSupportAmount)) {
       toast({
         title: language === "ar" ? "خطأ" : "Error",
         description: language === "ar" 
-          ? `المبلغ يجب أن يكون بين $${oddsData.minSupport} و $${oddsData.maxSupport}`
-          : `Amount must be between $${oddsData.minSupport} and $${oddsData.maxSupport}`,
+          ? `المبلغ يجب أن يكون بين $${oddsData.minSupportAmount} و $${oddsData.maxSupportAmount}`
+          : `Amount must be between $${oddsData.minSupportAmount} and $${oddsData.maxSupportAmount}`,
         variant: "destructive",
       });
       return;
@@ -344,9 +355,9 @@ export default function ChallengeWatchPage() {
                           <p className="text-xs text-muted-foreground">
                             {challenge.gameType === "chess" ? "⚪ White" : "Player 1"}
                           </p>
-                          {oddsData && (
+                          {oddsData?.player1 && (
                             <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/30">
-                              x{oddsData.player1Odds.toFixed(2)}
+                              x{oddsData.player1.odds.toFixed(2)}
                             </Badge>
                           )}
                         </div>
@@ -408,9 +419,9 @@ export default function ChallengeWatchPage() {
                           <p className="text-xs text-muted-foreground">
                             {challenge.gameType === "chess" ? "⚫ Black" : "Player 2"}
                           </p>
-                          {oddsData && challenge.player2 && (
+                          {oddsData?.player2 && challenge.player2 && (
                             <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-500 border-blue-500/30">
-                              x{oddsData.player2Odds.toFixed(2)}
+                              x{oddsData.player2.odds.toFixed(2)}
                             </Badge>
                           )}
                         </div>
@@ -462,7 +473,7 @@ export default function ChallengeWatchPage() {
                               {challenge.player1?.username}
                             </p>
                             <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                              x{(supportMode === "instant" ? oddsData?.instantMatchOdds : oddsData?.player1Odds)?.toFixed(2) || "1.50"}
+                              x{supportMode === "instant" ? (parseFloat(oddsData?.instantMatchOdds || "1.50")).toFixed(2) : (oddsData?.player1?.odds?.toFixed(2) || "1.50")}
                             </Badge>
                             <Button
                               size="sm"
@@ -497,7 +508,7 @@ export default function ChallengeWatchPage() {
                               {challenge.player2?.username}
                             </p>
                             <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
-                              x{(supportMode === "instant" ? oddsData?.instantMatchOdds : oddsData?.player2Odds)?.toFixed(2) || "1.50"}
+                              x{supportMode === "instant" ? (parseFloat(oddsData?.instantMatchOdds || "1.50")).toFixed(2) : (oddsData?.player2?.odds?.toFixed(2) || "1.50")}
                             </Badge>
                             <Button
                               size="sm"
@@ -531,8 +542,8 @@ export default function ChallengeWatchPage() {
                             <TabsContent value="instant" className="mt-3">
                               <p className="text-xs text-muted-foreground">
                                 {language === "ar" 
-                                  ? "معدل ربح ثابت x" + (oddsData?.instantMatchOdds?.toFixed(2) || "1.50") + " - نتيجة فورية!"
-                                  : "Fixed rate x" + (oddsData?.instantMatchOdds?.toFixed(2) || "1.50") + " - instant result!"}
+                                  ? "معدل ربح ثابت x" + (parseFloat(oddsData?.instantMatchOdds || "1.50")).toFixed(2) + " - نتيجة فورية!"
+                                  : "Fixed rate x" + (parseFloat(oddsData?.instantMatchOdds || "1.50")).toFixed(2) + " - instant result!"}
                               </p>
                             </TabsContent>
                             <TabsContent value="wait_for_match" className="mt-3">
@@ -550,12 +561,12 @@ export default function ChallengeWatchPage() {
                             </label>
                             <Input
                               type="number"
-                              min={oddsData?.minSupport || 1}
-                              max={oddsData?.maxSupport || 1000}
+                              min={oddsData?.minSupportAmount || 1}
+                              max={oddsData?.maxSupportAmount || 1000}
                               step="0.01"
                               value={supportAmount}
                               onChange={(e) => setSupportAmount(e.target.value)}
-                              placeholder={`${oddsData?.minSupport || 1} - ${oddsData?.maxSupport || 1000}`}
+                              placeholder={`${oddsData?.minSupportAmount || 1} - ${oddsData?.maxSupportAmount || 1000}`}
                               className="text-lg"
                               data-testid="input-support-amount"
                             />
@@ -595,8 +606,8 @@ export default function ChallengeWatchPage() {
                               <Info className="h-3 w-3" />
                               <span>
                                 {language === "ar" 
-                                  ? `رسوم المنصة: ${oddsData.houseFeePercent}% • الحد الأدنى: $${oddsData.minSupport} • الحد الأقصى: $${oddsData.maxSupport}`
-                                  : `House fee: ${oddsData.houseFeePercent}% • Min: $${oddsData.minSupport} • Max: $${oddsData.maxSupport}`}
+                                  ? `رسوم المنصة: ${oddsData.houseFeePercent}% • الحد الأدنى: $${oddsData.minSupportAmount} • الحد الأقصى: $${oddsData.maxSupportAmount}`
+                                  : `House fee: ${oddsData.houseFeePercent}% • Min: $${oddsData.minSupportAmount} • Max: $${oddsData.maxSupportAmount}`}
                               </span>
                             </div>
                           )}

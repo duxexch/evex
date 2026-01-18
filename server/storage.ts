@@ -3285,7 +3285,23 @@ export class DatabaseStorage implements IStorage {
 
   async getSupportSettings(gameType: string): Promise<SupportSettings | undefined> {
     const [result] = await db.select().from(supportSettings).where(eq(supportSettings.gameType, gameType));
-    return result || undefined;
+    if (result) return result;
+    
+    const defaultSettings: InsertSupportSettings = {
+      gameType,
+      isEnabled: true,
+      minSupportAmount: "1.00",
+      maxSupportAmount: "1000.00",
+      houseFeePercent: "5.00",
+      oddsMode: "automatic",
+      instantMatchOdds: "1.80",
+      allowInstantMatch: true,
+      winRateWeight: "0.60",
+      experienceWeight: "0.25",
+      streakWeight: "0.15",
+    };
+    const [created] = await db.insert(supportSettings).values(defaultSettings).returning();
+    return created;
   }
 
   async getSupportSettingsList(): Promise<SupportSettings[]> {
