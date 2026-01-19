@@ -48,7 +48,7 @@ import {
   Trophy,
   User,
 } from "lucide-react";
-import { apiRequest } from "./lib/queryClient";
+import { apiRequest, prefetchGames } from "./lib/queryClient";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ThemeProvider } from "@/lib/theme";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -660,6 +660,10 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    prefetchGames();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
