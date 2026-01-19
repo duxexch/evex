@@ -144,7 +144,7 @@ export function ShareMatchButton({
             </DropdownMenuItem>
           ))}
 
-          {navigator.share && (
+          {typeof navigator.share === "function" && (
             <DropdownMenuItem onClick={handleNativeShare} data-testid="share-more">
               <Send className="h-4 w-4 me-2" />
               {language === "ar" ? "المزيد..." : "More..."}
@@ -185,15 +185,17 @@ export function ShareMatchButton({
 
             <div className="grid grid-cols-4 gap-3">
               {shareLinks.map((link) => (
-                <Button
-                  key={link.name}
-                  variant="outline"
-                  className="h-16 flex-col gap-2"
-                  onClick={() => handleShare(link.url)}
-                >
-                  <link.icon className={cn("h-6 w-6", link.color)} />
-                  <span className="text-xs">{link.name}</span>
-                </Button>
+                <div key={link.name} className="flex flex-col items-center gap-2">
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => handleShare(link.url)}
+                    data-testid={`dialog-share-${link.name.toLowerCase()}`}
+                  >
+                    <link.icon className={cn("h-5 w-5", link.color)} />
+                  </Button>
+                  <span className="text-xs text-muted-foreground">{link.name}</span>
+                </div>
               ))}
             </div>
           </div>

@@ -87,6 +87,7 @@ const BalootGamePage = lazy(() => import("@/pages/games/BalootGame"));
 const PlayerProfilePage = lazy(() => import("@/pages/player-profile"));
 const LeaderboardPage = lazy(() => import("@/pages/leaderboard"));
 const SeasonalLeaderboardPage = lazy(() => import("@/pages/seasonal-leaderboard"));
+const GamesCatalogPage = lazy(() => import("@/pages/games-catalog"));
 
 const AdminLoginPage = lazy(() => import("@/pages/admin/admin-login"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin/admin-dashboard"));
@@ -621,7 +622,8 @@ function Router() {
         <Suspense fallback={<PageLoader />}>
           <Switch>
             <Route path="/" component={DashboardPage} />
-            <Route path="/games" component={GamesPage} />
+            <Route path="/games" component={GamesCatalogPage} />
+            <Route path="/games/admin" component={GamesPage} />
             <Route path="/play" component={PlayPage} />
             <Route path="/challenges" component={ChallengesPage} />
             <Route path="/lobby" component={GameLobbyPage} />

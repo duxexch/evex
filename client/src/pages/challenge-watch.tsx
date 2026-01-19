@@ -18,6 +18,7 @@ import { ChessBoard } from "@/components/games/ChessBoard";
 import { DominoBoard } from "@/components/games/DominoBoard";
 import { SpectatorPanel } from "@/components/games/SpectatorPanel";
 import { ShareMatchButton } from "@/components/games/ShareMatchButton";
+import { TikTokGiftBar, FloatingGiftsOverlay } from "@/components/games/TikTokGiftBar";
 import {
   Crown,
   Target,
@@ -251,6 +252,26 @@ export default function ChallengeWatchPage() {
     return amount * odds;
   };
 
+  const handleSendGift = useCallback((giftId: string, playerId: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      toast({
+        title: language === "ar" ? "خطأ" : "Error",
+        description: language === "ar" ? "غير متصل" : "Not connected",
+        variant: "destructive",
+      });
+      return;
+    }
+    wsRef.current.send(JSON.stringify({
+      type: "send_gift",
+      challengeId,
+      giftId,
+      recipientId: playerId,
+    }));
+    toast({
+      title: language === "ar" ? "تم الإرسال!" : "Gift Sent!",
+    });
+  }, [challengeId, language, toast]);
+
   const handleAddSupport = () => {
     if (!selectedPlayer || !supportAmount) return;
     const amount = parseFloat(supportAmount);
@@ -305,8 +326,8 @@ export default function ChallengeWatchPage() {
   const isRTL = language === "ar";
 
   return (
-    <div className="min-h-screen bg-background" dir={isRTL ? "rtl" : "ltr"}>
-      <div className="flex flex-col lg:flex-row h-screen">
+    <div className="min-h-screen bg-background pb-24" dir={isRTL ? "rtl" : "ltr"}>
+      <div className="flex flex-col lg:flex-row min-h-screen">
         <div className="flex-1 flex flex-col overflow-hidden">
           <header className="flex items-center justify-between gap-4 p-3 border-b bg-card">
             <div className="flex items-center gap-3">
@@ -702,6 +723,20 @@ export default function ChallengeWatchPage() {
           </div>
         </div>
       </div>
+
+      <FloatingGiftsOverlay 
+        gifts={receivedGifts.map(g => ({ id: g.id, giftId: g.giftId || 'heart', senderName: g.senderName }))} 
+      />
+
+      <TikTokGiftBar
+        onSendGift={handleSendGift}
+        player1Id={challenge?.player1Id}
+        player2Id={challenge?.player2Id}
+        player1Name={challenge?.player1?.username}
+        player2Name={challenge?.player2?.username}
+        disabled={!user}
+        className="fixed bottom-0 left-0 right-0 z-30"
+      />
 
       {gameSession?.status === "finished" && (
         <Dialog open={true}>
