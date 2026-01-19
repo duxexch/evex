@@ -1083,11 +1083,14 @@ export default function AdminUnifiedGames() {
               }
             </DialogDescription>
           </DialogHeader>
-          <GameForm
-            game={editingGame}
-            onSuccess={handleFormSuccess}
-            onCancel={() => setIsFormOpen(false)}
-          />
+          {isFormOpen && (
+            <GameForm
+              key={editingGame?.id ?? "new"}
+              game={editingGame}
+              onSuccess={handleFormSuccess}
+              onCancel={() => setIsFormOpen(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
