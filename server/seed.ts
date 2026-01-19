@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { 
   games, languages, currencies, countryPaymentMethods, 
-  themes, p2pSettings, financialLimits, promoCodes
+  themes, p2pSettings, financialLimits, promoCodes, giftCatalog
 } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
@@ -526,6 +526,34 @@ export async function seedMultiplayerGames() {
     console.log(`[Seed] Added ${addedCount} multiplayer games`);
   } else {
     console.log("Multiplayer games already seeded");
+  }
+}
+
+export async function seedGiftCatalog() {
+  const defaultGifts = [
+    { name: "Rose", nameAr: "وردة", price: "0.50", iconUrl: "heart", category: "love", animationType: "float", coinValue: 5, sortOrder: 1 },
+    { name: "Fire", nameAr: "نار", price: "1.00", iconUrl: "flame", category: "gaming", animationType: "burst", coinValue: 10, sortOrder: 2 },
+    { name: "Trophy", nameAr: "كأس", price: "5.00", iconUrl: "trophy", category: "celebration", animationType: "spin", coinValue: 50, sortOrder: 3 },
+    { name: "Crown", nameAr: "تاج", price: "10.00", iconUrl: "crown", category: "celebration", animationType: "rain", coinValue: 100, sortOrder: 4 },
+    { name: "Rocket", nameAr: "صاروخ", price: "25.00", iconUrl: "rocket", category: "gaming", animationType: "burst", coinValue: 250, sortOrder: 5 },
+    { name: "Diamond", nameAr: "ماسة", price: "50.00", iconUrl: "gem", category: "love", animationType: "spin", coinValue: 500, sortOrder: 6 },
+    { name: "Star", nameAr: "نجمة", price: "2.00", iconUrl: "star", category: "general", animationType: "float", coinValue: 20, sortOrder: 7 },
+    { name: "Lightning", nameAr: "برق", price: "3.00", iconUrl: "zap", category: "gaming", animationType: "burst", coinValue: 30, sortOrder: 8 },
+  ];
+
+  let addedCount = 0;
+  for (const gift of defaultGifts) {
+    const [existing] = await db.select().from(giftCatalog).where(eq(giftCatalog.name, gift.name));
+    if (!existing) {
+      await db.insert(giftCatalog).values(gift);
+      addedCount++;
+    }
+  }
+  
+  if (addedCount > 0) {
+    console.log(`[Seed] Added ${addedCount} gifts to catalog`);
+  } else {
+    console.log("Gift catalog already seeded");
   }
 }
 

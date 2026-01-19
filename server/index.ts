@@ -5,7 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupGameWebSocket } from "./game-websocket";
 import { seedBotAccounts } from "./bot-seeder";
-import { seedMultiplayerGames } from "./seed";
+import { seedMultiplayerGames, seedGiftCatalog } from "./seed";
 import { startBotSimulator } from "./bot-game-simulator";
 
 const app = express();
@@ -211,11 +211,12 @@ process.on('unhandledRejection', (reason, promise) => {
     async () => {
       log(`serving on port ${port}`);
       
-      // Seed multiplayer games (runs on both dev and production)
+      // Seed multiplayer games and gift catalog (runs on both dev and production)
       try {
         await seedMultiplayerGames();
+        await seedGiftCatalog();
       } catch (error: any) {
-        log(`Multiplayer games seed error: ${error.message}`, "seed");
+        log(`Seed error: ${error.message}`, "seed");
       }
       
       // Initialize bot accounts and start game simulator

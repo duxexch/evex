@@ -6,6 +6,7 @@ import {
   notifications, userSessions, loginHistory, announcements, announcementViews, userPreferences,
   userRelationships, socialPlatforms,
   liveGameSessions, gameMoves, gameSpectators, giftItems, spectatorGifts, gameChatMessages,
+  giftCatalog, userGiftInventory, challengeGifts,
   achievements, userAchievements, seasons, seasonalStats, seasonRewards,
   p2pTrades, p2pOffers, p2pTradeMessages, p2pTraderRatings, p2pTraderMetrics, p2pSettings,
   multiplayerGames, systemConfig, adminAuditLogs, challenges,
@@ -33,6 +34,9 @@ import {
   type GameSpectator, type InsertGameSpectator,
   type GiftItem, type InsertGiftItem,
   type SpectatorGift, type InsertSpectatorGift,
+  type GiftCatalog, type InsertGiftCatalog,
+  type UserGiftInventory, type InsertUserGiftInventory,
+  type ChallengeGift, type InsertChallengeGift,
   type GameChatMessage, type InsertGameChatMessage,
   type Achievement, type InsertAchievement,
   type UserAchievement, type InsertUserAchievement,
@@ -1518,6 +1522,92 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(spectatorGifts)
       .where(eq(spectatorGifts.recipientId, playerId))
       .orderBy(desc(spectatorGifts.createdAt));
+  }
+
+  // Gift Catalog (for challenges/streaming)
+  async listGiftCatalog(activeOnly: boolean = true): Promise<GiftCatalog[]> {
+    let query = db.select().from(giftCatalog);
+    if (activeOnly) {
+      query = query.where(eq(giftCatalog.isActive, true)) as any;
+    }
+    return query.orderBy(asc(giftCatalog.sortOrder));
+  }
+
+  async getGiftFromCatalog(id: string): Promise<GiftCatalog | undefined> {
+    const [gift] = await db.select().from(giftCatalog).where(eq(giftCatalog.id, id));
+    return gift || undefined;
+  }
+
+  async createGiftInCatalog(gift: InsertGiftCatalog): Promise<GiftCatalog> {
+    const [created] = await db.insert(giftCatalog).values(gift).returning();
+    return created;
+  }
+
+  // User Gift Inventory
+  async getUserGiftInventory(userId: string): Promise<(UserGiftInventory & { gift: GiftCatalog })[]> {
+    const results = await db.select({
+      inventory: userGiftInventory,
+      gift: giftCatalog,
+    }).from(userGiftInventory)
+      .innerJoin(giftCatalog, eq(userGiftInventory.giftId, giftCatalog.id))
+      .where(eq(userGiftInventory.userId, userId));
+    
+    return results.map(r => ({ ...r.inventory, gift: r.gift }));
+  }
+
+  async addToUserGiftInventory(userId: string, giftId: string, quantity: number = 1): Promise<UserGiftInventory> {
+    const existing = await db.select().from(userGiftInventory)
+      .where(and(
+        eq(userGiftInventory.userId, userId),
+        eq(userGiftInventory.giftId, giftId)
+      ));
+    
+    if (existing.length > 0) {
+      const [updated] = await db.update(userGiftInventory)
+        .set({ quantity: existing[0].quantity + quantity, updatedAt: new Date() })
+        .where(eq(userGiftInventory.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(userGiftInventory)
+      .values({ userId, giftId, quantity })
+      .returning();
+    return created;
+  }
+
+  async removeFromUserGiftInventory(userId: string, giftId: string, quantity: number = 1): Promise<{ success: boolean; error?: string }> {
+    const [existing] = await db.select().from(userGiftInventory)
+      .where(and(
+        eq(userGiftInventory.userId, userId),
+        eq(userGiftInventory.giftId, giftId)
+      ));
+    
+    if (!existing || existing.quantity < quantity) {
+      return { success: false, error: "Insufficient gift quantity" };
+    }
+    
+    if (existing.quantity === quantity) {
+      await db.delete(userGiftInventory).where(eq(userGiftInventory.id, existing.id));
+    } else {
+      await db.update(userGiftInventory)
+        .set({ quantity: existing.quantity - quantity, updatedAt: new Date() })
+        .where(eq(userGiftInventory.id, existing.id));
+    }
+    
+    return { success: true };
+  }
+
+  // Challenge Gifts
+  async sendChallengeGift(gift: InsertChallengeGift): Promise<ChallengeGift> {
+    const [created] = await db.insert(challengeGifts).values(gift).returning();
+    return created;
+  }
+
+  async getChallengeGifts(challengeId: string): Promise<ChallengeGift[]> {
+    return db.select().from(challengeGifts)
+      .where(eq(challengeGifts.challengeId, challengeId))
+      .orderBy(desc(challengeGifts.sentAt));
   }
 
   // Game Chat Messages
