@@ -904,11 +904,33 @@ export default function AdminUnifiedGames() {
             <Settings2 className="h-6 w-6" />
             {language === "ar" ? "إدارة الألعاب" : "Games Management"}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             {language === "ar" 
-              ? `إجمالي ${games.length} لعبة - ${statusCounts.active} نشطة، ${statusCounts.listed} مدرجة، ${statusCounts.inactive} خاملة`
-              : `Total ${games.length} games - ${statusCounts.active} active, ${statusCounts.listed} listed, ${statusCounts.inactive} inactive`
+              ? `عرض ${filteredGames.length} من ${games.length} لعبة`
+              : `Showing ${filteredGames.length} of ${games.length} games`
             }
+            {activeCategory !== "all" && (
+              <span className="mx-2">•</span>
+            )}
+            {activeCategory !== "all" && (
+              <span>
+                {language === "ar" 
+                  ? GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelAr
+                  : GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelEn
+                }
+              </span>
+            )}
+            {displayLocationFilter !== "all" && (
+              <span className="mx-2">•</span>
+            )}
+            {displayLocationFilter !== "all" && (
+              <span>
+                {language === "ar" 
+                  ? DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr
+                  : DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn
+                }
+              </span>
+            )}
           </p>
         </div>
         <Button onClick={() => { setEditingGame(null); setIsFormOpen(true); }} data-testid="button-add-game">
