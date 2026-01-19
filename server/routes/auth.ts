@@ -13,9 +13,7 @@ import {
   registrationRateLimiter,
   strictRateLimiter
 } from "./middleware";
-
-const JWT_USER_SECRET = process.env.JWT_SECRET || "development-secret-key";
-const JWT_USER_EXPIRY = "7d";
+import { JWT_USER_SECRET, JWT_USER_EXPIRY } from "../lib/auth-config";
 
 export function registerAuthRoutes(app: Express) {
   // One-click registration - generates account ID and password automatically
