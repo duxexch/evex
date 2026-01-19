@@ -6242,7 +6242,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Log admin action
       await storage.createAdminAuditLog({
         adminId: req.user!.id,
-        action: 'create',
+        action: 'game_update',
         entityType: 'multiplayer_game',
         entityId: game.id,
         newValue: game,
@@ -6275,7 +6275,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Log admin action
       await storage.createAdminAuditLog({
         adminId: req.user!.id,
-        action: 'update',
+        action: 'game_update',
         entityType: 'multiplayer_game',
         entityId: id,
         oldValue: oldGame,
@@ -6309,7 +6309,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Log admin action
       await storage.createAdminAuditLog({
         adminId: req.user!.id,
-        action: 'toggle',
+        action: 'game_update',
         entityType: 'multiplayer_game',
         entityId: id,
         oldValue: { isActive: game.isActive },
@@ -6343,7 +6343,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Log admin action
       await storage.createAdminAuditLog({
         adminId: req.user!.id,
-        action: 'delete',
+        action: 'game_update',
         entityType: 'multiplayer_game',
         entityId: id,
         oldValue: game,
