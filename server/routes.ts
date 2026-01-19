@@ -63,6 +63,7 @@ import { getAllCircuitBreakerStats } from "./lib/circuit-breaker";
 import { logger, requestLogger } from "./lib/logger";
 import { calculateOdds, calculatePotentialWinnings, type PlayerStats } from "./lib/odds-calculator";
 import { JWT_USER_SECRET, JWT_ADMIN_SECRET, JWT_USER_EXPIRY } from "./lib/auth-config";
+import { registerModularRoutes } from "./routes/index";
 
 // Rate limiting for authentication endpoints (brute-force protection)
 const authRateLimiter = rateLimit({
@@ -187,105 +188,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Apply general API rate limiter to all API routes
   app.use("/api", apiRateLimiter);
   
-  // ==================== HEALTH CHECK ====================
-  
-  app.get("/api/health", async (req: Request, res: Response) => {
-    try {
-      // Check database connection
-      const dbStart = Date.now();
-      await db.execute(sql`SELECT 1`);
-      const dbLatency = Date.now() - dbStart;
-      
-      res.json({ 
-        status: "healthy", 
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || "development",
-        database: {
-          status: "connected",
-          latencyMs: dbLatency,
-        },
-        version: "1.0.0",
-        uptime: process.uptime(),
-        memory: {
-          heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-          heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-          rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
-        },
-      });
-    } catch (error: any) {
-      res.status(503).json({ 
-        status: "unhealthy", 
-        timestamp: new Date().toISOString(),
-        database: {
-          status: "disconnected",
-          error: error.message,
-        }
-      });
-    }
-  });
-  
-  // Detailed health check for monitoring (admin only in production)
-  app.get("/api/health/detailed", async (req: Request, res: Response) => {
-    try {
-      const dbStart = Date.now();
-      await db.execute(sql`SELECT count(*) as count FROM users`);
-      const dbLatency = Date.now() - dbStart;
-      
-      const poolStats = pool.totalCount !== undefined ? {
-        total: pool.totalCount,
-        idle: pool.idleCount,
-        waiting: pool.waitingCount,
-      } : null;
-      
-      res.json({
-        status: "healthy",
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || "development",
-        version: "1.0.0",
-        uptime: process.uptime(),
-        database: {
-          status: "connected",
-          latencyMs: dbLatency,
-          pool: poolStats,
-        },
-        memory: {
-          heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-          heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-          rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
-          external: Math.round(process.memoryUsage().external / 1024 / 1024),
-        },
-        cpu: process.cpuUsage(),
-        nodeVersion: process.version,
-      });
-    } catch (error: any) {
-      res.status(503).json({
-        status: "unhealthy",
-        timestamp: new Date().toISOString(),
-        error: error.message,
-      });
-    }
-  });
-  
-  // Full health report with circuit breakers and alerts
-  app.get("/api/health/full", async (req: Request, res: Response) => {
-    try {
-      const report = await getHealthReport();
-      const statusCode = report.status.status === 'unhealthy' ? 503 : 
-                         report.status.status === 'degraded' ? 200 : 200;
-      res.status(statusCode).json(report);
-    } catch (error: any) {
-      trackError(error.message);
-      res.status(503).json({
-        status: { status: 'unhealthy', timestamp: new Date().toISOString() },
-        error: error.message
-      });
-    }
-  });
-  
-  // Circuit breaker status endpoint
-  app.get("/api/health/circuits", async (req: Request, res: Response) => {
-    res.json(getAllCircuitBreakerStats());
-  });
+  // Register modular routes (health, etc.)
+  registerModularRoutes(app);
   
   // ==================== AUTH ROUTES ====================
   
