@@ -549,43 +549,49 @@ function GameForm({
           <FormField
             control={form.control}
             name="displayLocations"
-            render={({ field }) => (
-              <FormItem>
-                <div className="grid grid-cols-2 gap-3">
-                  {DISPLAY_LOCATIONS.map((location) => {
-                    const IconComp = location.icon;
-                    const isChecked = field.value.includes(location.key);
-                    return (
-                      <div
-                        key={location.key}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
-                          isChecked
-                            ? "border-primary bg-primary/10"
-                            : "border-muted"
-                        }`}
-                        onClick={() => {
-                          const newValue = isChecked
-                            ? field.value.filter((v: string) => v !== location.key)
-                            : [...field.value, location.key];
-                          field.onChange(newValue);
-                        }}
-                        data-testid={`checkbox-location-${location.key}`}
-                      >
-                        <Checkbox
-                          checked={isChecked}
-                          className="pointer-events-none"
-                        />
-                        <IconComp className="h-4 w-4" />
-                        <span className="text-sm">
-                          {language === "ar" ? location.labelAr : location.labelEn}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
+            render={({ field }) => {
+              const currentValue = Array.isArray(field.value) ? field.value : [];
+              return (
+                <FormItem>
+                  <div className="grid grid-cols-2 gap-3">
+                    {DISPLAY_LOCATIONS.map((location) => {
+                      const IconComp = location.icon;
+                      const isChecked = currentValue.includes(location.key);
+                      return (
+                        <div
+                          key={location.key}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
+                            isChecked
+                              ? "border-primary bg-primary/10"
+                              : "border-muted"
+                          }`}
+                          onClick={() => {
+                            const newValue = isChecked
+                              ? currentValue.filter((v) => v !== location.key)
+                              : [...currentValue, location.key];
+                            form.setValue("displayLocations", newValue, { 
+                              shouldValidate: true, 
+                              shouldDirty: true 
+                            });
+                          }}
+                          data-testid={`checkbox-location-${location.key}`}
+                        >
+                          <Checkbox
+                            checked={isChecked}
+                            className="pointer-events-none"
+                          />
+                          <IconComp className="h-4 w-4" />
+                          <span className="text-sm">
+                            {language === "ar" ? location.labelAr : location.labelEn}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
         </div>
 
