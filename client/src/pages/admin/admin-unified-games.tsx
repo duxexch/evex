@@ -899,18 +899,13 @@ export default function AdminUnifiedGames() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Settings2 className="h-6 w-6" />
-            {language === "ar" ? "إدارة الألعاب" : "Games Management"}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {language === "ar" 
-              ? `عرض ${filteredGames.length} من ${games.length} لعبة`
-              : `Showing ${filteredGames.length} of ${games.length} games`
-            }
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Settings2 className="h-6 w-6" />
+          {language === "ar" ? "إدارة الألعاب" : "Games Management"}
+          <Badge variant="secondary" className="text-sm font-normal">
+            {games.length}
+          </Badge>
+        </h1>
         <Button onClick={() => { setEditingGame(null); setIsFormOpen(true); }} data-testid="button-add-game">
           <Plus className="h-4 w-4 mr-2" />
           {language === "ar" ? "إضافة لعبة" : "Add Game"}
@@ -953,11 +948,12 @@ export default function AdminUnifiedGames() {
         })}
       </div>
 
-      <div className="flex items-center gap-4 flex-wrap">
+      {/* Search and Filters Row */}
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={language === "ar" ? "بحث عن لعبة..." : "Search games..."}
+            placeholder={language === "ar" ? "بحث..." : "Search..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -966,8 +962,7 @@ export default function AdminUnifiedGames() {
         </div>
 
         <Select value={activeCategory} onValueChange={setActiveCategory}>
-          <SelectTrigger className="w-44" data-testid="select-category-filter">
-            <Gamepad2 className="h-4 w-4 mr-2" />
+          <SelectTrigger className="w-40" data-testid="select-category-filter">
             <SelectValue placeholder={language === "ar" ? "الفئة" : "Category"} />
           </SelectTrigger>
           <SelectContent>
@@ -986,34 +981,43 @@ export default function AdminUnifiedGames() {
         </Select>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44" data-testid="select-status-filter">
-            <Filter className="h-4 w-4 mr-2" />
+          <SelectTrigger className="w-36" data-testid="select-status-filter">
             <SelectValue placeholder={language === "ar" ? "الحالة" : "Status"} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">
-              {language === "ar" ? "جميع الحالات" : "All Statuses"} ({statusCounts.all})
+              {language === "ar" ? "جميع الحالات" : "All Statuses"}
             </SelectItem>
             <SelectItem value="active">
               <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500" />
-                {language === "ar" ? "نشطة" : "Active"} ({statusCounts.active})
+                {language === "ar" ? "نشطة" : "Active"}
               </span>
             </SelectItem>
             <SelectItem value="listed">
               <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-yellow-500" />
-                {language === "ar" ? "مدرجة" : "Listed"} ({statusCounts.listed})
+                {language === "ar" ? "مدرجة" : "Listed"}
               </span>
             </SelectItem>
             <SelectItem value="inactive">
               <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-red-500" />
-                {language === "ar" ? "خاملة" : "Inactive"} ({statusCounts.inactive})
+                {language === "ar" ? "خاملة" : "Inactive"}
               </span>
             </SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Results count - shows when filters reduce results */}
+        {filteredGames.length !== games.length && (
+          <span className="text-sm text-muted-foreground">
+            {language === "ar" 
+              ? `${filteredGames.length} نتيجة`
+              : `${filteredGames.length} results`
+            }
+          </span>
+        )}
       </div>
 
       {filteredGames.length === 0 ? (
