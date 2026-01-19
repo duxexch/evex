@@ -431,19 +431,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "Platform daily conversion limit reached. Try again tomorrow." });
       }
 
-      const result = await storage.convertToProjectCurrencyAtomic(req.user!.id, parsedAmount);
+      const result = await storage.convertToProjectCurrencyAtomic(req.user!.id, String(parsedAmount));
       if (!result.success) {
         return res.status(400).json({ error: result.error });
       }
 
+      const conversion = result.conversion!;
       res.json({
-        message: result.status === "pending" 
+        message: conversion.status === "pending" 
           ? "Conversion submitted for admin approval" 
           : "Conversion completed successfully",
-        status: result.status,
-        conversionId: result.conversionId,
-        creditedAmount: result.creditedAmount,
-        commissionAmount: result.commissionAmount,
+        status: conversion.status,
+        conversionId: conversion.id,
+        creditedAmount: conversion.netAmount,
+        commissionAmount: conversion.commissionAmount,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

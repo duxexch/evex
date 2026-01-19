@@ -2,10 +2,10 @@ import type { Express, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, desc, or } from "drizzle-orm";
-import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable } from "@shared/schema";
+import { eq, desc, or, and, isNull } from "drizzle-orm";
+import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable, notifications } from "@shared/schema";
 import { authMiddleware, AuthRequest } from "./middleware";
-import { broadcastChallengeUpdate } from "../websocket";
+import { broadcastChallengeUpdate, broadcastNotification } from "../websocket";
 
 // In-memory stores for challenges (should be moved to DB in production)
 const challenges: any[] = [];
@@ -194,6 +194,12 @@ export function registerChallengesRoutes(app: Express): void {
   app.post("/api/challenges", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const { gameType, betAmount, opponentType, friendAccountId, visibility = 'public', currencyType = 'usd' } = req.body;
+      const parsedBetAmount = parseFloat(String(betAmount || 0));
+      
+      // Validate amount is positive
+      if (isNaN(parsedBetAmount) || parsedBetAmount <= 0) {
+        return res.status(400).json({ error: "Invalid bet amount" });
+      }
       
       // VALIDATION: Verify game exists and is active in database (Single Source of Truth)
       const validation = await storage.validateGameConfig(gameType, String(betAmount || 0));
@@ -201,39 +207,93 @@ export function registerChallengesRoutes(app: Express): void {
         return res.status(400).json({ error: validation.error });
       }
       
-      // Check if project currency is enabled for games when using project currency
-      if (currencyType === 'project') {
-        const settings = await storage.getProjectCurrencySettings();
-        if (!settings?.isActive || !settings?.useInGames) {
-          return res.status(400).json({ error: "Project currency is not available for games" });
-        }
-        
-        // Check user's project currency balance
-        const wallet = await storage.getProjectCurrencyWallet(req.user!.id);
-        const totalBalance = parseFloat(wallet?.purchasedBalance || '0') + parseFloat(wallet?.earnedBalance || '0');
-        if (totalBalance < parseFloat(String(betAmount || 0))) {
-          return res.status(400).json({ error: "Insufficient project currency balance" });
-        }
-      }
-      
       const gameConfig = validation.game!;
       const timeLimit = gameConfig.defaultTimeLimit || 300;
+      const userId = req.user!.id;
       
-      // Insert challenge into database for persistence
-      const [dbChallenge] = await db.insert(challengesTable).values({
-        gameType,
-        betAmount: String(betAmount),
-        currencyType,
-        visibility,
-        status: 'waiting',
-        player1Id: req.user!.id,
-        player2Id: opponentType === 'friend' ? friendAccountId : null,
-        opponentType,
-        friendAccountId: opponentType === 'friend' ? friendAccountId : null,
-        timeLimit,
-        player1Score: 0,
-        player2Score: 0,
-      }).returning();
+      // Use transaction to check balance and deduct + create challenge atomically
+      const [dbChallenge] = await db.transaction(async (tx) => {
+        if (currencyType === 'project') {
+          // Check if project currency is enabled for games
+          const settings = await storage.getProjectCurrencySettings();
+          if (!settings?.isActive || !settings?.useInGames) {
+            throw new Error("Project currency is not available for games");
+          }
+          
+          // Lock and check user's project currency balance
+          const [wallet] = await tx.select()
+            .from(projectCurrencyWallets)
+            .where(eq(projectCurrencyWallets.userId, userId))
+            .for('update');
+          
+          if (!wallet) {
+            throw new Error('Project currency wallet not found');
+          }
+          
+          let earnedBalance = parseFloat(wallet.earnedBalance);
+          let purchasedBalance = parseFloat(wallet.purchasedBalance);
+          const totalBalance = earnedBalance + purchasedBalance;
+          
+          if (totalBalance < parsedBetAmount) {
+            throw new Error("Insufficient project currency balance to create this challenge");
+          }
+          
+          // Deduct from earned first, then purchased
+          let remaining = parsedBetAmount;
+          if (earnedBalance >= remaining) {
+            earnedBalance -= remaining;
+            remaining = 0;
+          } else {
+            remaining -= earnedBalance;
+            earnedBalance = 0;
+            purchasedBalance -= remaining;
+          }
+          
+          await tx.update(projectCurrencyWallets)
+            .set({ 
+              earnedBalance: earnedBalance.toFixed(8),
+              purchasedBalance: purchasedBalance.toFixed(8),
+              updatedAt: new Date()
+            })
+            .where(eq(projectCurrencyWallets.userId, userId));
+        } else {
+          // Check and deduct USD balance
+          const [userRecord] = await tx.select()
+            .from(users)
+            .where(eq(users.id, userId))
+            .for('update');
+          
+          if (!userRecord) {
+            throw new Error('User not found');
+          }
+          
+          const currentBalance = parseFloat(userRecord.balance);
+          if (currentBalance < parsedBetAmount) {
+            throw new Error('Insufficient balance to create this challenge');
+          }
+          
+          // Deduct balance
+          await tx.update(users)
+            .set({ balance: (currentBalance - parsedBetAmount).toString() })
+            .where(eq(users.id, userId));
+        }
+        
+        // Insert challenge into database
+        return await tx.insert(challengesTable).values({
+          gameType,
+          betAmount: String(betAmount),
+          currencyType,
+          visibility,
+          status: 'waiting',
+          player1Id: userId,
+          player2Id: opponentType === 'friend' ? friendAccountId : null,
+          opponentType,
+          friendAccountId: opponentType === 'friend' ? friendAccountId : null,
+          timeLimit,
+          player1Score: 0,
+          player2Score: 0,
+        }).returning();
+      });
       
       // Get player details for response
       const player1 = await storage.getUser(req.user!.id);
@@ -259,6 +319,29 @@ export function registerChallengesRoutes(app: Express): void {
       
       // Broadcast new challenge to all connected clients for real-time updates
       broadcastChallengeUpdate('created', challenge);
+      
+      // Notify followers of the challenger about the new challenge
+      const followers = await storage.getUserFollowers(req.user!.id);
+      if (followers.length > 0) {
+        const followerIds = followers.map(f => f.userId);
+        const gameName = gameType.charAt(0).toUpperCase() + gameType.slice(1);
+        
+        await broadcastNotification({
+          type: "system",
+          priority: "normal",
+          title: "New Challenge",
+          titleAr: "تحدي جديد",
+          message: `${player1?.nickname || player1?.username} started a ${gameName} challenge for $${parsedBetAmount}! Watch and support now.`,
+          messageAr: `${player1?.nickname || player1?.username} بدأ تحدي ${gameName} بقيمة $${parsedBetAmount}! شاهد وادعم الآن.`,
+          link: `/watch/${dbChallenge.id}`,
+          metadata: JSON.stringify({ 
+            challengeId: dbChallenge.id, 
+            gameType, 
+            betAmount: parsedBetAmount,
+            action: 'watch_and_support'
+          }),
+        }, followerIds);
+      }
       
       res.json(challenge);
     } catch (error: any) {
@@ -372,15 +455,24 @@ export function registerChallengesRoutes(app: Express): void {
             .where(eq(users.id, userId));
         }
         
-        // Update challenge in database
-        await tx.update(challengesTable)
+        // Update challenge in database with race condition protection
+        const updateResult = await tx.update(challengesTable)
           .set({ 
             player2Id: userId,
             status: 'active',
             startedAt: new Date(),
             updatedAt: new Date()
           })
-          .where(eq(challengesTable.id, challengeId));
+          .where(and(
+            eq(challengesTable.id, challengeId),
+            eq(challengesTable.status, 'waiting'),
+            isNull(challengesTable.player2Id)
+          ))
+          .returning();
+        
+        if (updateResult.length === 0) {
+          throw new Error('Challenge is no longer available - already taken or cancelled');
+        }
         
       });
       
@@ -408,6 +500,9 @@ export function registerChallengesRoutes(app: Express): void {
       challengeJoinLocks.delete(challengeId);
       if (error.message.includes('Insufficient')) {
         return res.status(400).json({ error: error.message });
+      }
+      if (error.message.includes('no longer available') || error.message.includes('already taken')) {
+        return res.status(409).json({ error: error.message });
       }
       res.status(500).json({ error: error.message });
     }
