@@ -555,12 +555,6 @@ function GameForm({
                   {DISPLAY_LOCATIONS.map((location) => {
                     const IconComp = location.icon;
                     const isChecked = field.value.includes(location.key);
-                    const handleToggle = () => {
-                      const newValue = isChecked
-                        ? field.value.filter((v) => v !== location.key)
-                        : [...field.value, location.key];
-                      field.onChange(newValue);
-                    };
                     return (
                       <div
                         key={location.key}
@@ -569,13 +563,17 @@ function GameForm({
                             ? "border-primary bg-primary/10"
                             : "border-muted"
                         }`}
-                        onClick={handleToggle}
+                        onClick={() => {
+                          const newValue = isChecked
+                            ? field.value.filter((v: string) => v !== location.key)
+                            : [...field.value, location.key];
+                          field.onChange(newValue);
+                        }}
                         data-testid={`checkbox-location-${location.key}`}
                       >
                         <Checkbox
                           checked={isChecked}
-                          onClick={(e) => e.stopPropagation()}
-                          onCheckedChange={() => handleToggle()}
+                          className="pointer-events-none"
                         />
                         <IconComp className="h-4 w-4" />
                         <span className="text-sm">
