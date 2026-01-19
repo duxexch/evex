@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
@@ -918,27 +917,28 @@ export default function AdminUnifiedGames() {
         </Button>
       </div>
 
-      <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap h-auto p-1 bg-muted/50">
-          {GAME_CATEGORIES.map((cat) => {
-            const IconComp = cat.icon;
-            return (
-              <TabsTrigger 
-                key={cat.key} 
-                value={cat.key}
-                className="flex items-center gap-2 whitespace-nowrap"
-                data-testid={`tab-category-${cat.key}`}
-              >
-                <IconComp className="h-4 w-4" />
-                {language === "ar" ? cat.labelAr : cat.labelEn}
-                <Badge variant="secondary" className="ml-1 text-xs">
-                  {categoryCounts[cat.key] || 0}
-                </Badge>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-      </Tabs>
+      {/* Category Filter Tabs */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {GAME_CATEGORIES.map((cat) => {
+          const IconComp = cat.icon;
+          return (
+            <Button
+              key={cat.key}
+              variant={activeCategory === cat.key ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveCategory(cat.key)}
+              data-testid={`tab-category-${cat.key}`}
+              className="gap-2"
+            >
+              <IconComp className="h-4 w-4" />
+              {language === "ar" ? cat.labelAr : cat.labelEn}
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {categoryCounts[cat.key] || 0}
+              </Badge>
+            </Button>
+          );
+        })}
+      </div>
 
       {/* Display Location Filter Tabs */}
       <div className="flex items-center gap-2 flex-wrap">
