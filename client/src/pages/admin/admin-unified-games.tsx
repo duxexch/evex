@@ -554,30 +554,28 @@ function GameForm({
                 <div className="grid grid-cols-2 gap-3">
                   {DISPLAY_LOCATIONS.map((location) => {
                     const IconComp = location.icon;
+                    const isChecked = field.value.includes(location.key);
+                    const handleToggle = () => {
+                      const newValue = isChecked
+                        ? field.value.filter((v) => v !== location.key)
+                        : [...field.value, location.key];
+                      field.onChange(newValue);
+                    };
                     return (
                       <div
                         key={location.key}
                         className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
-                          field.value.includes(location.key)
+                          isChecked
                             ? "border-primary bg-primary/10"
                             : "border-muted"
                         }`}
-                        onClick={() => {
-                          const newValue = field.value.includes(location.key)
-                            ? field.value.filter((v) => v !== location.key)
-                            : [...field.value, location.key];
-                          field.onChange(newValue);
-                        }}
+                        onClick={handleToggle}
                         data-testid={`checkbox-location-${location.key}`}
                       >
                         <Checkbox
-                          checked={field.value.includes(location.key)}
-                          onCheckedChange={(checked) => {
-                            const newValue = checked
-                              ? [...field.value, location.key]
-                              : field.value.filter((v) => v !== location.key);
-                            field.onChange(newValue);
-                          }}
+                          checked={isChecked}
+                          onClick={(e) => e.stopPropagation()}
+                          onCheckedChange={() => handleToggle()}
                         />
                         <IconComp className="h-4 w-4" />
                         <span className="text-sm">
