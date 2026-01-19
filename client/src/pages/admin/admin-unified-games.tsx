@@ -684,6 +684,7 @@ export default function AdminUnifiedGames() {
   const { language } = useI18n();
   const [activeCategory, setActiveCategory] = useState("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [displayLocationFilter, setDisplayLocationFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<MultiplayerGame | null>(null);
@@ -785,11 +786,13 @@ export default function AdminUnifiedGames() {
   const filteredGames = games.filter((game) => {
     const matchesCategory = activeCategory === "all" || game.category === activeCategory;
     const matchesStatus = statusFilter === "all" || game.status === statusFilter;
+    const matchesDisplayLocation = displayLocationFilter === "all" || 
+      (Array.isArray(game.displayLocations) && game.displayLocations.includes(displayLocationFilter));
     const matchesSearch = searchQuery === "" || 
       game.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
       game.nameAr.includes(searchQuery) ||
       game.key.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesStatus && matchesSearch;
+    return matchesCategory && matchesStatus && matchesDisplayLocation && matchesSearch;
   });
 
   const getCategoryCounts = () => {
@@ -811,8 +814,19 @@ export default function AdminUnifiedGames() {
     };
   };
 
+  const getDisplayLocationCounts = () => {
+    const counts: Record<string, number> = { all: games.length };
+    DISPLAY_LOCATIONS.forEach((loc) => {
+      counts[loc.key] = games.filter((g) => 
+        Array.isArray(g.displayLocations) && g.displayLocations.includes(loc.key)
+      ).length;
+    });
+    return counts;
+  };
+
   const categoryCounts = getCategoryCounts();
   const statusCounts = getStatusCounts();
+  const displayLocationCounts = getDisplayLocationCounts();
 
   const handleEdit = (game: MultiplayerGame) => {
     setEditingGame(game);
@@ -880,6 +894,42 @@ export default function AdminUnifiedGames() {
           })}
         </TabsList>
       </Tabs>
+
+      {/* Display Location Filter Tabs */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          variant={displayLocationFilter === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setDisplayLocationFilter("all")}
+          data-testid="tab-location-all"
+          className="gap-2"
+        >
+          <LayoutGrid className="h-4 w-4" />
+          {language === "ar" ? "جميع المواقع" : "All Locations"}
+          <Badge variant="secondary" className="ml-1 text-xs">
+            {displayLocationCounts.all || 0}
+          </Badge>
+        </Button>
+        {DISPLAY_LOCATIONS.map((loc) => {
+          const IconComp = loc.icon;
+          return (
+            <Button
+              key={loc.key}
+              variant={displayLocationFilter === loc.key ? "default" : "outline"}
+              size="sm"
+              onClick={() => setDisplayLocationFilter(loc.key)}
+              data-testid={`tab-location-${loc.key}`}
+              className="gap-2"
+            >
+              <IconComp className="h-4 w-4" />
+              {language === "ar" ? loc.labelAr : loc.labelEn}
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {displayLocationCounts[loc.key] || 0}
+              </Badge>
+            </Button>
+          );
+        })}
+      </div>
 
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
