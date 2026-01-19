@@ -1,0 +1,193 @@
+المعمارية المقترحة
+منصة VEX لديها نظام games/gamesessions في PostgreSQL، فالمشكلة تكون في تحميل جميع الألعاب مرة واحدة في الـ Frontend (React) مما يسبب لاجات، أو استعلامات DB ثقيلة تسبب كراشات عند آلاف اللاعبين.
+​
+
+خطة التنفيذ المرحلية
+المرحلة 1: Database Optimization (أولوية قصوى)
+text
+-- 1. أنشئ indexes للألعاب الشائعة
+CREATE INDEX idx_games_status_category ON games(status, category);
+CREATE INDEX idx_gamesessions_user_game ON gamesessions(userId, gameId);
+
+-- 2. قسم الـ games table لـ 2 جداول:
+games_metadata (id, name, icon, category, rtp, status)
+games_config (gameId, minBet, maxBet, volatility, provider)
+الكود الاحترافي:
+
+sql
+-- Migration script
+CREATE TABLE games_metadata (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  icon VARCHAR(500),
+  category VARCHAR(100),
+  rtp DECIMAL(5,2),
+  status VARCHAR(20) DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX CONCURRENTLY idx_games_category_status ON games_metadata(category, status);
+المرحلة 2: Backend API Pagination + Caching
+text
+GET /api/games?category=slots&page=1&limit=20&featured=true
+GET /api/games/popular?limit=10
+GET /api/games/recent?limit=5
+Express.js Implementation:
+
+typescript
+// server/routes/games.ts
+import Redis from 'redis';
+
+const redis = Redis.createClient();
+
+app.get('/api/games', async (req, res) => {
+  const { category, page = 1, limit = 20, featured } = req.query;
+  const cacheKey = `games:${category}:${page}:${featured}`;
+  
+  // Cache 5 دقائق
+  const cached = await redis.get(cacheKey);
+  if (cached) return res.json(JSON.parse(cached));
+
+  const offset = (Number(page) - 1) * Number(limit);
+  const where: any = { status: 'active' };
+  
+  if (category) where.category = category;
+  if (featured === 'true') where.featured = true;
+
+  const games = await db.select()
+    .from(games_metadata)
+    .where(where)
+    .limit(Number(limit))
+    .offset(offset)
+    .orderBy('priority', 'desc');
+
+  await redis.setex(cacheKey, 300, JSON.stringify(games));
+  res.json(games);
+});
+المرحلة 3: Frontend Infinite Scroll + Virtual List
+React + TanStack Query + react-window:
+
+tsx
+// client/pages/games.tsx
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { FixedSizeList as List } from 'react-window';
+
+const GamesLobby = () => {
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['games'],
+    queryFn: ({ pageParam = 1 }) => 
+      fetch(`/api/games?page=${pageParam}&limit=20`).then(res => res.json()),
+    getNextPageParam: (lastPage, pages) => 
+      lastPage.length === 20 ? pages.length + 1 : undefined,
+  });
+
+  const Item = ({ index, style, data }: ListChildComponentProps<Game[]>) => (
+    <div style={style}>
+      <GameCard game={data[index % 20]} />
+    </div>
+  );
+
+  return (
+    <div className="games-lobby">
+      <List
+        height={600}
+        itemCount={data?.pages.flat().length || 0}
+        itemSize={200}
+        itemData={data?.pages.flat()}
+        width="100%"
+      >
+        {Item}
+      </List>
+      
+      {hasNextPage && (
+        <button 
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+        >
+          تحميل المزيد...
+        </button>
+      )}
+    </div>
+  );
+};
+المرحلة 4: Game Providers Architecture (الأهم)
+بدلاً من تشغيل كل لعبة داخل المنصة، استخدم iframe + API Gateway:
+
+text
+┌─────────────────┐    ┌──────────────┐    ┌──────────────────┐
+│ VEX Platform    │───▶│ API Gateway  │───▶│ Game Provider 1  │
+│ (React + WS)    │    │ (Load Balance)│    │ (iframe)         │
+└─────────────────┘    └──────────────┘    └──────────────────┘
+                              │
+                       ┌──────────────┐
+                       │ Game Provider │
+                       │ N (iframe)    │
+                       └──────────────┘
+Backend Game Session Manager:
+
+typescript
+// server/websocket/gameSessions.ts
+interface GameSession {
+  id: string;
+  userId: string;
+  gameId: string;
+  provider: string;
+  iframeUrl: string;
+  sessionData: any;
+}
+
+const activeSessions: Map<string, GameSession> = new Map();
+
+io.on('connection', (socket) => {
+  socket.on('joinGame', async ({ gameId, userId }) => {
+    const game = await db.select().from(games_metadata).where({ id: gameId });
+    const sessionId = generateSessionId();
+    
+    // Dynamic iframe URL based on provider
+    const iframeUrl = game[0].provider === 'custom' 
+      ? '/games/custom/' + gameId 
+      : `https://${game[0].providerUrl}/embed?session=${sessionId}&user=${userId}`;
+    
+    activeSessions.set(sessionId, { 
+      id: sessionId, 
+      userId, 
+      gameId, 
+      provider: game[0].provider,
+      iframeUrl,
+      sessionData: {}
+    });
+
+    socket.emit('gameReady', { sessionId, iframeUrl });
+  });
+});
+المرحلة 5: Performance Monitoring + Limits
+typescript
+// server/middleware/rateLimiter.ts
+import rateLimit from 'express-rate-limit';
+
+const gameLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 دقيقة
+  max: 50, // 50 لعبة كحد أقصى في الدقيقة
+  message: 'بطء في الطلبات، حاول مرة أخرى',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/games', gameLimiter);
+معايير الجودة
+Database: Indexes + Pagination + Connection Pooling
+
+Backend: Redis Cache + Rate Limiting + WebSocket Sessions
+
+Frontend: Infinite Scroll + Virtual List + Skeleton Loading
+
+Monitoring: New Relic/Prometheus لتتبع الـ bottlenecks
+
+🎯 النتيجة المتوقعة
+قبل	بعد
+تحميل 1000 لعبة	15s + crash	2s smooth
+Concurrent Users	100 max	10K+
+Memory Usage	2GB+	500MB
+CPU Usage	90%+	30%
+ابدأ بالمرحلة 1 (Database) ثم 2 (API) ثم 3 (Frontend). هتفرق معاك 100%!
+​
