@@ -146,9 +146,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// Process-level error handlers to prevent silent crashes
+process.on('uncaughtException', (error) => {
+  console.error('[FATAL] Uncaught Exception:', error.message);
+  console.error(error.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 (async () => {
-  await registerRoutes(httpServer, app);
-  registerAdminRoutes(app);
+  try {
+    await registerRoutes(httpServer, app);
+    registerAdminRoutes(app);
 
   // Global error handler - catches unhandled errors without crashing the server
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
@@ -211,4 +223,9 @@ app.use((req, res, next) => {
       }, 5000); // Wait 5 seconds for server to fully initialize
     },
   );
+  } catch (error: any) {
+    console.error('[FATAL] Server startup failed:', error.message);
+    console.error(error.stack);
+    process.exit(1);
+  }
 })();

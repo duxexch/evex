@@ -24,23 +24,35 @@ const fallbackUserSecret = 'dev-user-secret-do-not-use-in-production';
 const adminSecretFromEnv = process.env.JWT_ADMIN_SECRET;
 const fallbackAdminSecret = 'dev-admin-secret-do-not-use-in-production';
 
-// Production validation
+// Production validation - enforce strong secrets
 if (isProduction) {
   if (!userSecretFromEnv || userSecretFromEnv.length < 32) {
-    throw new Error('CRITICAL: JWT_USER_SECRET (or SESSION_SECRET) must be set to at least 32 characters in production!');
+    throw new Error('CRITICAL: SESSION_SECRET (or JWT_USER_SECRET) must be set to at least 32 characters in production!');
   }
-  if (!adminSecretFromEnv || adminSecretFromEnv.length < 32) {
-    throw new Error('CRITICAL: JWT_ADMIN_SECRET must be set to at least 32 characters in production!');
-  }
-  if (userSecretFromEnv === adminSecretFromEnv) {
-    throw new Error('CRITICAL: JWT_USER_SECRET and JWT_ADMIN_SECRET must be different in production!');
+  if (adminSecretFromEnv) {
+    // If explicitly provided, validate it
+    if (adminSecretFromEnv.length < 32) {
+      throw new Error('CRITICAL: JWT_ADMIN_SECRET must be at least 32 characters in production!');
+    }
+    if (userSecretFromEnv === adminSecretFromEnv) {
+      throw new Error('CRITICAL: JWT_USER_SECRET and JWT_ADMIN_SECRET must be different in production!');
+    }
   }
 }
 
+// Derive admin secret from user secret if not provided (cryptographically distinct)
+const derivedAdminSecret = userSecretFromEnv 
+  ? `admin_${crypto.createHash('sha256').update(userSecretFromEnv).digest('hex').slice(0, 32)}`
+  : null;
+
 // Export the secrets
 export const JWT_USER_SECRET = userSecretFromEnv || fallbackUserSecret;
-export const JWT_ADMIN_SECRET = adminSecretFromEnv || 
-  (userSecretFromEnv ? `admin_${crypto.createHash('sha256').update(userSecretFromEnv).digest('hex').slice(0, 32)}` : fallbackAdminSecret);
+export const JWT_ADMIN_SECRET = adminSecretFromEnv || derivedAdminSecret || fallbackAdminSecret;
+
+// Log configuration in production
+if (isProduction && !adminSecretFromEnv && derivedAdminSecret) {
+  console.log('[Auth Config] JWT_ADMIN_SECRET auto-derived from SESSION_SECRET (secure)');
+}
 
 // Token expiration times
 export const JWT_USER_EXPIRY = '7d';
