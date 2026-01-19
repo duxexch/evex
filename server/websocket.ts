@@ -924,7 +924,6 @@ export function setupWebSocket(server: Server) {
               updatedAt: new Date(),
               status: isGameOver ? 'completed' : 'playing',
               winnerId: winnerId,
-              endedAt: isGameOver ? new Date() : null,
             })
             .where(eq(challengeGameSessions.id, session.id))
             .returning();
@@ -1124,7 +1123,7 @@ export function setupWebSocket(server: Server) {
             .set({
               status: "completed",
               winnerId,
-              completedAt: new Date(),
+              endedAt: new Date(),
             })
             .where(eq(challenges.id, challengeId));
 
