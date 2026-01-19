@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -197,7 +197,7 @@ function getIconComponent(iconName: string) {
   return icons[iconName] || Gamepad2;
 }
 
-// Separate component to handle display locations with proper reactivity
+// Horizontal toggle buttons for display locations (multi-select)
 function DisplayLocationsField({ 
   form, 
   language 
@@ -213,50 +213,33 @@ function DisplayLocationsField({
   });
   const currentValue = Array.isArray(displayLocations) ? displayLocations : [];
 
-  const handleToggle = (locationKey: string) => {
-    // Get fresh value at click time
-    const freshValue = form.getValues("displayLocations");
-    const safeValue = Array.isArray(freshValue) ? freshValue : [];
-    const isCurrentlyChecked = safeValue.includes(locationKey);
-    
-    const newValue = isCurrentlyChecked
-      ? safeValue.filter((v) => v !== locationKey)
-      : [...safeValue, locationKey];
-    
-    form.setValue("displayLocations", newValue, { 
-      shouldValidate: true, 
-      shouldDirty: true 
-    });
-  };
-
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <ToggleGroup 
+      type="multiple" 
+      variant="outline"
+      value={currentValue}
+      onValueChange={(value) => {
+        form.setValue("displayLocations", value, { 
+          shouldValidate: true, 
+          shouldDirty: true 
+        });
+      }}
+      className="flex-wrap justify-start gap-2"
+    >
       {DISPLAY_LOCATIONS.map((location) => {
         const IconComp = location.icon;
-        const isChecked = currentValue.includes(location.key);
         return (
-          <div
+          <ToggleGroupItem
             key={location.key}
-            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
-              isChecked
-                ? "border-primary bg-primary/10"
-                : "border-muted"
-            }`}
-            onClick={() => handleToggle(location.key)}
-            data-testid={`checkbox-location-${location.key}`}
+            value={location.key}
+            data-testid={`toggle-location-${location.key}`}
           >
-            <Checkbox
-              checked={isChecked}
-              className="pointer-events-none"
-            />
             <IconComp className="h-4 w-4" />
-            <span className="text-sm">
-              {language === "ar" ? location.labelAr : location.labelEn}
-            </span>
-          </div>
+            <span>{language === "ar" ? location.labelAr : location.labelEn}</span>
+          </ToggleGroupItem>
         );
       })}
-    </div>
+    </ToggleGroup>
   );
 }
 
