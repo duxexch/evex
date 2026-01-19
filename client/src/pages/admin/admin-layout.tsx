@@ -1,4 +1,5 @@
-import { useLocation, Link, Redirect } from "wouter";
+import { useState, useEffect, lazy, Suspense } from "react";
+import { useLocation } from "wouter";
 import {
   Sidebar,
   SidebarContent,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   LayoutDashboard,
   Users,
@@ -41,6 +43,8 @@ import {
   Bot,
 } from "lucide-react";
 import { AdminAlertsDropdown } from "@/components/admin/AdminAlertsDropdown";
+
+const AdminLoginPage = lazy(() => import("./admin-login"));
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -180,13 +184,43 @@ function AdminSidebar() {
   );
 }
 
+function LoginFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md space-y-4">
+        <Skeleton className="h-16 w-16 rounded-full mx-auto" />
+        <Skeleton className="h-8 w-48 mx-auto" />
+        <Skeleton className="h-4 w-64 mx-auto" />
+        <div className="space-y-4 mt-8">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
-  // Check authentication synchronously at render time
-  const token = localStorage.getItem("adminToken");
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   
-  // If no token, use declarative Redirect component (no useEffect, no state loops)
-  if (!token) {
-    return <Redirect to="/admin" />;
+  useEffect(() => {
+    const token = localStorage.getItem("adminToken");
+    setIsAuthenticated(!!token);
+  }, []);
+  
+  // Show loading state while checking auth
+  if (isAuthenticated === null) {
+    return <LoginFallback />;
+  }
+  
+  // If no token, render login page directly (no Redirect, no navigation loops)
+  if (!isAuthenticated) {
+    return (
+      <Suspense fallback={<LoginFallback />}>
+        <AdminLoginPage />
+      </Suspense>
+    );
   }
 
   const style = {
