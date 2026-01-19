@@ -697,7 +697,7 @@ export default function AdminUnifiedGames() {
   const { language } = useI18n();
   const [activeCategory, setActiveCategory] = useState("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [displayLocationFilter, setDisplayLocationFilter] = useState<string>("all");
+  const [displayLocationFilter, setDisplayLocationFilter] = useState<string>("home");
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<MultiplayerGame | null>(null);
@@ -830,8 +830,7 @@ export default function AdminUnifiedGames() {
   const filteredGames = games.filter((game) => {
     const matchesCategory = activeCategory === "all" || game.category === activeCategory;
     const matchesStatus = statusFilter === "all" || game.status === statusFilter;
-    const matchesDisplayLocation = displayLocationFilter === "all" || 
-      (Array.isArray(game.displayLocations) && game.displayLocations.includes(displayLocationFilter));
+    const matchesDisplayLocation = Array.isArray(game.displayLocations) && game.displayLocations.includes(displayLocationFilter);
     const matchesSearch = searchQuery === "" || 
       game.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
       game.nameAr.includes(searchQuery) ||
@@ -906,30 +905,23 @@ export default function AdminUnifiedGames() {
           </h1>
           <p className="text-muted-foreground text-sm">
             {language === "ar" 
-              ? `عرض ${filteredGames.length} من ${games.length} لعبة`
-              : `Showing ${filteredGames.length} of ${games.length} games`
+              ? `${filteredGames.length} لعبة في "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr}"`
+              : `${filteredGames.length} games in "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn}"`
             }
+            <span className="mx-2">•</span>
+            <span className="opacity-60">
+              {language === "ar" ? `إجمالي ${games.length}` : `${games.length} total`}
+            </span>
             {activeCategory !== "all" && (
-              <span className="mx-2">•</span>
-            )}
-            {activeCategory !== "all" && (
-              <span>
-                {language === "ar" 
-                  ? GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelAr
-                  : GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelEn
-                }
-              </span>
-            )}
-            {displayLocationFilter !== "all" && (
-              <span className="mx-2">•</span>
-            )}
-            {displayLocationFilter !== "all" && (
-              <span>
-                {language === "ar" 
-                  ? DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr
-                  : DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn
-                }
-              </span>
+              <>
+                <span className="mx-2">•</span>
+                <span>
+                  {language === "ar" 
+                    ? GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelAr
+                    : GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelEn
+                  }
+                </span>
+              </>
             )}
           </p>
         </div>
@@ -962,21 +954,8 @@ export default function AdminUnifiedGames() {
         })}
       </div>
 
-      {/* Display Location Filter Tabs */}
+      {/* Display Location Filter Tabs - Single Select Only */}
       <div className="flex items-center gap-2 flex-wrap">
-        <Button
-          variant={displayLocationFilter === "all" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setDisplayLocationFilter("all")}
-          data-testid="tab-location-all"
-          className="gap-2"
-        >
-          <LayoutGrid className="h-4 w-4" />
-          {language === "ar" ? "جميع المواقع" : "All Locations"}
-          <Badge variant="secondary" className="ml-1 text-xs">
-            {displayLocationCounts.all || 0}
-          </Badge>
-        </Button>
         {DISPLAY_LOCATIONS.map((loc) => {
           const IconComp = loc.icon;
           return (
@@ -1202,21 +1181,19 @@ export default function AdminUnifiedGames() {
                               );
                             })}
                             <DropdownMenuSeparator />
-                            {displayLocationFilter !== "all" && (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setDeleteGameId(game.id);
-                                  setDeleteMode("remove_from_section");
-                                }}
-                                data-testid={`menu-remove-from-section-${game.id}`}
-                              >
-                                <X className="h-4 w-4 mr-2" />
-                                {language === "ar" 
-                                  ? `إزالة من ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr || "هذا القسم"}`
-                                  : `Remove from ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn || "this section"}`
-                                }
-                              </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setDeleteGameId(game.id);
+                                setDeleteMode("remove_from_section");
+                              }}
+                              data-testid={`menu-remove-from-section-${game.id}`}
+                            >
+                              <X className="h-4 w-4 mr-2" />
+                              {language === "ar" 
+                                ? `إزالة من ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr || "هذا القسم"}`
+                                : `Remove from ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn || "this section"}`
+                              }
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => {
