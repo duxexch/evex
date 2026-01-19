@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -205,8 +205,12 @@ function DisplayLocationsField({
   form: ReturnType<typeof useForm<GameFormData>>; 
   language: string;
 }) {
-  // Use watch to get reactive updates
-  const displayLocations = form.watch("displayLocations");
+  // Use useWatch hook for proper reactivity without infinite loops
+  const displayLocations = useWatch({
+    control: form.control,
+    name: "displayLocations",
+    defaultValue: []
+  });
   const currentValue = Array.isArray(displayLocations) ? displayLocations : [];
 
   const handleToggle = (locationKey: string) => {
@@ -226,36 +230,33 @@ function DisplayLocationsField({
   };
 
   return (
-    <FormItem>
-      <div className="grid grid-cols-2 gap-3">
-        {DISPLAY_LOCATIONS.map((location) => {
-          const IconComp = location.icon;
-          const isChecked = currentValue.includes(location.key);
-          return (
-            <div
-              key={location.key}
-              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
-                isChecked
-                  ? "border-primary bg-primary/10"
-                  : "border-muted"
-              }`}
-              onClick={() => handleToggle(location.key)}
-              data-testid={`checkbox-location-${location.key}`}
-            >
-              <Checkbox
-                checked={isChecked}
-                className="pointer-events-none"
-              />
-              <IconComp className="h-4 w-4" />
-              <span className="text-sm">
-                {language === "ar" ? location.labelAr : location.labelEn}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <FormMessage />
-    </FormItem>
+    <div className="grid grid-cols-2 gap-3">
+      {DISPLAY_LOCATIONS.map((location) => {
+        const IconComp = location.icon;
+        const isChecked = currentValue.includes(location.key);
+        return (
+          <div
+            key={location.key}
+            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
+              isChecked
+                ? "border-primary bg-primary/10"
+                : "border-muted"
+            }`}
+            onClick={() => handleToggle(location.key)}
+            data-testid={`checkbox-location-${location.key}`}
+          >
+            <Checkbox
+              checked={isChecked}
+              className="pointer-events-none"
+            />
+            <IconComp className="h-4 w-4" />
+            <span className="text-sm">
+              {language === "ar" ? location.labelAr : location.labelEn}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
