@@ -697,7 +697,7 @@ export default function AdminUnifiedGames() {
   const { language } = useI18n();
   const [activeCategory, setActiveCategory] = useState("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [displayLocationFilter, setDisplayLocationFilter] = useState<string>("home");
+  const [displayLocationFilter, setDisplayLocationFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<MultiplayerGame | null>(null);
@@ -830,7 +830,8 @@ export default function AdminUnifiedGames() {
   const filteredGames = games.filter((game) => {
     const matchesCategory = activeCategory === "all" || game.category === activeCategory;
     const matchesStatus = statusFilter === "all" || game.status === statusFilter;
-    const matchesDisplayLocation = Array.isArray(game.displayLocations) && game.displayLocations.includes(displayLocationFilter);
+    const matchesDisplayLocation = displayLocationFilter === "all" || 
+      (Array.isArray(game.displayLocations) && game.displayLocations.includes(displayLocationFilter));
     const matchesSearch = searchQuery === "" || 
       game.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
       game.nameAr.includes(searchQuery) ||
@@ -905,24 +906,9 @@ export default function AdminUnifiedGames() {
           </h1>
           <p className="text-muted-foreground text-sm">
             {language === "ar" 
-              ? `${filteredGames.length} لعبة في "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr}"`
-              : `${filteredGames.length} games in "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn}"`
+              ? `عرض ${filteredGames.length} من ${games.length} لعبة`
+              : `Showing ${filteredGames.length} of ${games.length} games`
             }
-            <span className="mx-2">•</span>
-            <span className="opacity-60">
-              {language === "ar" ? `إجمالي ${games.length}` : `${games.length} total`}
-            </span>
-            {activeCategory !== "all" && (
-              <>
-                <span className="mx-2">•</span>
-                <span>
-                  {language === "ar" 
-                    ? GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelAr
-                    : GAME_CATEGORIES.find(c => c.key === activeCategory)?.labelEn
-                  }
-                </span>
-              </>
-            )}
           </p>
         </div>
         <Button onClick={() => { setEditingGame(null); setIsFormOpen(true); }} data-testid="button-add-game">
@@ -931,31 +917,21 @@ export default function AdminUnifiedGames() {
         </Button>
       </div>
 
-      {/* Category Filter Tabs */}
+      {/* Display Location Filter Tabs */}
       <div className="flex items-center gap-2 flex-wrap">
-        {GAME_CATEGORIES.map((cat) => {
-          const IconComp = cat.icon;
-          return (
-            <Button
-              key={cat.key}
-              variant={activeCategory === cat.key ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveCategory(cat.key)}
-              data-testid={`tab-category-${cat.key}`}
-              className="gap-2"
-            >
-              <IconComp className="h-4 w-4" />
-              {language === "ar" ? cat.labelAr : cat.labelEn}
-              <Badge variant="secondary" className="ml-1 text-xs">
-                {categoryCounts[cat.key] || 0}
-              </Badge>
-            </Button>
-          );
-        })}
-      </div>
-
-      {/* Display Location Filter Tabs - Single Select Only */}
-      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          variant={displayLocationFilter === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setDisplayLocationFilter("all")}
+          data-testid="tab-location-all"
+          className="gap-2"
+        >
+          <LayoutGrid className="h-4 w-4" />
+          {language === "ar" ? "جميع الألعاب" : "All Games"}
+          <Badge variant="secondary" className="ml-1 text-xs">
+            {games.length}
+          </Badge>
+        </Button>
         {DISPLAY_LOCATIONS.map((loc) => {
           const IconComp = loc.icon;
           return (
@@ -977,8 +953,8 @@ export default function AdminUnifiedGames() {
         })}
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={language === "ar" ? "بحث عن لعبة..." : "Search games..."}
@@ -989,10 +965,30 @@ export default function AdminUnifiedGames() {
           />
         </div>
 
+        <Select value={activeCategory} onValueChange={setActiveCategory}>
+          <SelectTrigger className="w-44" data-testid="select-category-filter">
+            <Gamepad2 className="h-4 w-4 mr-2" />
+            <SelectValue placeholder={language === "ar" ? "الفئة" : "Category"} />
+          </SelectTrigger>
+          <SelectContent>
+            {GAME_CATEGORIES.map((cat) => {
+              const IconComp = cat.icon;
+              return (
+                <SelectItem key={cat.key} value={cat.key}>
+                  <span className="flex items-center gap-2">
+                    <IconComp className="h-4 w-4" />
+                    {language === "ar" ? cat.labelAr : cat.labelEn} ({categoryCounts[cat.key] || 0})
+                  </span>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48" data-testid="select-status-filter">
+          <SelectTrigger className="w-44" data-testid="select-status-filter">
             <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder={language === "ar" ? "فلترة بالحالة" : "Filter by status"} />
+            <SelectValue placeholder={language === "ar" ? "الحالة" : "Status"} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">
@@ -1024,16 +1020,35 @@ export default function AdminUnifiedGames() {
         <Card>
           <CardContent className="p-12 text-center">
             <Gamepad2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">
-              {language === "ar" 
-                ? "لا توجد ألعاب في هذه الفئة"
-                : "No games found in this category"
+            <p className="text-muted-foreground mb-2">
+              {displayLocationFilter !== "all" 
+                ? (language === "ar" 
+                    ? `لا توجد ألعاب في قسم "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr}"`
+                    : `No games in "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn}" section`)
+                : (language === "ar" 
+                    ? "لا توجد ألعاب تطابق الفلاتر المحددة"
+                    : "No games match the selected filters")
               }
             </p>
-            <Button className="mt-4" onClick={() => { setEditingGame(null); setIsFormOpen(true); }}>
-              <Plus className="h-4 w-4 mr-2" />
-              {language === "ar" ? "إضافة لعبة جديدة" : "Add New Game"}
-            </Button>
+            {displayLocationFilter !== "all" && (
+              <p className="text-muted-foreground text-sm mb-4">
+                {language === "ar" 
+                  ? "يمكنك إضافة ألعاب لهذا القسم من قسم 'جميع الألعاب'"
+                  : "You can add games to this section from 'All Games'"}
+              </p>
+            )}
+            <div className="flex items-center justify-center gap-2">
+              {displayLocationFilter !== "all" && (
+                <Button variant="outline" onClick={() => setDisplayLocationFilter("all")}>
+                  <LayoutGrid className="h-4 w-4 mr-2" />
+                  {language === "ar" ? "عرض جميع الألعاب" : "View All Games"}
+                </Button>
+              )}
+              <Button onClick={() => { setEditingGame(null); setIsFormOpen(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                {language === "ar" ? "إضافة لعبة جديدة" : "Add New Game"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -1181,19 +1196,21 @@ export default function AdminUnifiedGames() {
                               );
                             })}
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setDeleteGameId(game.id);
-                                setDeleteMode("remove_from_section");
-                              }}
-                              data-testid={`menu-remove-from-section-${game.id}`}
-                            >
-                              <X className="h-4 w-4 mr-2" />
-                              {language === "ar" 
-                                ? `إزالة من ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr || "هذا القسم"}`
-                                : `Remove from ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn || "this section"}`
-                              }
-                            </DropdownMenuItem>
+                            {displayLocationFilter !== "all" && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setDeleteGameId(game.id);
+                                  setDeleteMode("remove_from_section");
+                                }}
+                                data-testid={`menu-remove-from-section-${game.id}`}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                {language === "ar" 
+                                  ? `إزالة من ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr || "هذا القسم"}`
+                                  : `Remove from ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn || "this section"}`
+                                }
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
                               onClick={() => {
