@@ -124,6 +124,24 @@ export function useNotifications() {
             });
           }
         }
+
+        // Handle real-time challenge updates
+        if (data.type === "challenge_update") {
+          // Invalidate all challenge-related queries for real-time updates
+          queryClient.invalidateQueries({ queryKey: ['/api/challenges/public'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/challenges/available'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/challenges/my'] });
+          
+          // Show toast for new challenges (optional - can be noisy)
+          if (data.eventType === 'created' && data.data?.visibility === 'public') {
+            toast({
+              title: language === 'ar' ? 'تحدي جديد!' : 'New Challenge!',
+              description: language === 'ar' 
+                ? `${data.data.player1Name} أنشأ تحدي ${data.data.gameType}` 
+                : `${data.data.player1Name} created a ${data.data.gameType} challenge`,
+            });
+          }
+        }
       } catch (error) {
         console.error("WebSocket message error:", error);
       }

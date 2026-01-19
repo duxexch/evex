@@ -2,9 +2,10 @@ import type { Express, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, or } from "drizzle-orm";
 import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable } from "@shared/schema";
 import { authMiddleware, AuthRequest } from "./middleware";
+import { broadcastChallengeUpdate } from "../websocket";
 
 // In-memory stores for challenges (should be moved to DB in production)
 const challenges: any[] = [];
@@ -164,8 +165,27 @@ export function registerChallengesRoutes(app: Express): void {
 
   app.get("/api/challenges/my", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const my = challenges.filter(c => c.player1Id === req.user!.id || c.player2Id === req.user!.id);
-      res.json(my);
+      // Read from DB instead of in-memory
+      const myChallenges = await db.select().from(challengesTable)
+        .where(or(
+          eq(challengesTable.player1Id, req.user!.id),
+          eq(challengesTable.player2Id, req.user!.id)
+        ))
+        .orderBy(desc(challengesTable.createdAt))
+        .limit(20);
+      
+      // Enrich with player names
+      const enriched = await Promise.all(myChallenges.map(async (c) => {
+        const player1 = await storage.getUser(c.player1Id);
+        const player2 = c.player2Id ? await storage.getUser(c.player2Id) : null;
+        return {
+          ...c,
+          player1Name: player1?.nickname || player1?.username,
+          player2Name: player2?.nickname || player2?.username,
+        };
+      }));
+      
+      res.json(enriched);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -199,27 +219,47 @@ export function registerChallengesRoutes(app: Express): void {
       const gameConfig = validation.game!;
       const timeLimit = gameConfig.defaultTimeLimit || 300;
       
-      const challenge = {
-        id: `challenge-${Date.now()}`,
+      // Insert challenge into database for persistence
+      const [dbChallenge] = await db.insert(challengesTable).values({
         gameType,
-        betAmount,
+        betAmount: String(betAmount),
         currencyType,
         visibility,
         status: 'waiting',
         player1Id: req.user!.id,
-        player1Name: req.user!.username,
-        player1Rating: { wins: 0, losses: 0, winRate: 0, rank: "bronze" },
         player2Id: opponentType === 'friend' ? friendAccountId : null,
-        player2Name: null,
+        opponentType,
+        friendAccountId: opponentType === 'friend' ? friendAccountId : null,
+        timeLimit,
         player1Score: 0,
         player2Score: 0,
-        timeLimit,
+      }).returning();
+      
+      // Get player details for response
+      const player1 = await storage.getUser(req.user!.id);
+      const gamesWon = player1?.gamesWon || 0;
+      const gamesLost = player1?.gamesLost || 0;
+      const totalGames = gamesWon + gamesLost;
+      const winRate = totalGames > 0 ? Math.round((gamesWon / totalGames) * 100) : 50;
+      const rank = winRate >= 80 ? "diamond" : winRate >= 60 ? "gold" : winRate >= 40 ? "silver" : "bronze";
+      
+      const challenge = {
+        ...dbChallenge,
+        player1Name: req.user!.username,
+        player1Rating: { wins: gamesWon, losses: gamesLost, winRate, rank },
+        player2Name: null,
+        player2Rating: null,
         spectatorCount: 0,
         totalBets: 0,
-        createdAt: new Date().toISOString(),
         houseFee: gameConfig.houseFee,
       };
+      
+      // Also keep in memory for backward compatibility
       challenges.push(challenge);
+      
+      // Broadcast new challenge to all connected clients for real-time updates
+      broadcastChallengeUpdate('created', challenge);
+      
       res.json(challenge);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -236,19 +276,23 @@ export function registerChallengesRoutes(app: Express): void {
     challengeJoinLocks.add(challengeId);
     
     try {
-      const challenge = challenges.find(c => c.id === challengeId);
-      if (!challenge) {
+      // Read challenge from DB instead of memory
+      const [dbChallenge] = await db.select().from(challengesTable).where(eq(challengesTable.id, challengeId)).limit(1);
+      if (!dbChallenge) {
         challengeJoinLocks.delete(challengeId);
         return res.status(404).json({ error: "Challenge not found" });
       }
-      if (challenge.player1Id === req.user!.id) {
+      if (dbChallenge.player1Id === req.user!.id) {
         challengeJoinLocks.delete(challengeId);
         return res.status(400).json({ error: "Cannot join your own challenge" });
       }
-      if (challenge.status !== 'waiting') {
+      if (dbChallenge.status !== 'waiting') {
         challengeJoinLocks.delete(challengeId);
         return res.status(400).json({ error: "Challenge is no longer available" });
       }
+      
+      // Use DB challenge for financial logic
+      const challenge = dbChallenge as any;
       
       // Financial safety: Check and deduct balance using transaction with row-level locking
       const betAmount = parseFloat(String(challenge.betAmount));
@@ -328,18 +372,38 @@ export function registerChallengesRoutes(app: Express): void {
             .where(eq(users.id, userId));
         }
         
-        // Update challenge atomically within the lock
-        challenge.player2Id = userId;
-        challenge.player2Name = req.user!.username;
-        challenge.player2Rating = { wins: 0, losses: 0, winRate: 0, rank: "bronze" };
-        challenge.status = 'active';
-        (challenge as any).startedAt = new Date().toISOString();
+        // Update challenge in database
+        await tx.update(challengesTable)
+          .set({ 
+            player2Id: userId,
+            status: 'active',
+            startedAt: new Date(),
+            updatedAt: new Date()
+          })
+          .where(eq(challengesTable.id, challengeId));
+        
       });
       
       // Release lock after success (challenge is now 'active', so future joins will fail on status check)
       challengeJoinLocks.delete(challengeId);
       
-      res.json(challenge);
+      // Fetch updated challenge from DB for accurate broadcast
+      const [updatedChallenge] = await db.select().from(challengesTable).where(eq(challengesTable.id, challengeId)).limit(1);
+      const player1 = await storage.getUser(updatedChallenge!.player1Id);
+      const player2 = await storage.getUser(userId);
+      
+      const enrichedChallenge = {
+        ...updatedChallenge,
+        player1Name: player1?.nickname || player1?.username,
+        player2Name: player2?.nickname || player2?.username,
+        player1Rating: { wins: player1?.gamesWon || 0, losses: player1?.gamesLost || 0, winRate: 50, rank: "silver" },
+        player2Rating: { wins: player2?.gamesWon || 0, losses: player2?.gamesLost || 0, winRate: 50, rank: "silver" },
+      };
+      
+      // Broadcast that challenge started for real-time updates
+      broadcastChallengeUpdate('started', enrichedChallenge);
+      
+      res.json(enrichedChallenge);
     } catch (error: any) {
       challengeJoinLocks.delete(challengeId);
       if (error.message.includes('Insufficient')) {
@@ -351,16 +415,31 @@ export function registerChallengesRoutes(app: Express): void {
 
   app.post("/api/challenges/:id/withdraw", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const challenge = challenges.find(c => c.id === req.params.id && c.player1Id === req.user!.id);
-      if (!challenge) {
+      // Read from DB instead of memory
+      const [dbChallenge] = await db.select().from(challengesTable)
+        .where(eq(challengesTable.id, req.params.id))
+        .limit(1);
+      
+      if (!dbChallenge || dbChallenge.player1Id !== req.user!.id) {
         return res.status(404).json({ error: "Challenge not found" });
       }
-      if (challenge.status !== 'waiting') {
+      if (dbChallenge.status !== 'waiting') {
         return res.status(400).json({ error: "Can only withdraw waiting challenges" });
       }
-      challenge.status = 'cancelled';
-      const penalty = challenge.betAmount * 0.3;
-      res.json({ ...challenge, penalty });
+      
+      const penalty = parseFloat(dbChallenge.betAmount || '0') * 0.3;
+      
+      // Update in database
+      await db.update(challengesTable)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(eq(challengesTable.id, req.params.id));
+      
+      const cancelledChallenge = { ...dbChallenge, status: 'cancelled' };
+      
+      // Broadcast challenge cancelled for real-time updates
+      broadcastChallengeUpdate('cancelled', cancelledChallenge);
+      
+      res.json({ ...cancelledChallenge, penalty });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -1323,6 +1323,22 @@ export function getAdminClientCount() {
   return adminClients.size;
 }
 
+// Broadcast challenge updates to all connected clients for real-time list updates
+export function broadcastChallengeUpdate(eventType: 'created' | 'joined' | 'started' | 'ended' | 'cancelled', challenge: any) {
+  const message = JSON.stringify({ 
+    type: 'challenge_update', 
+    eventType,
+    data: challenge 
+  });
+  clients.forEach((sockets) => {
+    sockets.forEach((socket) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(message);
+      }
+    });
+  });
+}
+
 // Bot game broadcast functions for real-time spectator updates
 export function broadcastBotGameState(
   challengeId: string, 
