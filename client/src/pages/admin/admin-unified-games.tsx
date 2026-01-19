@@ -61,8 +61,22 @@ import {
   Gift,
   Settings2,
   Filter,
-  Search
+  Search,
+  MoreVertical,
+  Check,
+  X
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -689,6 +703,7 @@ export default function AdminUnifiedGames() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<MultiplayerGame | null>(null);
   const [deleteGameId, setDeleteGameId] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState<"permanent" | "remove_from_section">("permanent");
   const wsRef = useRef<WebSocket | null>(null);
 
   const { data: games = [], isLoading } = useQuery<MultiplayerGame[]>({
@@ -735,6 +750,36 @@ export default function AdminUnifiedGames() {
       });
     },
   });
+
+  const updateDisplayLocationsMutation = useMutation({
+    mutationFn: ({ id, displayLocations }: { id: string; displayLocations: string[] }) =>
+      adminFetch(`/api/admin/multiplayer-games/${id}`, { 
+        method: "PATCH", 
+        body: JSON.stringify({ displayLocations }) 
+      }),
+    onSuccess: () => {
+      toast({ 
+        title: language === "ar" ? "تم تحديث أماكن العرض" : "Display locations updated",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/multiplayer-games"] });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: language === "ar" ? "فشل تحديث أماكن العرض" : "Failed to update display locations", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const toggleDisplayLocation = (game: MultiplayerGame, location: string) => {
+    const currentLocations = Array.isArray(game.displayLocations) ? game.displayLocations : [];
+    const isInLocation = currentLocations.includes(location);
+    const newLocations = isInLocation 
+      ? currentLocations.filter(l => l !== location)
+      : [...currentLocations, location];
+    updateDisplayLocationsMutation.mutate({ id: game.id, displayLocations: newLocations });
+  };
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -1104,15 +1149,65 @@ export default function AdminUnifiedGames() {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDeleteGameId(game.id)}
-                          data-testid={`button-delete-${game.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              data-testid={`button-actions-${game.id}`}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>
+                              {language === "ar" ? "أماكن العرض" : "Display Locations"}
+                            </DropdownMenuLabel>
+                            {DISPLAY_LOCATIONS.map((loc) => {
+                              const LocIcon = loc.icon;
+                              const currentLocations = Array.isArray(game.displayLocations) ? game.displayLocations : [];
+                              const isInLocation = currentLocations.includes(loc.key);
+                              return (
+                                <DropdownMenuItem
+                                  key={loc.key}
+                                  onClick={() => toggleDisplayLocation(game, loc.key)}
+                                  data-testid={`menu-toggle-${loc.key}-${game.id}`}
+                                >
+                                  <LocIcon className="h-4 w-4 mr-2" />
+                                  {language === "ar" ? loc.labelAr : loc.labelEn}
+                                  {isInLocation && <Check className="h-4 w-4 ml-auto text-green-500" />}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                            <DropdownMenuSeparator />
+                            {displayLocationFilter !== "all" && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setDeleteGameId(game.id);
+                                  setDeleteMode("remove_from_section");
+                                }}
+                                data-testid={`menu-remove-from-section-${game.id}`}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                {language === "ar" 
+                                  ? `إزالة من ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr || "هذا القسم"}`
+                                  : `Remove from ${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn || "this section"}`
+                                }
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => {
+                                setDeleteGameId(game.id);
+                                setDeleteMode("permanent");
+                              }}
+                              data-testid={`menu-delete-${game.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {language === "ar" ? "حذف نهائي" : "Delete Permanently"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1150,16 +1245,30 @@ export default function AdminUnifiedGames() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteGameId} onOpenChange={() => setDeleteGameId(null)}>
+      <AlertDialog open={!!deleteGameId} onOpenChange={(open) => { 
+        if (!open) {
+          setDeleteGameId(null);
+          setDeleteMode("permanent");
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === "ar" ? "هل أنت متأكد؟" : "Are you sure?"}
+              {deleteMode === "remove_from_section" 
+                ? (language === "ar" ? "إزالة من القسم؟" : "Remove from section?")
+                : (language === "ar" ? "حذف نهائي؟" : "Delete permanently?")
+              }
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {language === "ar" 
-                ? "سيتم حذف هذه اللعبة نهائياً. لا يمكن التراجع عن هذا الإجراء."
-                : "This game will be permanently deleted. This action cannot be undone."
+              {deleteMode === "remove_from_section" 
+                ? (language === "ar" 
+                    ? `سيتم إزالة هذه اللعبة من "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelAr || "هذا القسم"}". يمكنك إضافتها مرة أخرى لاحقاً.`
+                    : `This game will be removed from "${DISPLAY_LOCATIONS.find(l => l.key === displayLocationFilter)?.labelEn || "this section"}". You can add it back later.`
+                  )
+                : (language === "ar" 
+                    ? "سيتم حذف هذه اللعبة نهائياً. لا يمكن التراجع عن هذا الإجراء."
+                    : "This game will be permanently deleted. This action cannot be undone."
+                  )
               }
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1168,11 +1277,27 @@ export default function AdminUnifiedGames() {
               {language === "ar" ? "إلغاء" : "Cancel"}
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteGameId && deleteMutation.mutate(deleteGameId)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!deleteGameId) return;
+                if (deleteMode === "remove_from_section") {
+                  const game = games.find(g => g.id === deleteGameId);
+                  if (game) {
+                    const currentLocations = Array.isArray(game.displayLocations) ? game.displayLocations : [];
+                    const newLocations = currentLocations.filter(l => l !== displayLocationFilter);
+                    updateDisplayLocationsMutation.mutate({ id: deleteGameId, displayLocations: newLocations });
+                  }
+                  setDeleteGameId(null);
+                } else {
+                  deleteMutation.mutate(deleteGameId);
+                }
+              }}
+              className={deleteMode === "permanent" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
               data-testid="button-confirm-delete"
             >
-              {language === "ar" ? "حذف" : "Delete"}
+              {deleteMode === "remove_from_section"
+                ? (language === "ar" ? "إزالة" : "Remove")
+                : (language === "ar" ? "حذف" : "Delete")
+              }
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
