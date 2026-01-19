@@ -3,6 +3,7 @@ import {
   games, languages, currencies, countryPaymentMethods, 
   themes, p2pSettings, financialLimits, promoCodes
 } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 async function seed() {
   console.log("Starting database seed...");
@@ -408,6 +409,124 @@ async function seed() {
   console.log("Created promo codes");
 
   console.log("Database seed completed successfully!");
+}
+
+export async function seedMultiplayerGames() {
+  const multiplayerGamesList = [
+    {
+      name: "Domino",
+      description: "Classic domino game. Match tiles and be the first to empty your hand!",
+      category: "board",
+      sections: ["challenges", "multiplayer"],
+      gameType: "multiplayer",
+      status: "active",
+      rtp: "98.00",
+      houseEdge: "2.00",
+      volatility: "low",
+      minBet: "1.00",
+      maxBet: "1000.00",
+      multiplierMin: "1.00",
+      multiplierMax: "2.00",
+      isFeatured: true,
+      minPlayers: 2,
+      maxPlayers: 4,
+      sortOrder: 1,
+    },
+    {
+      name: "Chess",
+      description: "The ultimate strategy game. Checkmate your opponent to win!",
+      category: "strategy",
+      sections: ["challenges", "multiplayer"],
+      gameType: "multiplayer",
+      status: "active",
+      rtp: "100.00",
+      houseEdge: "0.00",
+      volatility: "low",
+      minBet: "1.00",
+      maxBet: "500.00",
+      multiplierMin: "1.00",
+      multiplierMax: "2.00",
+      isFeatured: true,
+      minPlayers: 2,
+      maxPlayers: 2,
+      sortOrder: 2,
+    },
+    {
+      name: "Backgammon",
+      description: "Ancient board game of strategy and luck. Race to bear off all your pieces!",
+      category: "board",
+      sections: ["challenges", "multiplayer"],
+      gameType: "multiplayer",
+      status: "active",
+      rtp: "98.00",
+      houseEdge: "2.00",
+      volatility: "medium",
+      minBet: "1.00",
+      maxBet: "500.00",
+      multiplierMin: "1.00",
+      multiplierMax: "2.00",
+      isFeatured: false,
+      minPlayers: 2,
+      maxPlayers: 2,
+      sortOrder: 3,
+    },
+    {
+      name: "Tarneeb",
+      description: "Popular Arabic trick-taking card game. Team up and win!",
+      category: "cards",
+      sections: ["challenges", "multiplayer"],
+      gameType: "multiplayer",
+      status: "active",
+      rtp: "100.00",
+      houseEdge: "0.00",
+      volatility: "medium",
+      minBet: "1.00",
+      maxBet: "500.00",
+      multiplierMin: "1.00",
+      multiplierMax: "2.00",
+      isFeatured: true,
+      minPlayers: 4,
+      maxPlayers: 4,
+      sortOrder: 4,
+    },
+    {
+      name: "Baloot",
+      description: "Traditional Saudi Arabian card game. Strategy meets luck!",
+      category: "cards",
+      sections: ["challenges", "multiplayer"],
+      gameType: "multiplayer",
+      status: "active",
+      rtp: "100.00",
+      houseEdge: "0.00",
+      volatility: "medium",
+      minBet: "1.00",
+      maxBet: "500.00",
+      multiplierMin: "1.00",
+      multiplierMax: "2.00",
+      isFeatured: true,
+      minPlayers: 4,
+      maxPlayers: 4,
+      sortOrder: 5,
+    },
+  ];
+
+  let addedCount = 0;
+  for (const game of multiplayerGamesList) {
+    const [existing] = await db.select().from(games).where(
+      eq(games.name, game.name)
+    );
+    if (!existing) {
+      await db.insert(games).values(game);
+      addedCount++;
+      console.log(`[Seed] Added multiplayer game: ${game.name}`);
+    }
+  }
+  
+  if (addedCount > 0) {
+    console.log(`[Seed] Added ${addedCount} multiplayer games`);
+  } else {
+    console.log("Multiplayer games already seeded");
+  }
 }
 
 seed().catch(console.error);
