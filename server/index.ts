@@ -228,7 +228,7 @@ process.on('unhandledRejection', (reason, promise) => {
         } catch (error: any) {
           log(`Bot system error: ${error.message}`, "bot");
         }
-      }, 5000); // Wait 5 seconds for server to fully initialize
+      }, 15000); // Wait 15 seconds for server to fully initialize and respond to users first
     },
   );
   } catch (error: any) {

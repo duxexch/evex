@@ -797,13 +797,14 @@ export default function ChallengesPage() {
                   <div className="col-span-2 text-center text-muted-foreground">{t('challenges.noGamesAvailable')}</div>
                 ) : challengeGames.map(game => {
                   const Icon = getGameIconByName(game.name);
+                  const gameKey = game.name.toLowerCase();
                   return (
                     <Button
                       key={game.id}
-                      variant={selectedGame === game.id ? "default" : "outline"}
+                      variant={selectedGame === gameKey ? "default" : "outline"}
                       className="h-auto py-3 flex-col"
-                      onClick={() => setSelectedGame(game.id)}
-                      data-testid={`button-game-${game.name.toLowerCase()}`}
+                      onClick={() => setSelectedGame(gameKey)}
+                      data-testid={`button-game-${gameKey}`}
                     >
                       <Icon className="h-6 w-6 mb-1" />
                       <span>{game.name}</span>
