@@ -197,6 +197,68 @@ function getIconComponent(iconName: string) {
   return icons[iconName] || Gamepad2;
 }
 
+// Separate component to handle display locations with proper reactivity
+function DisplayLocationsField({ 
+  form, 
+  language 
+}: { 
+  form: ReturnType<typeof useForm<GameFormData>>; 
+  language: string;
+}) {
+  // Use watch to get reactive updates
+  const displayLocations = form.watch("displayLocations");
+  const currentValue = Array.isArray(displayLocations) ? displayLocations : [];
+
+  const handleToggle = (locationKey: string) => {
+    // Get fresh value at click time
+    const freshValue = form.getValues("displayLocations");
+    const safeValue = Array.isArray(freshValue) ? freshValue : [];
+    const isCurrentlyChecked = safeValue.includes(locationKey);
+    
+    const newValue = isCurrentlyChecked
+      ? safeValue.filter((v) => v !== locationKey)
+      : [...safeValue, locationKey];
+    
+    form.setValue("displayLocations", newValue, { 
+      shouldValidate: true, 
+      shouldDirty: true 
+    });
+  };
+
+  return (
+    <FormItem>
+      <div className="grid grid-cols-2 gap-3">
+        {DISPLAY_LOCATIONS.map((location) => {
+          const IconComp = location.icon;
+          const isChecked = currentValue.includes(location.key);
+          return (
+            <div
+              key={location.key}
+              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
+                isChecked
+                  ? "border-primary bg-primary/10"
+                  : "border-muted"
+              }`}
+              onClick={() => handleToggle(location.key)}
+              data-testid={`checkbox-location-${location.key}`}
+            >
+              <Checkbox
+                checked={isChecked}
+                className="pointer-events-none"
+              />
+              <IconComp className="h-4 w-4" />
+              <span className="text-sm">
+                {language === "ar" ? location.labelAr : location.labelEn}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <FormMessage />
+    </FormItem>
+  );
+}
+
 function GameForm({ 
   game, 
   onSuccess, 
@@ -546,53 +608,7 @@ function GameForm({
             {language === "ar" ? "أماكن العرض" : "Display Locations"}
           </h4>
           
-          <FormField
-            control={form.control}
-            name="displayLocations"
-            render={({ field }) => {
-              const currentValue = Array.isArray(field.value) ? field.value : [];
-              return (
-                <FormItem>
-                  <div className="grid grid-cols-2 gap-3">
-                    {DISPLAY_LOCATIONS.map((location) => {
-                      const IconComp = location.icon;
-                      const isChecked = currentValue.includes(location.key);
-                      return (
-                        <div
-                          key={location.key}
-                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover-elevate ${
-                            isChecked
-                              ? "border-primary bg-primary/10"
-                              : "border-muted"
-                          }`}
-                          onClick={() => {
-                            const newValue = isChecked
-                              ? currentValue.filter((v) => v !== location.key)
-                              : [...currentValue, location.key];
-                            form.setValue("displayLocations", newValue, { 
-                              shouldValidate: true, 
-                              shouldDirty: true 
-                            });
-                          }}
-                          data-testid={`checkbox-location-${location.key}`}
-                        >
-                          <Checkbox
-                            checked={isChecked}
-                            className="pointer-events-none"
-                          />
-                          <IconComp className="h-4 w-4" />
-                          <span className="text-sm">
-                            {language === "ar" ? location.labelAr : location.labelEn}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
+          <DisplayLocationsField form={form} language={language} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
