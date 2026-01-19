@@ -13,11 +13,7 @@ import { backgammonEngine } from "./game-engines/backgammon";
 import * as CardGameEngine from "./game-engines/card-game-engine";
 import { chatRateLimiter } from "./lib/rate-limiter";
 import { filterMessage } from "./lib/word-filter";
-
-const JWT_SECRET = process.env.SESSION_SECRET || "pwm-secret-key-change-in-production";
-const ADMIN_JWT_SECRET = process.env.SESSION_SECRET ? 
-  `admin_${process.env.SESSION_SECRET}_secure` : 
-  "admin-secret-key-change-in-production-secure";
+import { JWT_USER_SECRET, JWT_ADMIN_SECRET } from "./lib/auth-config";
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: string;
@@ -62,7 +58,7 @@ export function setupWebSocket(server: Server) {
         
         if (data.type === "auth") {
           try {
-            const decoded = jwt.verify(data.token, JWT_SECRET) as any;
+            const decoded = jwt.verify(data.token, JWT_USER_SECRET) as any;
             ws.userId = decoded.id;
             
             if (!clients.has(decoded.id)) {
@@ -93,7 +89,7 @@ export function setupWebSocket(server: Server) {
         // Admin authentication for real-time admin alerts
         if (data.type === "admin_auth") {
           try {
-            const decoded = jwt.verify(data.token, ADMIN_JWT_SECRET) as any;
+            const decoded = jwt.verify(data.token, JWT_ADMIN_SECRET) as any;
             // Verify the user is an admin
             if (decoded.role === 'admin') {
               ws.userId = decoded.id;

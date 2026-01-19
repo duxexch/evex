@@ -18,10 +18,7 @@ import { eq, desc, and, sql, like, or, gte, lte } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-
-const ADMIN_JWT_SECRET = process.env.SESSION_SECRET ? 
-  `admin_${process.env.SESSION_SECRET}_secure` : 
-  "admin-secret-key-change-in-production-secure";
+import { JWT_ADMIN_SECRET, JWT_ADMIN_EXPIRY } from "./lib/auth-config";
 
 interface AdminRequest extends Request {
   admin?: { id: string; role: string; username: string };
@@ -33,7 +30,7 @@ const adminAuthMiddleware = async (req: AdminRequest, res: Response, next: NextF
     return res.status(401).json({ error: "Admin authentication required" });
   }
   try {
-    const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
+    const decoded = jwt.verify(token, JWT_ADMIN_SECRET) as any;
     if (decoded.role !== "admin") {
       return res.status(403).json({ error: "Admin access only" });
     }
@@ -86,8 +83,8 @@ export function registerAdminRoutes(app: Express) {
       
       const token = jwt.sign(
         { id: user.id, role: user.role, username: user.username },
-        ADMIN_JWT_SECRET,
-        { expiresIn: "4h" }
+        JWT_ADMIN_SECRET,
+        { expiresIn: JWT_ADMIN_EXPIRY }
       );
       
       await logAdminAction(user.id, "login", "admin", user.id, {}, req);

@@ -62,18 +62,7 @@ import { getHealthReport, trackError, errorTracker } from "./lib/health";
 import { getAllCircuitBreakerStats } from "./lib/circuit-breaker";
 import { logger, requestLogger } from "./lib/logger";
 import { calculateOdds, calculatePotentialWinnings, type PlayerStats } from "./lib/odds-calculator";
-
-// Security: JWT_SECRET must be set in production
-const JWT_SECRET = process.env.SESSION_SECRET;
-if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error('CRITICAL: SESSION_SECRET environment variable must be set in production!');
-}
-const JWT_SIGNING_KEY = JWT_SECRET || 'dev-only-insecure-key';
-
-// Admin JWT secret (same as in admin-routes.ts)
-const ADMIN_JWT_SECRET = process.env.SESSION_SECRET ? 
-  `admin_${process.env.SESSION_SECRET}_secure` : 
-  "admin-secret-key-change-in-production-secure";
+import { JWT_USER_SECRET, JWT_ADMIN_SECRET, JWT_USER_EXPIRY } from "./lib/auth-config";
 
 // Rate limiting for authentication endpoints (brute-force protection)
 const authRateLimiter = rateLimit({
@@ -147,7 +136,7 @@ const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunctio
     return res.status(401).json({ error: "Unauthorized" });
   }
   try {
-    const decoded = jwt.verify(token, JWT_SIGNING_KEY) as any;
+    const decoded = jwt.verify(token, JWT_USER_SECRET) as any;
     req.user = decoded;
     next();
   } catch {
@@ -169,7 +158,7 @@ const adminTokenMiddleware = async (req: AuthRequest, res: Response, next: NextF
     return res.status(401).json({ error: "Admin authentication required" });
   }
   try {
-    const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
+    const decoded = jwt.verify(token, JWT_ADMIN_SECRET) as any;
     if (decoded.role !== "admin") {
       return res.status(403).json({ error: "Admin access only" });
     }
@@ -315,7 +304,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "active",
       });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_USER_SECRET, { expiresIn: JWT_USER_EXPIRY });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -374,7 +363,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "active",
       });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_USER_SECRET, { expiresIn: JWT_USER_EXPIRY });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -410,7 +399,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_USER_SECRET, { expiresIn: JWT_USER_EXPIRY });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -474,7 +463,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_USER_SECRET, { expiresIn: JWT_USER_EXPIRY });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -512,7 +501,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_USER_SECRET, { expiresIn: JWT_USER_EXPIRY });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -550,7 +539,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       await storage.updateUser(user.id, { lastLoginAt: new Date() });
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_USER_SECRET, { expiresIn: JWT_USER_EXPIRY });
       
       await storage.createAuditLog({
         userId: user.id,
@@ -719,7 +708,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const user = await storage.createUser(userData);
       
-      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_SIGNING_KEY, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id, role: user.role, username: user.username }, JWT_USER_SECRET, { expiresIn: JWT_USER_EXPIRY });
       
       await storage.createAuditLog({
         userId: user.id,
