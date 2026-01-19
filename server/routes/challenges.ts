@@ -345,6 +345,13 @@ export function registerChallengesRoutes(app: Express): void {
       
       res.json(challenge);
     } catch (error: any) {
+      // Return 400 for balance/validation errors
+      if (error.message.includes('Insufficient') || 
+          error.message.includes('not found') ||
+          error.message.includes('not available') ||
+          error.message.includes('Invalid')) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: error.message });
     }
   });

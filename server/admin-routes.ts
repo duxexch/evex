@@ -2480,10 +2480,11 @@ export function registerAdminRoutes(app: Express) {
     try {
       let settings = await storage.getProjectCurrencySettings();
       if (!settings) {
+        // Create with defaults from schema - isActive, useInGames, useInP2P are all true by default
         settings = await storage.updateProjectCurrencySettings({
           currencyName: "VEX Coin",
           currencySymbol: "VXC",
-          exchangeRate: "1.00",
+          exchangeRate: "100",
         });
       }
       res.json(settings);
