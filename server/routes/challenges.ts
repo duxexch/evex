@@ -2,8 +2,8 @@ import type { Express, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, desc, or, and, isNull } from "drizzle-orm";
-import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable, notifications, liveGameSessions } from "@shared/schema";
+import { eq, desc, or, and, isNull, ilike } from "drizzle-orm";
+import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable, notifications, liveGameSessions, games } from "@shared/schema";
 import { authMiddleware, AuthRequest } from "./middleware";
 import { broadcastChallengeUpdate, broadcastNotification, broadcastToUser } from "../websocket";
 
@@ -490,12 +490,22 @@ export function registerChallengesRoutes(app: Express): void {
       const player1 = await storage.getUser(updatedChallenge!.player1Id);
       const player2 = await storage.getUser(userId);
       
-      // Get game config to get gameId - fail if game not found
-      const gameConfig = await storage.getMultiplayerGameByKey(updatedChallenge!.gameType);
-      if (!gameConfig) {
-        throw new Error(`Game configuration not found for: ${updatedChallenge!.gameType}`);
+      // Get game from games table to get gameId for foreign key constraint
+      // Use case-insensitive search to handle variations in game type naming
+      const gameType = updatedChallenge!.gameType.toLowerCase();
+      const [gameRecord] = await db.select().from(games).where(ilike(games.name, gameType)).limit(1);
+      if (!gameRecord) {
+        // Fallback: try exact match with capitalized name
+        const gameTypeName = gameType.charAt(0).toUpperCase() + gameType.slice(1);
+        const [fallbackRecord] = await db.select().from(games).where(eq(games.name, gameTypeName)).limit(1);
+        if (!fallbackRecord) {
+          console.error(`[Challenge Join] Game not found in games table: ${gameType}`);
+          throw new Error(`Game configuration not found: ${gameType}`);
+        }
+        var gameId = fallbackRecord.id;
+      } else {
+        var gameId = gameRecord.id;
       }
-      const gameId = gameConfig.id;
       
       // Create live game session for this challenge
       const [gameSession] = await db.insert(liveGameSessions).values({
