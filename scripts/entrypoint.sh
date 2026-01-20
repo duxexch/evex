@@ -1,12 +1,15 @@
 #!/bin/sh
 # VEX Platform - Docker Entrypoint Script
 # Production-safe database migrations and startup
+# آخر تحديث: يناير 2026
 
 set -e
 
 echo "========================================"
 echo "🚀 VEX Platform - Starting Up"
 echo "   Environment: ${NODE_ENV:-development}"
+echo "   Version: 1.0.0"
+echo "   Date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
 
 # Validate required environment variables
@@ -169,10 +172,35 @@ else
     fi
 fi
 
+# Run database seeding if enabled
+if [ "$SEED_DATABASE" = "true" ]; then
+    echo ""
+    echo "🌱 Seeding database..."
+    # Try compiled JS first, fall back to tsx for TS
+    if [ -f "dist/scripts/seed-data.js" ]; then
+        if node dist/scripts/seed-data.js 2>&1; then
+            echo "✅ Database seeding completed"
+        else
+            echo "⚠️  Database seeding failed (non-fatal)"
+        fi
+    elif command -v npx >/dev/null 2>&1; then
+        if npx --yes tsx scripts/seed-data.ts 2>&1; then
+            echo "✅ Database seeding completed"
+        else
+            echo "⚠️  Database seeding failed (non-fatal)"
+        fi
+    else
+        echo "⚠️  Skipping seeding: no tsx available and no compiled seed script"
+    fi
+fi
+
 echo ""
 echo "========================================"
 echo "✅ All startup tasks completed!"
 echo "🎮 Starting VEX Platform server..."
+echo "   Port: ${PORT:-5000}"
+echo "   Games: Chess, Backgammon, Domino, Tarneeb, Baloot"
+echo "   Features: P2P Trading, VIX Coin, Watch & Win"
 echo "========================================"
 echo ""
 
