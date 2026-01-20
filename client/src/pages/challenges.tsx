@@ -256,9 +256,13 @@ export default function ChallengesPage() {
   const joinChallengeMutation = useMutation({
     mutationFn: (challengeId: string) =>
       apiRequest('POST', `/api/challenges/${challengeId}/join`),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       toast({ title: t('common.success'), description: t('challenges.joined') });
       queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
+      // Redirect to game screen immediately after successful join
+      if (data && data.id) {
+        window.location.href = `/challenge-game/${data.id}`;
+      }
     },
     onError: (err: any) => {
       toast({ title: t('common.error'), description: err.message, variant: "destructive" });
