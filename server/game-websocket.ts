@@ -851,10 +851,13 @@ async function handleRespondDraw(ws: AuthenticatedWebSocket, payload: { accept: 
 }
 
 function handleLeaveGame(ws: AuthenticatedWebSocket) {
-  handleDisconnect(ws);
+  handleDisconnect(ws, true);
 }
 
-function handleDisconnect(ws: AuthenticatedWebSocket) {
+// Track sessions that are already being processed for forfeit to prevent double execution
+const forfeitingSessionsLock = new Set<string>();
+
+async function handleDisconnect(ws: AuthenticatedWebSocket, isVoluntaryLeave: boolean = false) {
   if (ws.userId) {
     userConnections.delete(ws.userId);
   }
@@ -869,10 +872,67 @@ function handleDisconnect(ws: AuthenticatedWebSocket) {
           payload: { spectatorCount: room.spectators.size }
         });
       } else if (ws.userId) {
-        room.players.delete(ws.userId);
+        const disconnectedPlayerId = ws.userId;
+        room.players.delete(disconnectedPlayerId);
+        
+        // Check if this is an active paid game - if so, the disconnecting player loses
+        // Use lock + atomic DB update to prevent double forfeit execution
+        const sessionId = ws.sessionId;
+        if (!forfeitingSessionsLock.has(sessionId)) {
+          forfeitingSessionsLock.add(sessionId);
+          
+          try {
+            // Atomic check-and-update: only proceed if session transitions from in_progress to completed
+            // This prevents double forfeit by using DB as single source of truth
+            const updateResult = await db.update(liveGameSessions)
+              .set({ status: 'completed' })
+              .where(and(
+                eq(liveGameSessions.id, sessionId),
+                eq(liveGameSessions.status, 'in_progress')
+              ))
+              .returning({ id: liveGameSessions.id, player1Id: liveGameSessions.player1Id, player2Id: liveGameSessions.player2Id });
+            
+            // Only proceed if we successfully transitioned the status
+            if (updateResult.length > 0) {
+              const session = updateResult[0];
+              // Determine the opponent (winner)
+              const opponentId = session.player1Id === disconnectedPlayerId 
+                ? session.player2Id 
+                : session.player1Id;
+              
+              if (opponentId) {
+                // Trigger game over with opponent as winner (forfeit by disconnect/leave)
+                console.log(`[WS] Player ${disconnectedPlayerId} ${isVoluntaryLeave ? 'left' : 'disconnected'} - forfeiting game to ${opponentId}`);
+                
+                await handleGameOver(room, {
+                  isOver: true,
+                  winner: opponentId,
+                  reason: isVoluntaryLeave ? 'abandonment' : 'disconnect'
+                });
+                
+                // Notify remaining players/spectators
+                broadcastToRoom(room, {
+                  type: 'player_forfeited',
+                  payload: { 
+                    forfeitedBy: disconnectedPlayerId, 
+                    winner: opponentId,
+                    reason: isVoluntaryLeave ? 'abandonment' : 'disconnect'
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.error('[WS] Error handling disconnect forfeit:', error);
+          } finally {
+            // Clean up lock after processing
+            setTimeout(() => forfeitingSessionsLock.delete(sessionId), 5000);
+          }
+        }
+        
+        // Always notify about disconnection
         broadcastToRoom(room, {
           type: 'player_disconnected',
-          payload: { userId: ws.userId, username: ws.username }
+          payload: { userId: disconnectedPlayerId, username: ws.username }
         });
       }
 

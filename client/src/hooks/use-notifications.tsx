@@ -142,6 +142,24 @@ export function useNotifications() {
             });
           }
         }
+
+        // Handle game start - redirect players to game screen
+        if (data.type === "game_start") {
+          const payload = data.payload;
+          if (payload?.redirectUrl && user?.id) {
+            // Check if current user is one of the players
+            if (payload.player1Id === user.id || payload.player2Id === user.id) {
+              toast({
+                title: language === 'ar' ? 'بدأت المباراة!' : 'Game Started!',
+                description: language === 'ar' 
+                  ? 'انتقل إلى شاشة اللعبة الآن' 
+                  : 'Redirecting to game screen',
+              });
+              // Redirect to game screen
+              window.location.href = payload.redirectUrl;
+            }
+          }
+        }
       } catch (error) {
         console.error("WebSocket message error:", error);
       }
@@ -161,7 +179,7 @@ export function useNotifications() {
     };
 
     wsRef.current = ws;
-  }, [token, toast, language]);
+  }, [token, toast, language, user]);
 
   useEffect(() => {
     if (token && user) {

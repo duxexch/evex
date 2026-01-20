@@ -1339,6 +1339,19 @@ export function broadcastChallengeUpdate(eventType: 'created' | 'joined' | 'star
   });
 }
 
+// Broadcast to specific user for targeted notifications (e.g., game start)
+export function broadcastToUser(userId: string, message: any) {
+  const userSockets = clients.get(userId);
+  if (userSockets) {
+    const payload = typeof message === 'string' ? message : JSON.stringify(message);
+    userSockets.forEach((socket) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(payload);
+      }
+    });
+  }
+}
+
 // Bot game broadcast functions for real-time spectator updates
 export function broadcastBotGameState(
   challengeId: string, 

@@ -3,9 +3,9 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, desc, or, and, isNull } from "drizzle-orm";
-import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable, notifications } from "@shared/schema";
+import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable, notifications, liveGameSessions } from "@shared/schema";
 import { authMiddleware, AuthRequest } from "./middleware";
-import { broadcastChallengeUpdate, broadcastNotification } from "../websocket";
+import { broadcastChallengeUpdate, broadcastNotification, broadcastToUser } from "../websocket";
 
 // In-memory stores for challenges (should be moved to DB in production)
 const challenges: any[] = [];
@@ -432,11 +432,10 @@ export function registerChallengesRoutes(app: Express): void {
           await tx.insert(projectCurrencyLedger).values({
             walletId: wallet.id,
             userId: userId,
-            transactionType: 'game_stake',
-            amount: (-betAmount).toFixed(8),
-            balanceType: 'earned',
-            balanceBefore: (parseFloat(wallet.earnedBalance) + parseFloat(wallet.purchasedBalance)).toFixed(8),
-            balanceAfter: (earnedBalance + purchasedBalance).toFixed(8),
+            type: 'game_stake',
+            amount: (-betAmount).toFixed(2),
+            balanceBefore: (parseFloat(wallet.earnedBalance) + parseFloat(wallet.purchasedBalance)).toFixed(2),
+            balanceAfter: (earnedBalance + purchasedBalance).toFixed(2),
             description: `Game stake for challenge ${challengeId}`,
             referenceId: challengeId
           });
@@ -491,8 +490,27 @@ export function registerChallengesRoutes(app: Express): void {
       const player1 = await storage.getUser(updatedChallenge!.player1Id);
       const player2 = await storage.getUser(userId);
       
+      // Get game config to get gameId - fail if game not found
+      const gameConfig = await storage.getMultiplayerGameByKey(updatedChallenge!.gameType);
+      if (!gameConfig) {
+        throw new Error(`Game configuration not found for: ${updatedChallenge!.gameType}`);
+      }
+      const gameId = gameConfig.id;
+      
+      // Create live game session for this challenge
+      const [gameSession] = await db.insert(liveGameSessions).values({
+        challengeId: challengeId,
+        gameId: gameId,
+        gameType: updatedChallenge!.gameType,
+        player1Id: updatedChallenge!.player1Id,
+        player2Id: userId,
+        status: 'in_progress',
+        gameState: JSON.stringify({ initialized: true, startedAt: new Date().toISOString() }),
+      }).returning();
+      
       const enrichedChallenge = {
         ...updatedChallenge,
+        sessionId: gameSession.id,
         player1Name: player1?.nickname || player1?.username,
         player2Name: player2?.nickname || player2?.username,
         player1Rating: { wins: player1?.gamesWon || 0, losses: player1?.gamesLost || 0, winRate: 50, rank: "silver" },
@@ -501,6 +519,26 @@ export function registerChallengesRoutes(app: Express): void {
       
       // Broadcast that challenge started for real-time updates
       broadcastChallengeUpdate('started', enrichedChallenge);
+      
+      // Send game_start notification to both players to redirect them to the game
+      const gameStartMessage = {
+        type: 'game_start',
+        payload: {
+          challengeId: challengeId,
+          sessionId: gameSession.id,
+          gameType: updatedChallenge!.gameType,
+          betAmount: updatedChallenge!.betAmount,
+          player1Id: updatedChallenge!.player1Id,
+          player1Name: player1?.nickname || player1?.username,
+          player2Id: userId,
+          player2Name: player2?.nickname || player2?.username,
+          redirectUrl: `/challenge-game/${challengeId}`,
+        }
+      };
+      
+      // Notify both players to redirect to the game
+      broadcastToUser(updatedChallenge!.player1Id, gameStartMessage);
+      broadcastToUser(userId, gameStartMessage);
       
       res.json(enrichedChallenge);
     } catch (error: any) {
