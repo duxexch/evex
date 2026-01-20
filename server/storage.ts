@@ -490,8 +490,12 @@ export class DatabaseStorage implements IStorage {
       return { success: false, error: 'Invalid stake amount' };
     }
 
-    const platformFee = stake * (platformFeePercent / 100);
-    const winnerPayout = stake - platformFee;
+    // Total pot = stake from each player = stake * 2
+    // Platform fee is calculated on the total pot
+    const totalPot = stake * 2;
+    const platformFee = totalPot * (platformFeePercent / 100);
+    // Winner gets their original stake back + loser's stake - platform fee
+    const winnerPayout = totalPot - platformFee;
     const validGameTypes = ['chess', 'backgammon', 'domino', 'tarneeb', 'baloot'];
 
     return await db.transaction(async (tx) => {
@@ -592,8 +596,12 @@ export class DatabaseStorage implements IStorage {
       return { success: false, error: 'Invalid stake amount' };
     }
 
-    const platformFee = stake * (platformFeePercent / 100);
-    const winnerPayout = stake - platformFee;
+    // Total pot = stake from each player = stake * 2
+    // Platform fee is calculated on the total pot
+    const totalPot = stake * 2;
+    const platformFee = totalPot * (platformFeePercent / 100);
+    // Winner gets their original stake back + loser's stake - platform fee
+    const winnerPayout = totalPot - platformFee;
     const validGameTypes = ['chess', 'backgammon', 'domino', 'tarneeb', 'baloot'];
 
     return await db.transaction(async (tx) => {

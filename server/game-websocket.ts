@@ -12,6 +12,7 @@ import { chatRateLimiter, giftRateLimiter } from './lib/rate-limiter';
 import { filterMessage } from './lib/word-filter';
 import { settleSpectatorSupports } from './lib/support-settler';
 import { JWT_USER_SECRET } from './lib/auth-config';
+import { broadcastNotification } from './websocket';
 
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: string;
@@ -535,6 +536,16 @@ async function handleGameOver(room: GameRoom, status: any) {
       endedAt: new Date()
     });
 
+    // Update challenge status to 'completed' so it's removed from Arena active list
+    if (session.challengeId) {
+      await db.update(challenges)
+        .set({ 
+          status: 'completed',
+          updatedAt: new Date()
+        })
+        .where(eq(challenges.id, session.challengeId));
+    }
+
     // Update stats for non-paid games or draws only (skip if paid game payout was attempted)
     const isPaidGame = session.challengeId && !isDraw;
     if (!statsUpdatedInPayout && !isPaidGame) {
@@ -560,6 +571,58 @@ async function handleGameOver(room: GameRoom, status: any) {
       type: 'game_over',
       payload: status
     });
+
+    // Send notifications to winner and loser
+    try {
+      const gameName = gameType.charAt(0).toUpperCase() + gameType.slice(1);
+      const winner = await storage.getUser(winnerId);
+      const loser = loserId ? await storage.getUser(loserId) : null;
+      
+      if (winner && !isDraw) {
+        // Notification for winner
+        await broadcastNotification({
+          type: 'transaction',
+          priority: 'normal',
+          title: 'Victory!',
+          titleAr: 'فوز!',
+          message: `Congratulations! You won the ${gameName} match${session.challengeId ? ' and earned your winnings!' : '!'}`,
+          messageAr: `مبروك! فزت في مباراة ${gameName}${session.challengeId ? ' وربحت أرباحك!' : '!'}`,
+          link: `/history`,
+          metadata: JSON.stringify({ sessionId: room.sessionId, gameType, result: 'win' })
+        }, [winnerId]);
+      }
+      
+      if (loser && loserId && !isDraw) {
+        // Notification for loser
+        await broadcastNotification({
+          type: 'transaction',
+          priority: 'normal',
+          title: 'Match Ended',
+          titleAr: 'انتهت المباراة',
+          message: `The ${gameName} match has ended. Better luck next time!`,
+          messageAr: `انتهت مباراة ${gameName}. حظاً أوفر في المرة القادمة!`,
+          link: `/history`,
+          metadata: JSON.stringify({ sessionId: room.sessionId, gameType, result: 'loss' })
+        }, [loserId]);
+      }
+      
+      if (isDraw) {
+        // Notification for both players on draw
+        const playerIds = [session.player1Id, session.player2Id].filter(Boolean) as string[];
+        await broadcastNotification({
+          type: 'transaction',
+          priority: 'normal',
+          title: 'Draw!',
+          titleAr: 'تعادل!',
+          message: `The ${gameName} match ended in a draw.`,
+          messageAr: `انتهت مباراة ${gameName} بالتعادل.`,
+          link: `/history`,
+          metadata: JSON.stringify({ sessionId: room.sessionId, gameType, result: 'draw' })
+        }, playerIds);
+      }
+    } catch (notifError) {
+      console.error('[WS] Error sending game over notifications:', notifError);
+    }
   } catch (error) {
     console.error('[WS] Error handling game over:', error);
   }
