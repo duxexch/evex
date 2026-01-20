@@ -4,6 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth, useAuthHeaders } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
+import { getPendingGameStartMessages, acknowledgeGameStartMessage } from "@/lib/challenges-api";
 
 interface Notification {
   id: string;
@@ -21,6 +22,17 @@ interface Notification {
   createdAt: string;
 }
 
+export interface GameStartEvent {
+  challengeId: string;
+  sessionId: string;
+  gameType: string;
+  player1Id: string;
+  player1Name: string;
+  player2Id: string;
+  player2Name: string;
+  redirectUrl: string;
+}
+
 export function useNotifications() {
   const { token, user } = useAuth();
   const headers = useAuthHeaders();
@@ -29,6 +41,9 @@ export function useNotifications() {
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const pollingTimeoutRef = useRef<NodeJS.Timeout>();
+  const [gameStartEvent, setGameStartEvent] = useState<GameStartEvent | null>(null);
+  const [showGameStartModal, setShowGameStartModal] = useState(false);
 
   const { data: notifications = [], isLoading } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
@@ -73,6 +88,32 @@ export function useNotifications() {
     },
   });
 
+  /**
+   * Polling fallback for game start messages
+   * Triggers when WebSocket is not connected
+   */
+  const pollForPendingMessages = useCallback(async () => {
+    if (isConnected || !user?.id) return;
+    
+    try {
+      const result = await getPendingGameStartMessages();
+      if (result.messages && result.messages.length > 0) {
+        const message = result.messages[0];
+        console.log('[Polling] Found pending game start message:', message);
+        setGameStartEvent(message);
+        setShowGameStartModal(true);
+        await acknowledgeGameStartMessage(message.payload.challengeId);
+        
+        toast({
+          title: language === 'ar' ? 'بدأت المباراة!' : 'Game Started!',
+          description: language === 'ar' ? 'انتقل إلى شاشة اللعب' : 'Moving to game screen',
+        });
+      }
+    } catch (error) {
+      console.error('[Polling] Error:', error);
+    }
+  }, [isConnected, user?.id, toast, language]);
+
   const connectWebSocket = useCallback(() => {
     if (!token || wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -81,12 +122,29 @@ export function useNotifications() {
 
     ws.onopen = () => {
       setIsConnected(true);
+      console.log('[WebSocket] Connected, sending auth token');
       ws.send(JSON.stringify({ type: "auth", token }));
+      
+      // Clear polling when WebSocket connects
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = undefined;
+      }
+
+      // Check if we're waiting for a game start
+      const awaitingGameStart = sessionStorage.getItem('awaiting_game_start');
+      if (awaitingGameStart) {
+        console.log('[WebSocket] Connected while awaiting game start for challenge:', awaitingGameStart);
+        // Immediately poll for the message
+        pollForPendingMessages();
+      }
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        
+        console.log('[WebSocket] Message received:', data.type);
         
         if (data.type === "new_notification") {
           queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
@@ -143,20 +201,30 @@ export function useNotifications() {
           }
         }
 
-        // Handle game start - redirect players to game screen
+        // Handle game start - redirect players to game screen with modal
         if (data.type === "game_start") {
           const payload = data.payload;
-          if (payload?.redirectUrl && user?.id) {
-            // Check if current user is one of the players
+          console.log('[WebSocket] game_start event received:', payload);
+          console.log('[WebSocket] Current user ID:', user?.id);
+          console.log('[WebSocket] Is this our game?', payload && user?.id && (payload.player1Id === user.id || payload.player2Id === user.id));
+          
+          if (payload && user?.id) {
             if (payload.player1Id === user.id || payload.player2Id === user.id) {
+              console.log('[WebSocket] ✓ This is our game! Setting modal');
+              setGameStartEvent(payload);
+              setShowGameStartModal(true);
+              
+              // Clear the awaiting flag
+              sessionStorage.removeItem('awaiting_game_start');
+              
               toast({
                 title: language === 'ar' ? 'بدأت المباراة!' : 'Game Started!',
                 description: language === 'ar' 
                   ? 'انتقل إلى شاشة اللعبة الآن' 
                   : 'Redirecting to game screen',
               });
-              // Redirect to game screen
-              window.location.href = payload.redirectUrl;
+            } else {
+              console.log('[WebSocket] This game is not for us');
             }
           }
         }
@@ -166,20 +234,32 @@ export function useNotifications() {
     };
 
     ws.onclose = () => {
+      console.log('[WebSocket] Disconnected');
       setIsConnected(false);
       wsRef.current = null;
       
+      // Start polling when WebSocket disconnects
+      if (!pollingTimeoutRef.current) {
+        const pollWithBackoff = () => {
+          pollForPendingMessages();
+          pollingTimeoutRef.current = setTimeout(pollWithBackoff, 3000);
+        };
+        pollingTimeoutRef.current = setTimeout(pollWithBackoff, 3000);
+      }
+      
       reconnectTimeoutRef.current = setTimeout(() => {
+        console.log('[WebSocket] Attempting to reconnect');
         connectWebSocket();
       }, 5000);
     };
 
-    ws.onerror = () => {
+    ws.onerror = (error) => {
+      console.error('[WebSocket] Error:', error);
       ws.close();
     };
 
     wsRef.current = ws;
-  }, [token, toast, language, user]);
+  }, [token, toast, language, user, pollForPendingMessages]);
 
   useEffect(() => {
     if (token && user) {
@@ -190,11 +270,14 @@ export function useNotifications() {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+      }
       if (wsRef.current) {
         wsRef.current.close();
       }
     };
-  }, [token, user, connectWebSocket]);
+  }, [token, user, connectWebSocket, pollForPendingMessages]);
 
   const getLocalizedContent = useCallback((notification: Notification) => {
     return {
@@ -211,5 +294,8 @@ export function useNotifications() {
     markAsRead: markAsReadMutation.mutate,
     markAllAsRead: markAllAsReadMutation.mutate,
     getLocalizedContent,
+    gameStartEvent,
+    showGameStartModal,
+    setShowGameStartModal,
   };
 }

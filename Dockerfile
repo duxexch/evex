@@ -54,9 +54,6 @@ COPY --from=builder /app/server ./server
 COPY scripts ./scripts
 RUN chmod +x scripts/*.sh 2>/dev/null || true
 
-# Copy i18n translations
-COPY --from=builder /app/client/src/i18n ./client/src/i18n
-
 # Create necessary directories
 RUN mkdir -p logs uploads temp
 

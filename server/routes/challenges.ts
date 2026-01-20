@@ -2,7 +2,7 @@ import type { Express, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, desc, or, and, isNull, ilike } from "drizzle-orm";
+import { eq, desc, or, and, isNull, sql } from "drizzle-orm";
 import { users, projectCurrencyWallets, projectCurrencyLedger, challenges as challengesTable, notifications, liveGameSessions, games } from "@shared/schema";
 import { authMiddleware, AuthRequest } from "./middleware";
 import { broadcastChallengeUpdate, broadcastNotification, broadcastToUser } from "../websocket";
@@ -493,7 +493,7 @@ export function registerChallengesRoutes(app: Express): void {
       // Get game from games table to get gameId for foreign key constraint
       // Use case-insensitive search to handle variations in game type naming
       const gameType = updatedChallenge!.gameType.toLowerCase();
-      const [gameRecord] = await db.select().from(games).where(ilike(games.name, gameType)).limit(1);
+      const [gameRecord] = await db.select().from(games).where(sql`LOWER(${games.name}) = LOWER(${gameType})`).limit(1);
       if (!gameRecord) {
         // Fallback: try exact match with capitalized name
         const gameTypeName = gameType.charAt(0).toUpperCase() + gameType.slice(1);

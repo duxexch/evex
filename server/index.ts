@@ -7,6 +7,7 @@ import { setupGameWebSocket } from "./game-websocket";
 import { seedBotAccounts } from "./bot-seeder";
 import { seedMultiplayerGames, seedGiftCatalog } from "./seed";
 import { startBotSimulator } from "./bot-game-simulator";
+import { initializeServices, shutdownServices } from "./services-init";
 
 const app = express();
 const httpServer = createServer(app);
@@ -160,6 +161,9 @@ process.on('unhandledRejection', (reason, promise) => {
 
 (async () => {
   try {
+    // Initialize all background services
+    await initializeServices();
+
     await registerRoutes(httpServer, app);
     registerAdminRoutes(app);
 

@@ -16,7 +16,18 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useNotifications } from "@/hooks/use-notifications";
+import { useGameStartWatcher } from "@/hooks/use-game-start-watcher";
+import { 
+  createChallenge as createChallengeApi,
+  getAvailableChallenges,
+  getPublicChallenges,
+  getUserChallenges,
+  acceptChallenge as acceptChallengeApi,
+  withdrawChallenge as withdrawChallengeApi,
+} from "@/lib/challenges-api";
 import { BackButton } from "@/components/BackButton";
+import { GameStartModal } from "@/components/GameStartModal";
 import { 
   Swords, 
   Users, 
@@ -151,6 +162,28 @@ export default function ChallengesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { 
+    showGameStartModal, 
+    setShowGameStartModal, 
+    gameStartEvent 
+  } = useNotifications();
+  
+  // Game start watcher for monitoring game readiness
+  const {
+    isWaiting: isWaitingForGame,
+    gameStartEvent: watcherGameEvent,
+    showGameStartModal: watcherShowModal,
+    setShowGameStartModal: setWatcherShowModal,
+    navigateToGame,
+  } = useGameStartWatcher();
+  
+  // Merge watcher state with notifications state
+  const finalGameStartEvent = gameStartEvent || watcherGameEvent;
+  const finalShowModal = showGameStartModal || watcherShowModal;
+  const finalSetShowModal = (show: boolean) => {
+    setShowGameStartModal(show);
+    setWatcherShowModal(show);
+  };
   
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
@@ -165,14 +198,26 @@ export default function ChallengesPage() {
 
   const { data: myChallenges, isLoading: loadingMy } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/my'],
+    queryFn: getUserChallenges,
+    refetchInterval: 2000, // Refetch every 2 seconds
+    staleTime: 1500, // Data is stale after 1.5 seconds
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
   });
 
   const { data: availableChallenges, isLoading: loadingAvailable } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/available'],
+    queryFn: getAvailableChallenges,
+    refetchInterval: 2000,
+    staleTime: 1500,
+    gcTime: 5 * 60 * 1000,
   });
 
   const { data: publicChallenges, isLoading: loadingPublic } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/public'],
+    queryFn: getPublicChallenges,
+    refetchInterval: 2000,
+    staleTime: 1500,
+    gcTime: 5 * 60 * 1000,
   });
 
   const { data: userRating } = useQuery<any>({
@@ -241,10 +286,18 @@ export default function ChallengesPage() {
 
   const createChallengeMutation = useMutation({
     mutationFn: (data: { gameType: string; betAmount: number; opponentType: string; friendAccountId?: string; visibility: string }) =>
-      apiRequest('POST', '/api/challenges', data),
+      createChallengeApi({
+        gameType: data.gameType,
+        betAmount: data.betAmount,
+        opponentType: data.opponentType as 'random' | 'friend',
+        friendAccountId: data.friendAccountId,
+        visibility: data.visibility as 'public' | 'private',
+      }),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.created') });
-      queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/my'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/available'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/public'] });
       setShowCreateDialog(false);
       resetForm();
     },
@@ -255,14 +308,19 @@ export default function ChallengesPage() {
 
   const joinChallengeMutation = useMutation({
     mutationFn: (challengeId: string) =>
-      apiRequest('POST', `/api/challenges/${challengeId}/join`),
+      acceptChallengeApi(challengeId),
     onSuccess: (data: any) => {
       toast({ title: t('common.success'), description: t('challenges.joined') });
-      queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
-      // Redirect to game screen immediately after successful join
-      if (data && data.id) {
-        window.location.href = `/challenge/${data.id}/play`;
-      }
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/my'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/available'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/public'] });
+      
+      // Set the challenge ID temporarily - the game start event will come via WebSocket
+      // DO NOT redirect immediately - wait for WebSocket confirmation
+      console.log('[Join Challenge] Waiting for game_start event from WebSocket');
+      
+      // Store the challenge ID for polling fallback if WebSocket is slow
+      sessionStorage.setItem('awaiting_game_start', data?.id || '');
     },
     onError: (err: any) => {
       toast({ title: t('common.error'), description: err.message, variant: "destructive" });
@@ -271,10 +329,12 @@ export default function ChallengesPage() {
 
   const withdrawChallengeMutation = useMutation({
     mutationFn: (challengeId: string) =>
-      apiRequest('POST', `/api/challenges/${challengeId}/withdraw`),
+      withdrawChallengeApi(challengeId),
     onSuccess: () => {
       toast({ title: t('common.success'), description: t('challenges.withdrawn') });
-      queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/my'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/available'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/challenges/public'] });
       setShowWithdrawDialog(false);
       setActiveChallenge(null);
     },
@@ -362,6 +422,24 @@ export default function ChallengesPage() {
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
       <BackButton className="mb-2" />
+      
+      {/* Game Start Modal - Mandatory popup */}
+      {/* Show modal from both WebSocket and watcher */}
+      {finalGameStartEvent && (
+        <GameStartModal
+          isOpen={finalShowModal}
+          challengeId={finalGameStartEvent.challengeId}
+          gameType={finalGameStartEvent.gameType}
+          player1Name={finalGameStartEvent.player1Name}
+          player2Name={finalGameStartEvent.player2Name}
+          onOpen={() => {
+            navigateToGame(finalGameStartEvent.challengeId);
+          }}
+          onDismiss={() => {
+            finalSetShowModal(false);
+          }}
+        />
+      )}
       
       {/* Header Section */}
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

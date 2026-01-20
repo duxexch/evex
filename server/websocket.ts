@@ -1340,16 +1340,20 @@ export function broadcastChallengeUpdate(eventType: 'created' | 'joined' | 'star
 }
 
 // Broadcast to specific user for targeted notifications (e.g., game start)
-export function broadcastToUser(userId: string, message: any) {
+export function broadcastToUser(userId: string, message: any): boolean {
   const userSockets = clients.get(userId);
-  if (userSockets) {
+  if (userSockets && userSockets.size > 0) {
     const payload = typeof message === 'string' ? message : JSON.stringify(message);
+    let successCount = 0;
     userSockets.forEach((socket) => {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(payload);
+        successCount++;
       }
     });
+    return successCount > 0;
   }
+  return false;
 }
 
 // Bot game broadcast functions for real-time spectator updates

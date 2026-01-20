@@ -38,13 +38,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vex_user}:${POSTGRES_PASSWORD:-vex_password}@db:5432/${POSTGRES_DB:-vex_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vex_user}:${POSTGRES_PASSWORD:-vex_password}@db:5432/${POSTGRES_DB:-vex_db}?sslmode=disable
       SESSION_SECRET: ${SESSION_SECRET}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
       ALLOW_FORCE_MIGRATIONS: ${ALLOW_FORCE_MIGRATIONS:-false}
       SEED_DATABASE: ${SEED_DATABASE:-false}
       TZ: UTC
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD}
     ports:
       - "${APP_PORT:-5000}:5000"
     volumes:

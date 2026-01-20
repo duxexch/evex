@@ -1,5 +1,5 @@
 import { db } from "../server/db";
-import { countryPaymentMethods, currencies, games } from "../shared/schema";
+import { countryPaymentMethods, currencies, games, multiplayerGames } from "../shared/schema";
 import { sql } from "drizzle-orm";
 
 const CURRENCIES = [
@@ -120,6 +120,130 @@ const PAYMENT_METHODS = [
   { name: "Boost", type: "e_wallet", countryCode: "MY", minAmount: "10", maxAmount: "5000", processingTime: "Instant", sortOrder: 44 },
 ];
 
+// Multiplayer games (Single Source of Truth for challenges)
+const MULTIPLAYER_GAMES = [
+  {
+    key: "chess",
+    nameEn: "Chess",
+    nameAr: "الشطرنج",
+    descriptionEn: "Classic strategy game of chess. Outwit your opponent and claim victory!",
+    descriptionAr: "لعبة الشطرنج الكلاسيكية. تغلب على خصمك واحقق النصر!",
+    iconName: "Crown",
+    colorClass: "bg-amber-500/20 text-amber-500",
+    gradientClass: "from-amber-500/20 to-amber-600/10",
+    category: "multiplayer",
+    status: "active",
+    isActive: true,
+    minStake: "1.00",
+    maxStake: "10000.00",
+    priceVex: "0.00",
+    houseFee: "0.05",
+    minPlayers: 2,
+    maxPlayers: 2,
+    defaultTimeLimit: 600,
+    freePlayLimit: 0,
+    displayLocations: ["games", "challenges", "featured"],
+    isFeatured: true,
+    sortOrder: 1,
+  },
+  {
+    key: "backgammon",
+    nameEn: "Backgammon",
+    nameAr: "طاولة الزهر",
+    descriptionEn: "Ancient game of skill and luck. Roll the dice and reach the end first!",
+    descriptionAr: "لعبة قديمة من المهارة والحظ. ألقِ النرد وصل إلى النهاية أولاً!",
+    iconName: "Dices",
+    colorClass: "bg-red-500/20 text-red-500",
+    gradientClass: "from-red-500/20 to-red-600/10",
+    category: "multiplayer",
+    status: "active",
+    isActive: true,
+    minStake: "0.50",
+    maxStake: "5000.00",
+    priceVex: "0.00",
+    houseFee: "0.05",
+    minPlayers: 2,
+    maxPlayers: 2,
+    defaultTimeLimit: 600,
+    freePlayLimit: 0,
+    displayLocations: ["games", "challenges"],
+    isFeatured: true,
+    sortOrder: 2,
+  },
+  {
+    key: "domino",
+    nameEn: "Domino",
+    nameAr: "الدومينو",
+    descriptionEn: "Match tiles and dominate the board. A timeless classic!",
+    descriptionAr: "طابق البلاطات واسيطر على اللوحة. لعبة خالدة!",
+    iconName: "SquareDot",
+    colorClass: "bg-blue-500/20 text-blue-500",
+    gradientClass: "from-blue-500/20 to-blue-600/10",
+    category: "multiplayer",
+    status: "active",
+    isActive: true,
+    minStake: "0.50",
+    maxStake: "5000.00",
+    priceVex: "0.00",
+    houseFee: "0.05",
+    minPlayers: 2,
+    maxPlayers: 4,
+    defaultTimeLimit: 600,
+    freePlayLimit: 0,
+    displayLocations: ["games", "challenges"],
+    isFeatured: true,
+    sortOrder: 3,
+  },
+  {
+    key: "tarneeb",
+    nameEn: "Tarneeb",
+    nameAr: "طرنيب",
+    descriptionEn: "Popular Middle Eastern card game. Bid wisely and win!",
+    descriptionAr: "لعبة الورق الشهيرة في الشرق الأوسط. ارفع رهانك بحكمة واربح!",
+    iconName: "Spade",
+    colorClass: "bg-purple-500/20 text-purple-500",
+    gradientClass: "from-purple-500/20 to-purple-600/10",
+    category: "multiplayer",
+    status: "active",
+    isActive: true,
+    minStake: "1.00",
+    maxStake: "5000.00",
+    priceVex: "0.00",
+    houseFee: "0.05",
+    minPlayers: 4,
+    maxPlayers: 4,
+    defaultTimeLimit: 600,
+    freePlayLimit: 0,
+    displayLocations: ["games", "challenges"],
+    isFeatured: false,
+    sortOrder: 4,
+  },
+  {
+    key: "baloot",
+    nameEn: "Baloot",
+    nameAr: "بلوت",
+    descriptionEn: "Strategic card game from the Gulf. Master the art of bidding!",
+    descriptionAr: "لعبة ورق استراتيجية من الخليج. أتقن فن المزايدة!",
+    iconName: "Heart",
+    colorClass: "bg-pink-500/20 text-pink-500",
+    gradientClass: "from-pink-500/20 to-pink-600/10",
+    category: "multiplayer",
+    status: "active",
+    isActive: true,
+    minStake: "1.00",
+    maxStake: "5000.00",
+    priceVex: "0.00",
+    houseFee: "0.05",
+    minPlayers: 2,
+    maxPlayers: 4,
+    defaultTimeLimit: 600,
+    freePlayLimit: 0,
+    displayLocations: ["games", "challenges"],
+    isFeatured: false,
+    sortOrder: 5,
+  },
+];
+
 const GAMES = [
   { name: "Penalty Shootout", nameAr: "ضربات الجزاء", description: "Score goals and win big! Beat the goalkeeper in this exciting penalty shootout game.", descriptionAr: "سجل الأهداف واربح! تغلب على حارس المرمى في هذه اللعبة المثيرة", category: "sports", rtp: "96.5", volatility: "medium", minBet: "0.50", maxBet: "100", status: "active" },
   { name: "Crash", nameAr: "كراش", description: "Watch the multiplier rise and cash out before it crashes! High risk, high reward gameplay.", descriptionAr: "شاهد المضاعف يرتفع واسحب أرباحك قبل السقوط!", category: "crash", rtp: "97.0", volatility: "high", minBet: "0.10", maxBet: "500", status: "active" },
@@ -182,6 +306,62 @@ async function seedPaymentMethods() {
   console.log(`Seeded ${PAYMENT_METHODS.length} payment methods`);
 }
 
+async function seedMultiplayerGames() {
+  console.log("Seeding multiplayer games...");
+  for (const game of MULTIPLAYER_GAMES) {
+    try {
+      // Insert into multiplayerGames table
+      await db.insert(multiplayerGames).values({
+        key: game.key,
+        nameEn: game.nameEn,
+        nameAr: game.nameAr,
+        descriptionEn: game.descriptionEn,
+        descriptionAr: game.descriptionAr,
+        iconName: game.iconName,
+        colorClass: game.colorClass,
+        gradientClass: game.gradientClass,
+        category: game.category as any,
+        status: game.status as any,
+        isActive: game.isActive,
+        minStake: game.minStake,
+        maxStake: game.maxStake,
+        priceVex: game.priceVex,
+        houseFee: game.houseFee,
+        minPlayers: game.minPlayers,
+        maxPlayers: game.maxPlayers,
+        defaultTimeLimit: game.defaultTimeLimit,
+        freePlayLimit: game.freePlayLimit,
+        displayLocations: game.displayLocations,
+        isFeatured: game.isFeatured,
+        sortOrder: game.sortOrder,
+      }).onConflictDoNothing();
+      
+      // Also insert bridge entry into games table for challenge lookups
+      // This ensures liveGameSessions can reference the game by FK
+      await db.insert(games).values({
+        name: game.nameEn,
+        nameAr: game.nameAr,
+        description: game.descriptionEn,
+        descriptionAr: game.descriptionAr,
+        category: game.category,
+        rtp: "99.0", // Default high RTP for P2P games
+        volatility: "medium" as any,
+        minBet: game.minStake,
+        maxBet: game.maxStake,
+        status: "active" as any,
+        isFeatured: game.isFeatured,
+        isFree: false,
+        imageUrl: `/game-thumbnails/${game.nameEn.toLowerCase().replace(/\s+/g, '-')}.png`,
+      }).onConflictDoNothing();
+      
+      console.log(`✓ Seeded multiplayer game: ${game.nameEn}`);
+    } catch (err) {
+      console.log(`✗ Game ${game.nameEn} may already exist`);
+    }
+  }
+  console.log(`Seeded ${MULTIPLAYER_GAMES.length} multiplayer games`);
+}
+
 async function seedGames() {
   console.log("Seeding games...");
   for (const game of GAMES) {
@@ -214,9 +394,10 @@ async function main() {
   try {
     await seedCurrencies();
     await seedPaymentMethods();
+    await seedMultiplayerGames();
     await seedGames();
     
-    console.log("Seed completed successfully!");
+    console.log("\n✅ Seed completed successfully!");
   } catch (error) {
     console.error("Seed failed:", error);
     process.exit(1);

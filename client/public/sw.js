@@ -1,27 +1,33 @@
-const CACHE_NAME = 'vex-v1';
+const CACHE_VERSION = 'vex-v2-20260120-001';
+const RUNTIME_CACHE = 'vex-runtime-20260120-001';
 const STATIC_ASSETS = [
-  '/',
   '/manifest.json',
   '/favicon.png',
 ];
 
 self.addEventListener('install', (event) => {
+  console.log('[SW] Installing version:', CACHE_VERSION);
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+    caches.open(CACHE_VERSION).then((cache) => {
+      return cache.addAll(STATIC_ASSETS).catch(() => {
+        console.log('[SW] Some static assets failed to cache (non-critical)');
+      });
     })
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activating version:', CACHE_VERSION);
   event.waitUntil(
     caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
+      const deletePromises = cacheNames
+        .filter((name) => name !== CACHE_VERSION && name !== RUNTIME_CACHE)
+        .map((name) => {
+          console.log('[SW] Deleting old cache:', name);
+          return caches.delete(name);
+        });
+      return Promise.all(deletePromises);
     })
   );
   event.waitUntil(clients.claim());
@@ -32,10 +38,40 @@ self.addEventListener('fetch', (event) => {
   
   const url = new URL(event.request.url);
   
-  if (url.pathname.startsWith('/api/')) {
+  // Skip WebSocket and API calls - never cache
+  if (url.pathname.startsWith('/api/') || url.pathname === '/ws') {
     return;
   }
   
+  // Network-first for HTML documents (critical for updates)
+  if (event.request.headers.get('accept')?.includes('text/html') || 
+      url.pathname === '/' || 
+      url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const responseToCache = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request) || new Response('Offline', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: new Headers({
+              'Content-Type': 'text/plain'
+            })
+          });
+        })
+    );
+    return;
+  }
+  
+  // Cache-first for static assets (JS, CSS, images, fonts)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -46,13 +82,21 @@ self.addEventListener('fetch', (event) => {
           return response;
         }
         const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
+        caches.open(RUNTIME_CACHE).then((cache) => {
           cache.put(event.request, responseToCache);
         });
         return response;
+      }).catch(() => {
+        return new Response('Offline', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({
+            'Content-Type': 'text/plain'
+          })
+        });
       });
     })
-  )
+  );
 });
 
 self.addEventListener('push', (event) => {

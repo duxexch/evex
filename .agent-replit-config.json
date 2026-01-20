@@ -1,0 +1,107 @@
+{
+  "version": "1.0.1",
+  "lastUpdated": "2026-01-19T00:00:00Z",
+  "mode": "read-only-monitoring",
+  "replit": {
+    "detected": {
+      "modules": ["nodejs-20", "python-3.11", "web", "postgresql-16"],
+      "nixChannel": "stable-24_05",
+      "port": 5000,
+      "deploymentTarget": "autoscale"
+    },
+    "environment": "production",
+    "compatibility": {
+      "respectHiddenFiles": true,
+      "hiddenPaths": [".config", ".git", "node_modules", "dist"],
+      "useReplitWorkflows": false,
+      "respectReplitAgent": true
+    },
+    "safeguards": {
+      "preventCodeModification": true,
+      "preventDatabaseAccess": true,
+      "preventDependencyInstall": true,
+      "requireApprovalForChanges": true,
+      "respectReplitLimits": true
+    },
+    "resources": {
+      "maxMemoryMB": 50,
+      "maxExecutionTime": 30,
+      "respectReplitQuota": true,
+      "pauseOnInactivity": true
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "interval": "2h",
+    "checkHealth": true,
+    "checkTypeScript": true,
+    "checkSecurity": true,
+    "checkDependencies": false,
+    "adaptToReplitSleep": true
+  },
+  "notifications": {
+    "critical": {
+      "enabled": true,
+      "channels": ["log"],
+      "events": ["build_failed", "security_critical", "service_down"]
+    },
+    "warning": {
+      "enabled": true,
+      "channels": ["log"],
+      "interval": "6h",
+      "events": ["typescript_errors", "security_medium"]
+    },
+    "info": {
+      "enabled": false
+    }
+  },
+  "allowedOperations": [
+    "read_files",
+    "check_types",
+    "analyze_logs",
+    "generate_reports",
+    "cleanup_temp_files",
+    "update_snapshots"
+  ],
+  "blockedOperations": [
+    "modify_source_code",
+    "install_dependencies",
+    "database_migrations",
+    "delete_source_files",
+    "modify_config_files",
+    "restart_services",
+    "modify_replit_config"
+  ],
+  "snapshot": {
+    "enabled": true,
+    "interval": "1h",
+    "retentionDays": 7,
+    "path": ".agent-snapshots.json",
+    "lightweight": true
+  },
+  "logging": {
+    "enabled": true,
+    "path": "logs/agent-activity.log",
+    "level": "info",
+    "maxSizeMB": 10,
+    "rotateDaily": true,
+    "compressOld": true
+  },
+  "cache": {
+    "enabled": true,
+    "ttl": 3600,
+    "path": ".agent-cache",
+    "maxSizeMB": 5
+  },
+  "approvalWorkflow": {
+    "required": true,
+    "approvers": ["manual"],
+    "timeout": "24h"
+  },
+  "replitIntegration": {
+    "respectRunCommand": true,
+    "avoidConflictWithReplitAgent": true,
+    "useReplitPort": 5000,
+    "respectDeploymentConfig": true
+  }
+}

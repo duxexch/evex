@@ -14,6 +14,10 @@ vite.config.ts.*
 logs/
 *.log
 
+# Agent files (snapshots and cache)
+.agent-snapshots.json
+.agent-cache
+
 # Uploads
 uploads/
 
