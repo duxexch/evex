@@ -418,15 +418,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const dailyUserLimit = parseFloat(settings.dailyConversionLimitPerUser);
-      const userDailyTotal = await storage.getUserDailyConversionTotal(req.user!.id);
+      const userDailyTotal = parseFloat(await storage.getUserDailyConversionTotal(req.user!.id));
       if (userDailyTotal + parsedAmount > dailyUserLimit) {
         return res.status(400).json({ 
           error: `Daily conversion limit of $${dailyUserLimit.toFixed(2)} exceeded` 
         });
       }
 
-      const dailyPlatformLimit = parseFloat(settings.dailyConversionLimitPlatform);
-      const platformDailyTotal = await storage.getPlatformDailyConversionTotal();
+      const dailyPlatformLimit = parseFloat(settings.totalPlatformDailyLimit);
+      const platformDailyTotal = parseFloat(await storage.getPlatformDailyConversionTotal());
       if (platformDailyTotal + parsedAmount > dailyPlatformLimit) {
         return res.status(400).json({ error: "Platform daily conversion limit reached. Try again tomorrow." });
       }

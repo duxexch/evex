@@ -542,7 +542,7 @@ export function registerChallengesRoutes(app: Express): void {
           player1Name: player1?.nickname || player1?.username,
           player2Id: userId,
           player2Name: player2?.nickname || player2?.username,
-          redirectUrl: `/challenge-game/${challengeId}`,
+          redirectUrl: `/challenge/${challengeId}/play`,
         }
       };
       

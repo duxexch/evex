@@ -261,7 +261,7 @@ export default function ChallengesPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/challenges'] });
       // Redirect to game screen immediately after successful join
       if (data && data.id) {
-        window.location.href = `/challenge-game/${data.id}`;
+        window.location.href = `/challenge/${data.id}/play`;
       }
     },
     onError: (err: any) => {
