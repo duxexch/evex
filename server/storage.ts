@@ -2927,7 +2927,7 @@ export class DatabaseStorage implements IStorage {
       const sqlOp = operation === 'add' ? sql`+` : sql`-`;
 
       if (operation === 'subtract') {
-        const [result] = await db.execute(sql`
+        const queryResult = await db.execute(sql`
           UPDATE project_currency_wallets
           SET 
             ${sql.raw(balanceColumn)} = ${sql.raw(balanceColumn)} - ${changeAmount},
@@ -2938,12 +2938,13 @@ export class DatabaseStorage implements IStorage {
             AND ${sql.raw(balanceColumn)} >= ${changeAmount}
           RETURNING *
         `);
+        const result = (queryResult.rows as any[])[0];
         if (!result) {
           return { success: false, error: 'Insufficient balance' };
         }
         return { success: true, wallet: result as unknown as ProjectCurrencyWallet };
       } else {
-        const [result] = await db.execute(sql`
+        const queryResult = await db.execute(sql`
           UPDATE project_currency_wallets
           SET 
             ${sql.raw(balanceColumn)} = ${sql.raw(balanceColumn)} + ${changeAmount},
@@ -2953,6 +2954,7 @@ export class DatabaseStorage implements IStorage {
           WHERE id = ${walletId}
           RETURNING *
         `);
+        const result = (queryResult.rows as any[])[0];
         return { success: true, wallet: result as unknown as ProjectCurrencyWallet };
       }
     } catch (error: any) {
@@ -3039,11 +3041,12 @@ export class DatabaseStorage implements IStorage {
   async approveProjectCurrencyConversion(conversionId: string, adminId: string): Promise<{ success: boolean; error?: string }> {
     try {
       return await db.transaction(async (tx) => {
-        const [conversion] = await tx.execute(sql`
+        const conversionResult = await tx.execute(sql`
           SELECT * FROM project_currency_conversions 
           WHERE id = ${conversionId} AND status = 'pending'
           FOR UPDATE
         `);
+        const conversion = (conversionResult.rows as any[])[0];
         
         if (!conversion) {
           return { success: false, error: 'Conversion not found or already processed' };
@@ -3094,11 +3097,12 @@ export class DatabaseStorage implements IStorage {
   async rejectProjectCurrencyConversion(conversionId: string, adminId: string, reason: string): Promise<{ success: boolean; error?: string }> {
     try {
       return await db.transaction(async (tx) => {
-        const [conversion] = await tx.execute(sql`
+        const conversionResult = await tx.execute(sql`
           SELECT * FROM project_currency_conversions 
           WHERE id = ${conversionId} AND status = 'pending'
           FOR UPDATE
         `);
+        const conversion = (conversionResult.rows as any[])[0];
         
         if (!conversion) {
           return { success: false, error: 'Conversion not found or already processed' };
@@ -3173,12 +3177,13 @@ export class DatabaseStorage implements IStorage {
           return { success: false, error: 'Daily conversion limit exceeded' };
         }
 
-        const [lockResult] = await tx.execute(sql`
+        const lockQueryResult = await tx.execute(sql`
           UPDATE users
           SET balance = balance - ${amount}
           WHERE id = ${userId} AND balance >= ${amount}
           RETURNING id
         `);
+        const lockResult = (lockQueryResult.rows as any[])[0];
 
         if (!lockResult) {
           return { success: false, error: 'Insufficient balance' };
@@ -3325,29 +3330,31 @@ export class DatabaseStorage implements IStorage {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const [result] = await db.execute(sql`
+    const queryResult = await db.execute(sql`
       SELECT COALESCE(SUM(CAST(base_currency_amount AS DECIMAL)), 0) as total
       FROM project_currency_conversions
       WHERE user_id = ${userId}
         AND created_at >= ${today}
         AND status != 'rejected'
     `);
+    const result = (queryResult.rows as any[])[0];
     
-    return (result as any)?.total?.toString() || '0';
+    return result?.total?.toString() || '0';
   }
 
   async getPlatformDailyConversionTotal(): Promise<string> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const [result] = await db.execute(sql`
+    const queryResult = await db.execute(sql`
       SELECT COALESCE(SUM(CAST(base_currency_amount AS DECIMAL)), 0) as total
       FROM project_currency_conversions
       WHERE created_at >= ${today}
         AND status = 'completed'
     `);
+    const result = (queryResult.rows as any[])[0];
     
-    return (result as any)?.total?.toString() || '0';
+    return result?.total?.toString() || '0';
   }
 
   // ==================== CHALLENGES ====================
