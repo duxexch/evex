@@ -11,7 +11,7 @@ import {
   games,
   projectCurrencyWallets,
 } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   deductUSDBalance,
   deductProjectCurrency,

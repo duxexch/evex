@@ -2263,6 +2263,186 @@ export const insertAdminAlertSchema = createInsertSchema(adminAlerts).omit({ id:
 export type InsertAdminAlert = z.infer<typeof insertAdminAlertSchema>;
 export type AdminAlert = typeof adminAlerts.$inferSelect;
 
+// ==================== ADMIN SESSIONS (Session Management) ====================
+
+export const adminSessions = pgTable("admin_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id").notNull().unique(),
+  token: text("token").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  loginAt: timestamp("login_at").notNull(),
+  lastActivityAt: timestamp("last_activity_at").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  logoutAt: timestamp("logout_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_admin_sessions_admin_id").on(table.adminId),
+  index("idx_admin_sessions_expires_at").on(table.expiresAt),
+  index("idx_admin_sessions_session_id").on(table.sessionId),
+]);
+
+export const adminSessionsRelations = relations(adminSessions, ({ one }) => ({
+  admin: one(users, { fields: [adminSessions.adminId], references: [users.id] }),
+}));
+
+// ==================== ADMIN ROLES (Role-Based Access Control) ====================
+
+export const adminRoles = pgTable("admin_roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  maxConcurrentSessions: integer("max_concurrent_sessions").notNull().default(1),
+  sessionTimeoutMs: integer("session_timeout_ms").notNull().default(28800000),
+  requiresTwoFa: boolean("requires_two_fa").notNull().default(true),
+  ipWhitelist: text("ip_whitelist").array(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_admin_roles_name").on(table.name),
+]);
+
+export const adminRolesRelations = relations(adminRoles, ({ one, many }) => ({
+  permissions: many(adminPermissions),
+}));
+
+// ==================== ADMIN PERMISSIONS (RBAC) ====================
+
+export const adminPermissions = pgTable("admin_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  roleId: varchar("role_id").notNull().references(() => adminRoles.id, { onDelete: "cascade" }),
+  resource: text("resource").notNull(),
+  action: text("action").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_admin_permissions_role_id").on(table.roleId),
+]);
+
+export const adminPermissionsRelations = relations(adminPermissions, ({ one }) => ({
+  role: one(adminRoles, { fields: [adminPermissions.roleId], references: [adminRoles.id] }),
+}));
+
+// ==================== USER TWO-FACTOR AUTH ====================
+
+export const userTwoFactorAuth = pgTable("user_two_factor_auth", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  secret: text("secret"),
+  isEnabled: boolean("is_enabled").notNull().default(false),
+  backupCodes: text("backup_codes").array(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_user_2fa_user_id").on(table.userId),
+]);
+
+export const userTwoFactorAuthRelations = relations(userTwoFactorAuth, ({ one }) => ({
+  user: one(users, { fields: [userTwoFactorAuth.userId], references: [users.id] }),
+}));
+
+// ==================== USER BAN HISTORY ====================
+
+export const userBanHistory = pgTable("user_ban_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  bannedBy: varchar("banned_by").notNull().references(() => users.id),
+  reason: text("reason").notNull(),
+  bannedAt: timestamp("banned_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  isPermanent: boolean("is_permanent").notNull().default(true),
+  unbanReason: text("unban_reason"),
+  unbannedAt: timestamp("unbanned_at"),
+  unbannedBy: varchar("unbanned_by").references(() => users.id),
+}, (table) => [
+  index("idx_user_ban_history_user_id").on(table.userId),
+  index("idx_user_ban_history_banned_by").on(table.bannedBy),
+  index("idx_user_ban_history_expires_at").on(table.expiresAt),
+]);
+
+export const userBanHistoryRelations = relations(userBanHistory, ({ one }) => ({
+  user: one(users, { fields: [userBanHistory.userId], references: [users.id] }),
+}));
+
+// ==================== USER SUSPENSION HISTORY ====================
+
+export const userSuspensionHistory = pgTable("user_suspension_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  suspendedBy: varchar("suspended_by").notNull().references(() => users.id),
+  reason: text("reason").notNull(),
+  suspendedAt: timestamp("suspended_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  unSuspendedAt: timestamp("un_suspended_at"),
+  unSuspendedReason: text("un_suspended_reason"),
+}, (table) => [
+  index("idx_user_suspension_history_user_id").on(table.userId),
+  index("idx_user_suspension_history_expires_at").on(table.expiresAt),
+]);
+
+export const userSuspensionHistoryRelations = relations(userSuspensionHistory, ({ one }) => ({
+  user: one(users, { fields: [userSuspensionHistory.userId], references: [users.id] }),
+}));
+
+// ==================== USER WARNINGS ====================
+
+export const userWarnings = pgTable("user_warnings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  category: text("category").notNull(),
+  reason: text("reason").notNull(),
+  severity: text("severity").notNull(),
+  count: integer("count").notNull().default(1),
+  actionTaken: text("action_taken"),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_user_warnings_user_id").on(table.userId),
+  index("idx_user_warnings_category").on(table.category),
+]);
+
+export const userWarningsRelations = relations(userWarnings, ({ one }) => ({
+  user: one(users, { fields: [userWarnings.userId], references: [users.id] }),
+}));
+
+// ==================== FINANCIAL CONFIG ====================
+
+export const financialConfig = pgTable("financial_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  description: text("description"),
+  dataType: text("data_type").notNull(),
+  category: text("category").notNull(),
+  effectiveAt: timestamp("effective_at").notNull(),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_financial_config_key").on(table.key),
+  index("idx_financial_config_category").on(table.category),
+]);
+
+// ==================== TRANSACTION FRAUD FLAGS ====================
+
+export const transactionFraudFlags = pgTable("transaction_fraud_flags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionId: varchar("transaction_id").notNull().references(() => transactions.id, { onDelete: "cascade" }),
+  flag: text("flag").notNull(),
+  severity: text("severity").notNull(),
+  details: text("details"),
+  reviewed: boolean("reviewed").notNull().default(false),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  decision: text("decision"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_transaction_fraud_flags_transaction_id").on(table.transactionId),
+  index("idx_transaction_fraud_flags_severity").on(table.severity),
+  index("idx_transaction_fraud_flags_reviewed").on(table.reviewed),
+]);
+
+// ==================== ADVERTISEMENTS (Carousel Ads) ====================
 // ==================== ADVERTISEMENTS (Carousel Ads) ====================
 
 export const advertisementTypeEnum = pgEnum("advertisement_type", ["image", "video", "link", "embed"]);

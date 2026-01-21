@@ -71,7 +71,7 @@ export async function initiateGameStart(
     };
 
     const gameStartMessage = {
-      type: "game_start" as const,
+      type: "game_start",
       payload,
       timestamp: new Date().toISOString(),
       correlationId,

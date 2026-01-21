@@ -211,9 +211,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Update user balance
       await storage.updateUser(userId, { 
-        balance: newBalance,
-        totalWagered: (parseFloat(user.totalWagered) + bet).toFixed(2),
-        totalWon: (parseFloat(user.totalWon) + winAmount).toFixed(2),
+        balance: parseFloat(newBalance),
+        totalWagered: parseFloat((parseFloat(user.totalWagered) + bet).toFixed(2)),
+        totalWon: parseFloat((parseFloat(user.totalWon) + winAmount).toFixed(2)),
       });
       
       // Create game session

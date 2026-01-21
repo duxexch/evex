@@ -168,7 +168,7 @@ export async function validateChallengeAcceptance(
   }
 
   if (currencyType === 'usd') {
-    const balance = parseFloat(String(user.balance || 0));
+    const balance = user.usdBalance || 0;
     if (balance < betAmount) {
       return {
         valid: false,

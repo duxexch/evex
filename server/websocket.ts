@@ -1504,3 +1504,156 @@ export function getBotGameSpectatorCount(challengeId: string): number {
   const room = challengeGameRooms.get(challengeId);
   return room ? room.spectators.size : 0;
 }
+
+// ==================== MONITORING WEBSOCKET ====================
+
+interface MonitoringClient {
+  id: string;
+  ws: WebSocket;
+  userId: string;
+  role: string;
+  subscriptions: Set<string>;
+  connectedAt: Date;
+}
+
+let monitoringClients = new Map<string, MonitoringClient>();
+let monitoringClientCounter = 0;
+
+/**
+ * Add monitoring WebSocket handler to the existing WS server
+ */
+export function setupMonitoringWebSocket(wss: WebSocketServer) {
+  const monitoringWss = new WebSocketServer({ noServer: true });
+
+  // Handle upgrade for /ws/monitoring
+  // This should be called from the HTTP server upgrade event
+  console.log("✅ Monitoring WebSocket handler registered");
+
+  return {
+    broadcastAlert: (alert: any) => broadcastMonitoringMessage({
+      type: "alert",
+      severity: alert.severity,
+      data: alert,
+    }),
+    broadcastMetrics: (metrics: any) => broadcastMonitoringMessage({
+      type: "metrics_update",
+      data: metrics,
+    }),
+    broadcastStatus: (status: string, message?: string) => broadcastMonitoringMessage({
+      type: "status_update",
+      status,
+      message,
+      timestamp: new Date(),
+    }),
+    broadcastToRole: (role: string, message: any) => broadcastToRole(role, message),
+    getClientsInfo: () => Array.from(monitoringClients.values()).map((c) => ({
+      id: c.id,
+      userId: c.userId,
+      role: c.role,
+      connectedAt: c.connectedAt,
+    })),
+  };
+}
+
+function broadcastMonitoringMessage(message: any) {
+  const payload = JSON.stringify(message);
+  for (const client of monitoringClients.values()) {
+    if (client.ws.readyState === WebSocket.OPEN) {
+      try {
+        client.ws.send(payload);
+      } catch (error) {
+        console.error(`Error broadcasting to ${client.id}:`, error);
+      }
+    }
+  }
+}
+
+function broadcastToRole(role: string, message: any) {
+  const payload = JSON.stringify(message);
+  for (const client of monitoringClients.values()) {
+    if (client.role === role && client.ws.readyState === WebSocket.OPEN) {
+      try {
+        client.ws.send(payload);
+      } catch (error) {
+        console.error(`Error broadcasting to ${client.id}:`, error);
+      }
+    }
+  }
+}
+
+// ==================== PERMISSIONS WEBSOCKET ====================
+
+interface PermissionsClient {
+  id: string;
+  ws: WebSocket;
+  userId: string;
+  role: string;
+  subscribedRoles: Set<string>;
+  connectedAt: Date;
+}
+
+let permissionsClients = new Map<string, PermissionsClient>();
+let permissionsClientCounter = 0;
+
+/**
+ * Setup permissions WebSocket for real-time permission updates
+ */
+export function setupPermissionsWebSocket(wss: WebSocketServer) {
+  console.log("✅ Permissions WebSocket handler registered");
+
+  return {
+    broadcastPermissionChange: (roleId: string, change: any) => 
+      broadcastPermissionMessage({
+        type: "permission_change",
+        roleId,
+        data: change,
+        timestamp: new Date(),
+      }),
+    broadcastRoleUpdate: (roleId: string, role: any) =>
+      broadcastPermissionMessage({
+        type: "role_update",
+        roleId,
+        data: role,
+        timestamp: new Date(),
+      }),
+    broadcastPermissionMatrix: (matrix: any) =>
+      broadcastPermissionMessage({
+        type: "matrix_update",
+        data: matrix,
+        timestamp: new Date(),
+      }),
+    broadcastToAdmins: (message: any) => broadcastToAdmins(message),
+    getClientsInfo: () => Array.from(permissionsClients.values()).map((c) => ({
+      id: c.id,
+      userId: c.userId,
+      role: c.role,
+      connectedAt: c.connectedAt,
+    })),
+  };
+}
+
+function broadcastPermissionMessage(message: any) {
+  const payload = JSON.stringify(message);
+  for (const client of permissionsClients.values()) {
+    if (client.ws.readyState === WebSocket.OPEN) {
+      try {
+        client.ws.send(payload);
+      } catch (error) {
+        console.error(`Error broadcasting permissions to ${client.id}:`, error);
+      }
+    }
+  }
+}
+
+function broadcastToAdmins(message: any) {
+  const payload = JSON.stringify(message);
+  for (const client of permissionsClients.values()) {
+    if (client.role && client.ws.readyState === WebSocket.OPEN) {
+      try {
+        client.ws.send(payload);
+      } catch (error) {
+        console.error(`Error broadcasting to admin ${client.id}:`, error);
+      }
+    }
+  }
+}

@@ -8,11 +8,16 @@ import { seedBotAccounts } from "./bot-seeder";
 import { seedMultiplayerGames, seedGiftCatalog } from "./seed";
 import { startBotSimulator } from "./bot-game-simulator";
 import { initializeServices, shutdownServices } from "./services-init";
+import { registerMonitoringRoutes, initializeMonitoring } from "./routes/monitoring";
+import { registerPermissionsRoutes } from "./routes/permissions";
 
 const app = express();
 const httpServer = createServer(app);
 
 const gameWss = setupGameWebSocket(httpServer);
+
+// Initialize monitoring system
+initializeMonitoring();
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -166,6 +171,21 @@ process.on('unhandledRejection', (reason, promise) => {
 
     await registerRoutes(httpServer, app);
     registerAdminRoutes(app);
+
+    // Register comprehensive admin routes
+    const { registerAdminAuthRoutes } = await import("./routes/admin-auth");
+    const { registerAdminUsersRoutes } = await import("./routes/admin-users");
+    const { registerAdminComplaintsRoutes } = await import("./routes/admin-complaints");
+    const { registerAdminTransactionsRoutes } = await import("./routes/admin-transactions");
+
+    registerAdminAuthRoutes(app);
+    registerAdminUsersRoutes(app);
+    registerAdminComplaintsRoutes(app);
+    registerAdminTransactionsRoutes(app);
+
+    // Register monitoring and permissions routes
+    registerMonitoringRoutes(app);
+    registerPermissionsRoutes(app);
 
   // Global error handler - catches unhandled errors without crashing the server
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
