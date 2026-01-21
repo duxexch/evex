@@ -11,7 +11,7 @@ import {
   formatList,
   formatPlural,
   sortStrings,
-} from './localeFormatters';
+} from '../utils/localeFormatters';
 
 export const useTranslation = () => {
   const { language, t } = useLanguage();

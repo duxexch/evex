@@ -120,15 +120,15 @@ async function handleMessage(ws: AuthenticatedWebSocket, message: WebSocketMessa
     case 'respond_draw':
       await handleRespondDraw(ws, message.payload);
       break;
-    case 'game_start':
-      await handleGameStartEvent(message.payload);
-      break;
-    case 'player_abandoned':
-      await handlePlayerAbandonedEvent(message.payload);
-      break;
-    case 'game_inactivity':
-      await handleGameInactivityEvent(message.payload);
-      break;
+    // case 'game_start':
+    //   await handleGameStartEvent(message.payload);
+    //   break;
+    // case 'player_abandoned':
+    //   await handlePlayerAbandonedEvent(message.payload);
+    //   break;
+    // case 'game_inactivity':
+    //   await handleGameInactivityEvent(message.payload);
+    //   break;
     default:
       sendError(ws, 'Unknown message type');
   }

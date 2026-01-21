@@ -198,7 +198,10 @@ export default function ChallengesPage() {
 
   const { data: myChallenges, isLoading: loadingMy } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/my'],
-    queryFn: getUserChallenges,
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/challenges/my');
+      return res.json();
+    },
     refetchInterval: 2000, // Refetch every 2 seconds
     staleTime: 1500, // Data is stale after 1.5 seconds
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
@@ -206,7 +209,10 @@ export default function ChallengesPage() {
 
   const { data: availableChallenges, isLoading: loadingAvailable } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/available'],
-    queryFn: getAvailableChallenges,
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/challenges/available');
+      return res.json();
+    },
     refetchInterval: 2000,
     staleTime: 1500,
     gcTime: 5 * 60 * 1000,
@@ -214,7 +220,10 @@ export default function ChallengesPage() {
 
   const { data: publicChallenges, isLoading: loadingPublic } = useQuery<Challenge[]>({
     queryKey: ['/api/challenges/public'],
-    queryFn: getPublicChallenges,
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/challenges/public');
+      return res.json();
+    },
     refetchInterval: 2000,
     staleTime: 1500,
     gcTime: 5 * 60 * 1000,

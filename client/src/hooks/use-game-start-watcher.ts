@@ -59,19 +59,20 @@ export function useGameStartWatcher(): UseGameStartWatcherReturn {
     
     try {
       const response = await apiRequest('GET', `/api/game-start/status/${challengeId}`);
+      const data = await response.json();
       
-      if (response.ready) {
-        console.log('[GameStartWatcher] ✓ Game is ready!', response);
+      if (data.ready) {
+        console.log('[GameStartWatcher] ✓ Game is ready!', data);
         
         // If we already have the event from WebSocket, use it
         // Otherwise construct one from the response
         const event: GameStartEvent = gameStartEvent || {
-          challengeId: response.challenge.id,
-          sessionId: response.session.id,
-          gameType: response.challenge.gameType,
-          player1Id: response.session.player1Id,
+          challengeId: data.challenge.id,
+          sessionId: data.session.id,
+          gameType: data.challenge.gameType,
+          player1Id: data.session.player1Id,
           player1Name: 'Player 1',
-          player2Id: response.session.player2Id,
+          player2Id: data.session.player2Id,
           player2Name: 'Player 2',
           redirectUrl: `/challenge/${challengeId}/play`,
         };

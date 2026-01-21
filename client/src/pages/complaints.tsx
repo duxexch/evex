@@ -56,11 +56,7 @@ export default function ComplaintsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      return apiRequest("/api/complaints", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", "/api/complaints", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/complaints"] });
@@ -75,11 +71,7 @@ export default function ComplaintsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Complaint> }) => {
-      return apiRequest(`/api/complaints/${id}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(data),
-      });
+      return apiRequest("PATCH", `/api/complaints/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/complaints"] });
@@ -93,11 +85,7 @@ export default function ComplaintsPage() {
 
   const messageMutation = useMutation({
     mutationFn: async ({ complaintId, message }: { complaintId: string; message: string }) => {
-      return apiRequest(`/api/complaints/${complaintId}/messages`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ message }),
-      });
+      return apiRequest("POST", `/api/complaints/${complaintId}/messages`, { message });
     },
     onSuccess: () => {
       refetchDetails();
