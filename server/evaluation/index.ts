@@ -5,7 +5,7 @@
 
 import { runEvaluation, generateReportJSON, generateReportMarkdown } from "./runner";
 import { createChallengeScenario, challengeAcceptanceScenario } from "./scenarios";
-import { writeFileSync } from "fs";
+import { writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 
 /**
@@ -29,9 +29,8 @@ async function main() {
 
   try {
     // Ensure directory exists
-    const fs = require('fs');
-    if (!fs.existsSync(reportDir)) {
-      fs.mkdirSync(reportDir, { recursive: true });
+    if (!existsSync(reportDir)) {
+      mkdirSync(reportDir, { recursive: true });
     }
 
     // Save JSON report

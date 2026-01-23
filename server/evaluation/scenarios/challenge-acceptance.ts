@@ -11,6 +11,12 @@ import { db } from "../../db";
 import { users, challenges as challengesTable, liveGameSessions } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
+/**
+ * Test context for this scenario
+ * Note: This is safe because scenarios run sequentially, not concurrently.
+ * If parallel execution is added in the future, this should be refactored
+ * to pass context through function parameters instead.
+ */
 interface TestContext {
   player1Id: string;
   player2Id: string;

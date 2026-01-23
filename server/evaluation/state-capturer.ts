@@ -35,29 +35,49 @@ export async function captureState(
         .where(inArray(users.id, userIds));
     }
 
-    // Capture challenges
-    snapshot.database.challenges = await db
+    // Capture challenges where user is player1 or player2
+    const challengesAsPlayer1 = await db
       .select()
       .from(challenges)
-      .where(
-        inArray(
-          challenges.player1Id, 
-          userIds
-        )
-      )
+      .where(inArray(challenges.player1Id, userIds))
       .limit(100);
+    
+    const challengesAsPlayer2 = await db
+      .select()
+      .from(challenges)
+      .where(inArray(challenges.player2Id, userIds))
+      .limit(100);
+    
+    // Combine and deduplicate challenges
+    const allChallenges = [...challengesAsPlayer1];
+    for (const c of challengesAsPlayer2) {
+      if (!allChallenges.find(existing => existing.id === c.id)) {
+        allChallenges.push(c);
+      }
+    }
+    snapshot.database.challenges = allChallenges;
 
-    // Capture live game sessions
-    snapshot.database.liveGameSessions = await db
+    // Capture live game sessions where user is any player
+    const sessionsAsPlayer1 = await db
       .select()
       .from(liveGameSessions)
-      .where(
-        inArray(
-          liveGameSessions.player1Id,
-          userIds
-        )
-      )
+      .where(inArray(liveGameSessions.player1Id, userIds))
       .limit(100);
+    
+    const sessionsAsPlayer2 = await db
+      .select()
+      .from(liveGameSessions)
+      .where(inArray(liveGameSessions.player2Id, userIds))
+      .limit(100);
+    
+    // Combine and deduplicate sessions
+    const allSessions = [...sessionsAsPlayer1];
+    for (const s of sessionsAsPlayer2) {
+      if (!allSessions.find(existing => existing.id === s.id)) {
+        allSessions.push(s);
+      }
+    }
+    snapshot.database.liveGameSessions = allSessions;
 
     // Capture recent notifications
     snapshot.database.notifications = await db
@@ -98,6 +118,27 @@ export function compareStates(
 }
 
 /**
+ * Deep equality check for objects
+ */
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+  
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  
+  if (keysA.length !== keysB.length) return false;
+  
+  for (const key of keysA) {
+    if (!keysB.includes(key)) return false;
+    if (!deepEqual(a[key], b[key])) return false;
+  }
+  
+  return true;
+}
+
+/**
  * Find changes between two arrays of records
  */
 function findChanges(before: any[], after: any[], idField: string): any[] {
@@ -115,7 +156,7 @@ function findChanges(before: any[], after: any[], idField: string): any[] {
       // Find modified fields
       const modifications: any = {};
       for (const key of Object.keys(afterRecord)) {
-        if (JSON.stringify(beforeRecord[key]) !== JSON.stringify(afterRecord[key])) {
+        if (!deepEqual(beforeRecord[key], afterRecord[key])) {
           modifications[key] = {
             before: beforeRecord[key],
             after: afterRecord[key],
