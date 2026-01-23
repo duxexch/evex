@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:regression:multiplayer-bridge": "tsx tests/multiplayer-bridge-regression.ts",
+    "eval": "tsx scripts/run-evaluation.ts",
     "db:push": "drizzle-kit push",
     "agent:check": "node script/agent-monitor.js",
     "agent:health": "bash script/health-check.sh",
